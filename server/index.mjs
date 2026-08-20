@@ -2,11 +2,14 @@ import { createServer } from 'node:http'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { buildProject, currentManifest, listVersions, projectPaths, promoteProject, rollbackProject, runtimePath } from './project-builder.mjs'
 import { reasoningAvailable, researchCompany } from './reasoning.mjs'
 import { runDiscoveryTurn } from './discoveryAgent.mjs'
 import { credentialFor, listConnections, recordSync, removeConnection, saveConnection } from './connections.mjs'
 import { callerOf, rateLimit, spendModelCall } from './limits.mjs'
+import { databaseAvailable, migrate } from './db.mjs'
+import { authenticate, claimWorkspace, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
@@ -34,23 +37,54 @@ async function body(request) {
   catch { throw Object.assign(new Error('Invalid JSON request.'), { status: 400 }) }
 }
 
+/** The session token a request carries, from the standard header. */
+function bearer(request) {
+  const header = String(request.headers.authorization ?? '')
+  return header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+}
+
+/**
+ * Whether this request may act on this workspace.
+ *
+ * With a database, the answer comes from a signed-in account: the workspace has an owner, and a
+ * session that is not a member of it is refused however many tokens it presents. A workspace the
+ * caller has not claimed yet is claimed for them here, which is what makes the first build after
+ * signing in belong to somebody.
+ *
+ * Without a database, BO keeps its previous behaviour: the first caller to present a token for a
+ * workspace id owns it from then on. That is trust-on-first-use, it is not real security, and it
+ * exists so the prototype still runs with no infrastructure. `databaseAvailable()` is the switch.
+ */
 async function tenant(request, workspaceId) {
   const header = String(request.headers['x-bo-workspace-id'] ?? '').toLowerCase()
-  if (!header || header !== workspaceId.toLowerCase()) throw Object.assign(new Error('Workspace access denied.'), { status: 403 })
+  if (!header || header !== String(workspaceId).toLowerCase()) throw Object.assign(new Error('Workspace access denied.'), { status: 403 })
+
+  if (databaseAvailable()) {
+    const user = await sessionUser(bearer(request))
+    if (!user) throw Object.assign(new Error('Sign in to use this workspace.'), { status: 401 })
+    const existing = await membership(workspaceId, user.id)
+    if (existing) return { user, role: existing.role }
+    // Claiming refuses a workspace that already has a different owner, so this cannot take one over.
+    await claimWorkspace(workspaceId, user.id)
+    return { user, role: 'owner' }
+  }
+
   const token = String(request.headers['x-bo-access-token'] ?? '')
   if (!/^[a-zA-Z0-9_-]{32,200}$/.test(token)) throw Object.assign(new Error('Workspace session is missing or invalid.'), { status: 401 })
   const digest = createHash('sha256').update(token).digest('hex')
-  const file = path.join(accessRoot, `${workspaceId.toLowerCase()}.json`)
+  const file = path.join(accessRoot, `${String(workspaceId).toLowerCase()}.json`)
   let stored
   try { stored = JSON.parse(await readFile(file, 'utf8')) } catch (error) {
     if (error?.code !== 'ENOENT') throw error
     await mkdir(accessRoot, { recursive: true })
-    await writeFile(file, `${JSON.stringify({ workspaceId, digest, createdAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
-    return
+    await writeFile(file, `${JSON.stringify({ workspaceId, digest, createdAt: new Date().toISOString() }, null, 2)}
+`, 'utf8')
+    return { user: null, role: 'owner' }
   }
   const supplied = Buffer.from(digest)
   const expected = Buffer.from(String(stored.digest ?? ''))
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw Object.assign(new Error('Workspace session is not authorized.'), { status: 403 })
+  return { user: null, role: 'owner' }
 }
 
 function authorize(manifest, request, permission) {
@@ -267,9 +301,51 @@ function triggerWorkflows(manifest, data, entityId, event, record) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return send(response, 200, { status: 'healthy' })
+  if (request.method === 'GET' && url.pathname === '/api/health') return send(response, 200, { status: 'healthy', accounts: databaseAvailable() })
   const segments = url.pathname.split('/').filter(Boolean)
   if (segments[0] !== 'api') return false
+
+  /**
+   * Accounts: /api/auth/...
+   *
+   * Sign-up and sign-in are rate limited by caller, because a login form is the one endpoint an
+   * attacker is happy to call ten thousand times. The session token is returned once, here, and never
+   * again — the server keeps only its hash.
+   */
+  if (segments[1] === 'auth') {
+    if (!databaseAvailable()) return send(response, 503, { error: 'BO has no database configured, so it has no accounts yet. Set DATABASE_URL to your Supabase connection string.' })
+
+    if (request.method === 'GET' && segments[2] === 'me') {
+      const user = await sessionUser(bearer(request))
+      if (!user) return send(response, 401, { error: 'Not signed in.' })
+      return send(response, 200, { user, workspaces: await workspacesFor(user.id) })
+    }
+
+    if (request.method === 'POST' && (segments[2] === 'register' || segments[2] === 'login')) {
+      const window = rateLimit(`auth:${callerOf(request)}`, { max: Number(process.env.BO_AUTH_RATE_LIMIT || 10), windowMs: 60_000 })
+      if (!window.ok) return send(response, 429, { error: `Too many attempts. Try again in ${window.retryAfterSeconds} seconds.` })
+      const input = await body(request)
+      const user = segments[2] === 'register'
+        ? await registerUser(input.email, input.password)
+        : await authenticate(input.email, input.password)
+      const session = await createSession(user.id)
+      return send(response, 200, { user, token: session.token, expiresAt: session.expiresAt })
+    }
+
+    if (request.method === 'POST' && segments[2] === 'logout') {
+      await destroySession(bearer(request))
+      return send(response, 200, { signedOut: true })
+    }
+
+    if (request.method === 'POST' && segments[2] === 'logout-everywhere') {
+      const user = await sessionUser(bearer(request))
+      if (!user) return send(response, 401, { error: 'Not signed in.' })
+      await destroyAllSessions(user.id)
+      return send(response, 200, { signedOut: true })
+    }
+
+    return send(response, 405, { error: 'Method not allowed.' })
+  }
 
   /**
    * Industry knowledge: shared across companies, aggregate counts only.
@@ -646,7 +722,7 @@ async function staticFile(response, url) {
   }
 }
 
-const server = createServer(async (request, response) => {
+export const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
     if (await api(request, response, url) !== false) return
@@ -657,6 +733,32 @@ const server = createServer(async (request, response) => {
   }
 })
 
-server.listen(port, '127.0.0.1', () => console.log(`BO project service listening on ${port}`))
+/**
+ * Only start listening when this file is what was run.
+ *
+ * Imported instead, it hands over the server without opening a port or touching a database, which is
+ * what lets the account rules be tested against the real routes rather than against a copy of them.
+ */
+const startedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+/**
+ * Schema first, then requests.
+ *
+ * A migration that fails is not something to serve around: the alternative is answering requests
+ * against a half-built schema and writing data that will not fit it. Without a database configured
+ * there is nothing to migrate and BO starts as it always did.
+ */
+if (startedDirectly) {
+  if (databaseAvailable()) {
+    try {
+      const ran = await migrate()
+      if (ran.length) console.log(`BO applied ${ran.length} migration${ran.length === 1 ? '' : 's'}: ${ran.join(', ')}`)
+    } catch (error) {
+      console.error('BO could not prepare its database:', error?.message ?? error)
+      process.exit(1)
+    }
+  }
+  server.listen(port, '127.0.0.1', () => console.log(`BO project service listening on ${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
+}
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))

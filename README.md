@@ -27,6 +27,7 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `ANTHROPIC_API_KEY` | Entrevista e investigación en el servidor |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-opus-5`) |
+| `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |
 | `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
 | `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
 
@@ -62,6 +63,8 @@ smoke end-to-end en navegador. Cada bloque se puede lanzar por separado:
 | `npm run test:interview` | La entrevista en el servidor, la respuesta que vuelve, y que no se descargue el modelo del navegador |
 | `npm run test:stripe` | Conector Stripe: claves rechazadas, credencial cifrada, sincronización que no destruye datos |
 | `npm run test:limits` | Límite por IP, techo diario de llamadas al modelo, y que los endpoints gratuitos no se vean afectados |
+| `npm run test:auth` | Contraseñas con scrypt, sesiones sólo como hash, caducidad, y borrar una cuenta se lleva sus workspaces |
+| `npm run test:accounts` | Las rutas reales: un workspace pertenece a una cuenta y un extraño no llega a él |
 | `npm run test:research-ui` | Diario de razonamiento, fuentes citadas y capacidades investigadas en el workspace |
 | `npm run test:launch` | Abrir un Command Center terminado: sin overlay de construcción |
 | `npm run test:smoke` | Recorrido completo en navegador, rutas indexadas y Links |
@@ -92,7 +95,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. **No incluye todavía autenticación ni cuentas de usuario**, base de datos, facturación ni despliegue. Los datos viven en `localStorage` y en ficheros JSON del servidor, lo que sirve para un prototipo y no para varios usuarios a la vez.
+Esta V2 valida la experiencia y el modelo de interacción. El servidor ya tiene cuentas, sesiones y propiedad de workspaces sobre Postgres, **pero la interfaz todavía no tiene pantalla de acceso**: con `DATABASE_URL` configurada, el frontend aún no envía la sesión. Faltan también facturación y despliegue. Los datos viven en `localStorage` y en ficheros JSON del servidor, lo que sirve para un prototipo y no para varios usuarios a la vez.
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 
