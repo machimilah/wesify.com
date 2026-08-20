@@ -6,6 +6,8 @@ import type { AIBlueprint } from './engine/blueprint'
 import { isWorkspaceConfiguration } from './engine/workspaceSchema'
 import type { Answers } from './types'
 import { readStorage } from './engine/shared'
+import { accountsEnabled, currentAccount, type Account } from './engine/authClient'
+import { SignIn } from './components/SignIn'
 
 function activeWorkspaceId() {
   return localStorage.getItem('bo-active-workspace-id') || localStorage.getItem('bo-workspace-id') || readStorage<{ id?: string }>('bo-workspace-config', {}).id || ''
@@ -22,7 +24,24 @@ export default function App() {
   const [answers, setAnswers] = useState<Answers>(() => readStorage('bo-answers', {}))
   const [blueprint, setBlueprint] = useState<AIBlueprint | null>(() => readStorage('bo-blueprint', null))
 
+  const [accounts, setAccounts] = useState<boolean | undefined>(undefined)
+  const [account, setAccount] = useState<Account | null>(null)
+
   const navigate = (nextPath: string) => { window.history.pushState({}, '', nextPath); setPath(nextPath) }
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const enabled = await accountsEnabled()
+      // The stored session is checked against the server rather than trusted: it may have expired,
+      // been signed out from another device, or belong to a database that has since been replaced.
+      const existing = enabled ? await currentAccount() : null
+      if (cancelled) return
+      setAccount(existing?.user ?? null)
+      setAccounts(enabled)
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     const handleHistory = () => setPath(window.location.pathname)
@@ -41,6 +60,16 @@ export default function App() {
     const companyName = String(answers.companyName ?? 'Dashboard')
     document.title = path === '/' ? 'BO — Build your company workspace' : path.startsWith('/build') ? 'Build your workspace — BO' : `${companyName} — BO`
   }, [path, answers.companyName])
+
+  /**
+   * Whether anyone has to sign in at all.
+   *
+   * `undefined` means BO has not asked the server yet, and rendering either the app or a sign-in
+   * screen during that moment would show the wrong one and then swap it. With no database configured
+   * there are no accounts and nothing here ever appears.
+   */
+  if (accounts === undefined) return <main className="bo-home"/>
+  if (accounts && !account) return <SignIn onSignedIn={setAccount}/>
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
   if (buildMatch) return <Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate('/home') }}/>

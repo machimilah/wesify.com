@@ -1,3 +1,5 @@
+// First: configuration has to be in place before any module decides what BO can do.
+import './env.mjs'
 import { createServer } from 'node:http'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
