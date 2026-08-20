@@ -13,9 +13,10 @@
     "test:interview": "node scripts/interview.test.mjs",
     "test:stripe": "node scripts/stripe.test.mjs",
     "test:limits": "node scripts/limits.test.mjs",
+    "test:auth": "node scripts/auth.test.mjs",
     "test:research-ui": "node scripts/research-ui.test.mjs",
     "test:launch": "node scripts/launch.test.mjs",
-    "verify": "npm run test && npm run build && npm run test:project-service && npm run test:reasoning && npm run test:industry && npm run test:interview && npm run test:stripe && npm run test:limits && npm run test:research-ui && npm run test:launch && npm run test:smoke",
+    "verify": "npm run test && npm run build && npm run test:project-service && npm run test:reasoning && npm run test:industry && npm run test:interview && npm run test:stripe && npm run test:limits && npm run test:auth && npm run test:research-ui && npm run test:launch && npm run test:smoke",
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
     "start": "node server/index.mjs",
@@ -28,6 +29,7 @@
     "@vitejs/plugin-react": "latest",
     "gsap": "^3.15.0",
     "lucide-react": "latest",
+    "pg": "^8.23.0",
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest"
@@ -38,6 +40,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "jsdom": "latest",
+    "pg-mem": "^3.0.14",
     "playwright-core": "^1.62.1",
     "typescript": "latest",
     "vitest": "latest"
