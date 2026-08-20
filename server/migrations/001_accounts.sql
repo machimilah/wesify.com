@@ -43,3 +43,7 @@ create table if not exists workspace_members (
   created_at   timestamptz not null default now(),
   primary key (workspace_id, user_id)
 );
+
+-- The primary key leads with workspace_id, so it cannot serve "which workspaces does this person
+-- belong to" — which is what /api/auth/me asks on every page load for a signed-in operator.
+create index if not exists workspace_members_user_id_idx on workspace_members (user_id);

@@ -33,6 +33,17 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
+## Base de datos (Supabase)
+
+Para activar las cuentas hacen falta dos cosas:
+
+1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer los hashes de contraseña y de sesión. Es idempotente: volver a ejecutarlo no rompe nada.
+2. Poner la cadena de conexión (**Connect → Session pooler**, puerto `5432`) en `.env.local` como `DATABASE_URL`.
+
+Al arrancar, el servidor debe decir `listening on 8787 with accounts`. El fichero deja registrada la migración `001_accounts.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/002_*.sql`) se aplican solas al arrancar.
+
+Los registros del workspace —clientes, facturas, órdenes de trabajo— siguen en ficheros JSON bajo `generated-projects/`, no en Postgres. Las cuentas van primero porque son lo que separa a BO de que lo use una segunda persona.
+
 ## Índice de páginas
 
 | Ruta | Vista |
