@@ -57,11 +57,18 @@ async function open() {
 try {
   const page = await open()
 
-  // 1. Nothing is shown until BO knows who is asking.
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  // 1. The landing page is public. Nobody signs up for something they have not seen.
+  await page.getByTestId('landing-get-started').waitFor({ timeout: 20_000 })
+  await page.getByTestId('landing-examples').waitFor()
+  if (await page.getByTestId('signin-form').count()) throw new Error('The landing page was hidden behind a sign-in screen.')
   if (await page.getByTestId('company-brief').count()) throw new Error('BO showed the product before anyone signed in.')
 
-  // 2. A password BO will not accept is refused, and says why.
+  // 2. "Get started for free" leads to signing in, not straight into the product.
+  await page.getByTestId('landing-get-started').click()
+  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('company-brief').count()) throw new Error('BO let someone in without an account.')
+
+  // 3. A password BO will not accept is refused, and says why.
   await page.getByTestId('signin-email').fill('owner@example.com')
   await page.getByTestId('signin-password').fill('short')
   await page.getByTestId('signin-password').evaluate(node => node.setAttribute('minlength', '1'))
@@ -69,19 +76,20 @@ try {
   await page.getByTestId('signin-error').waitFor()
   if (!/at least/i.test(await page.getByTestId('signin-error').innerText())) throw new Error('BO refused a weak password without saying what it wanted.')
 
-  // 3. Signing up gets in.
+  // 4. Signing up gets in.
   await page.getByTestId('signin-password').fill('a-long-enough-password')
   await page.getByTestId('signin-submit').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
 
-  // 4. The session survives a reload. A sign-in that has to be repeated on refresh is not a session.
+  // 5. The session survives a reload. A sign-in that has to be repeated on refresh is not a session.
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
 
-  // 5. The same account reaches BO from a different browser. This is what accounts are for: before
+  // 6. The same account reaches BO from a different browser. This is what accounts are for: before
   //    them, a workspace lived in one browser and a second device saw an empty BO.
   const second = await open()
+  await second.getByTestId('landing-get-started').click()
   await second.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   await second.getByTestId('signin-switch').click()
   await second.getByTestId('signin-email').fill('owner@example.com')
@@ -89,8 +97,9 @@ try {
   await second.getByTestId('signin-submit').click()
   await second.getByTestId('company-brief').waitFor({ timeout: 20_000 })
 
-  // 6. The wrong password does not get in, and does not say which half was wrong.
+  // 7. The wrong password does not get in, and does not say which half was wrong.
   const third = await open()
+  await third.getByTestId('landing-get-started').click()
   await third.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   await third.getByTestId('signin-switch').click()
   await third.getByTestId('signin-email').fill('owner@example.com')
@@ -101,13 +110,17 @@ try {
   if (/no account|not found|unknown/i.test(refusal)) throw new Error(`The sign-in form says whether an account exists: ${refusal}`)
   if (await third.getByTestId('company-brief').count()) throw new Error('A wrong password got in.')
 
-  // 7. Signing out locally puts the form back.
+  // 8. Signing out locally puts the form back.
   await page.evaluate(() => localStorage.removeItem('bo-session-token'))
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
 
+  // 9. The landing page still works signed out, and still offers the way back in.
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('landing-get-started').waitFor({ timeout: 20_000 })
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: nothing shown before signing in, weak passwords explained, the session surviving a reload, the same account reached from another browser, a wrong password refused without revealing whether the address exists, and signing out putting the form back.')
+  console.log('Sign-in test passed: a public landing page, the product gated behind an account, weak passwords explained, the session surviving a reload, the same account reached from another browser, a wrong password refused without revealing whether the address exists, and signing out putting the form back.')
 } finally {
   await browser.close()
   vite.kill()

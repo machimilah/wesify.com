@@ -8,6 +8,7 @@ import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account } from './engine/authClient'
 import { SignIn } from './components/SignIn'
+import { Landing } from './components/Landing'
 
 function activeWorkspaceId() {
   return localStorage.getItem('bo-active-workspace-id') || localStorage.getItem('bo-workspace-id') || readStorage<{ id?: string }>('bo-workspace-config', {}).id || ''
@@ -58,18 +59,25 @@ export default function App() {
   }, [path])
   useEffect(() => {
     const companyName = String(answers.companyName ?? 'Dashboard')
-    document.title = path === '/' ? 'BO — Build your company workspace' : path.startsWith('/build') ? 'Build your workspace — BO' : `${companyName} — BO`
+    document.title = path === '/' ? 'BO — Describe your company, get the software to run it' : path === '/start' ? 'BO — Build your company workspace' : path.startsWith('/build') ? 'Build your workspace — BO' : `${companyName} — BO`
   }, [path, answers.companyName])
 
   /**
-   * Whether anyone has to sign in at all.
+   * The landing page is public; everything else is not.
    *
-   * `undefined` means BO has not asked the server yet, and rendering either the app or a sign-in
-   * screen during that moment would show the wrong one and then swap it. With no database configured
-   * there are no accounts and nothing here ever appears.
+   * A landing page behind a sign-in screen cannot do its job — nobody signs up for something they
+   * have not seen. So `/` is always reachable, and the gate sits in front of the product instead.
+   *
+   * `accounts === undefined` means BO has not asked the server whether it has accounts yet. Rendering
+   * either the product or a sign-in screen during that moment would show the wrong one and swap it,
+   * so it waits. With no database configured there are no accounts and none of this appears.
    */
+  const start = () => navigate(accounts && !account ? '/signin' : '/start')
+  if (path === '/') return <Landing onStart={start} signedIn={Boolean(account)}/>
+
   if (accounts === undefined) return <main className="bo-home"/>
-  if (accounts && !account) return <SignIn onSignedIn={setAccount}/>
+  if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); navigate('/start') }}/>
+  if (path === '/signin') { navigate('/start'); return <main className="bo-home"/> }
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
   if (buildMatch) return <Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate('/home') }}/>
@@ -97,7 +105,7 @@ export default function App() {
     return <Dashboard workspaceId={workspaceId} answers={answers} blueprint={blueprint}/>
   }
 
-  if (path !== '/') return <Home onSubmit={brief => { setAnswers({ companyDescription: brief }); navigate(`/build/${crypto.randomUUID()}`) }}/>
+  // Anything else is the prompt: the page a signed-in operator starts a new company from.
   return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={(brief) => {
     const workspaceId = crypto.randomUUID()
     localStorage.removeItem('bo-records'); localStorage.removeItem('bo-actions'); localStorage.removeItem('bo-workspace-config'); localStorage.removeItem('bo-workspace-records'); localStorage.removeItem('bo-ai-history'); localStorage.removeItem('bo-active-workspace-id'); setAnswers({ companyDescription: brief }); setBlueprint(null); navigate(`/build/${workspaceId}`)

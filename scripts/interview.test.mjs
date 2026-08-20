@@ -110,7 +110,8 @@ const modelRequests = []
 page.on('request', item => { if (/huggingface|mlc-ai|\.wasm$|params_shard/i.test(item.url())) modelRequests.push(item.url()) })
 
 try {
-  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  // `/` is the public landing page now; the prompt this suite is about lives at /start.
+  await page.goto(`http://127.0.0.1:${vitePort}/start`, { waitUntil: 'networkidle' })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 
