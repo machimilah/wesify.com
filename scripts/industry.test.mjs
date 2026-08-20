@@ -28,9 +28,26 @@ for (let i = 0; i < 60; i++) {
   if (i === 59) throw new Error('The project service did not start.')
 }
 
-const observe = (subsector, payload) => fetch(`http://127.0.0.1:${port}/api/industries/${subsector}/observations`, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
-}).then(response => response.json())
+/**
+ * Every observation now comes from a real workspace, and each workspace counts as one company.
+ *
+ * A test that always used the same workspace would be testing the opposite of what the store is for,
+ * so the default is a fresh one per call — the same thing five separate companies reporting looks
+ * like. `as` pins a workspace when a check is specifically about the same company reporting twice.
+ */
+let workspaceCounter = 0
+const observe = (subsector, payload, as = '') => {
+  const workspaceId = as || `ws-industry-${(workspaceCounter += 1)}`
+  return fetch(`http://127.0.0.1:${port}/api/industries/${subsector}/observations`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-bo-workspace-id': workspaceId,
+      'x-bo-access-token': `token-${workspaceId}`.padEnd(40, 'x'),
+    },
+    body: JSON.stringify({ ...payload, workspaceId }),
+  }).then(response => response.json())
+}
 const verdictOf = subsector => fetch(`http://127.0.0.1:${port}/api/industries/${subsector}`).then(response => response.json())
 
 try {
@@ -85,7 +102,29 @@ try {
   const sanitised = await readIndustryProfile('541')
   assert.ok(!Object.keys(sanitised.observed).some(id => /[^a-z0-9.-]/.test(id)), 'malformed capability ids must never be stored')
 
-  console.log('Industry test passed: no verdict without evidence, a threshold before deciding, splits left open, behaviour beating research, per-company counting, anonymity, and input validation.')
+  /**
+   * The loop is the only thing BO has that a competitor cannot copy, so writing to it is guarded.
+   *
+   * An open endpoint means anyone can invent companies until the industry says whatever they want,
+   * and the threshold that makes the verdict trustworthy becomes the thing that makes it forgeable.
+   */
+  const anonymous = await fetch(`http://127.0.0.1:${port}/api/industries/541/observations`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ removed: ['crm.contacts'], newCompany: true }),
+  })
+  assert.ok(anonymous.status === 401 || anonymous.status === 403, `an anonymous caller must not be able to write to industry knowledge, got ${anonymous.status}`)
+
+  // One workspace is one company however often it reports, so a single caller cannot reach a verdict.
+  const beforeForgery = await readIndustryProfile('813')
+  for (let i = 0; i < MIN_COMPANIES * 3; i += 1) await observe('813', { removed: ['crm.pipeline'], newCompany: true }, 'ws-persistent-liar')
+  const afterForgery = await readIndustryProfile('813')
+  assert.equal(afterForgery.companies, (beforeForgery.companies ?? 0) + 1, 'one workspace reporting fifteen times must count as one company')
+  const forged = industryVerdict(afterForgery)
+  assert.ok(!forged.exclude.some(item => item.capabilityId === 'crm.pipeline'), 'one caller reached a verdict on its own')
+
+  // Reading stays open: the knowledge is aggregate and belongs to everyone using BO.
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/industries/541`)).status, 200)
+
+  console.log('Industry test passed: no verdict without evidence, a threshold before deciding, splits left open, behaviour beating research, per-company counting, anonymity, input validation, anonymous writes refused, and one workspace counting once however often it reports.')
 } finally {
   api.kill()
   await rm(root, { recursive: true, force: true })

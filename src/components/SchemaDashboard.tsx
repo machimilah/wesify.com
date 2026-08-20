@@ -182,7 +182,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     const after = new Set(nextConfig.capabilities ?? [])
     const added = [...after].filter(id => !before.has(id))
     const removed = [...before].filter(id => !after.has(id))
-    if (added.length || removed.length) void recordIndustryObservations(nextConfig.industrySubsector ?? config.industrySubsector, { added, removed, label: nextConfig.industryLabel })
+    if (added.length || removed.length) void recordIndustryObservations(nextConfig.industrySubsector ?? config.industrySubsector, config.id, { added, removed, label: nextConfig.industryLabel })
   }
 
   const persist = (nextConfig: WorkspaceConfiguration, nextRecords: WorkspaceRecords) => {

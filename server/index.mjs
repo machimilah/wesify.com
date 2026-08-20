@@ -6,6 +6,7 @@ import { buildProject, currentManifest, listVersions, projectPaths, promoteProje
 import { reasoningAvailable, researchCompany } from './reasoning.mjs'
 import { runDiscoveryTurn } from './discoveryAgent.mjs'
 import { credentialFor, listConnections, recordSync, removeConnection, saveConnection } from './connections.mjs'
+import { callerOf, rateLimit, spendModelCall } from './limits.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
@@ -119,6 +120,34 @@ async function mergeConnectedRecords(workspaceId, providerId, pulled) {
 
   await writeData(workspaceId, data)
   return counts
+}
+
+/**
+ * What every model-backed request pays before it is allowed to cost anything.
+ *
+ * One caller is slowed by the window; the whole deployment is capped by the daily budget. Returning a
+ * value here means the request is refused, and the message says which limit was hit so the operator
+ * can tell "too fast" apart from "out of budget for today".
+ */
+function modelToll(request) {
+  const window = rateLimit(`model:${callerOf(request)}`, { max: Number(process.env.BO_MODEL_RATE_LIMIT || 20), windowMs: 60_000 })
+  if (!window.ok) return { status: 429, error: `Too many requests. Try again in ${window.retryAfterSeconds} seconds.` }
+  const budget = spendModelCall()
+  if (!budget.ok) return { status: 429, error: `BO has reached its model budget for today (${budget.limit} requests). It resets at midnight UTC.` }
+  return null
+}
+
+/** Industries this workspace has already been counted towards, kept in the workspace's own folder. */
+async function countedIndustries(workspaceId) {
+  try { return JSON.parse(await readFile(path.join(projectPaths(workspaceId).root, 'industry.json'), 'utf8')).counted ?? [] }
+  catch { return [] }
+}
+
+async function markIndustryCounted(workspaceId, subsector, already) {
+  const root = projectPaths(workspaceId).root
+  await mkdir(root, { recursive: true })
+  await writeFile(path.join(root, 'industry.json'), `${JSON.stringify({ counted: [...already, subsector] }, null, 2)}
+`, 'utf8')
 }
 
 async function audit(workspaceId, event, request, detail = {}) {
@@ -242,18 +271,37 @@ async function api(request, response, url) {
   const segments = url.pathname.split('/').filter(Boolean)
   if (segments[0] !== 'api') return false
 
-  // Industry knowledge is shared across companies and holds only aggregate counts, so it needs no
-  // workspace token: there is nothing in it belonging to any one company.
+  /**
+   * Industry knowledge: shared across companies, aggregate counts only.
+   *
+   * Reading needs nothing — there is nothing in it belonging to any one company. Writing needs a real
+   * workspace, because the count of companies is what decides whether an industry has spoken, and an
+   * open write endpoint means anyone can invent five hundred companies and change what every genuine
+   * one is given. It is the only defensible thing BO has, so it is the thing worth protecting first.
+   *
+   * The "already counted" marker lives with the company, not with the industry, so the shared store
+   * still holds no trace of who contributed to it.
+   */
   if (segments[1] === 'industries') {
     if (request.method === 'GET' && segments.length === 2) return send(response, 200, await listIndustries())
     if (request.method === 'GET' && segments[2]) return send(response, 200, industryVerdict(await readIndustryProfile(segments[2])))
     if (request.method === 'POST' && segments[2] && segments[3] === 'observations') {
       const input = await body(request)
+      const workspaceId = String(input.workspaceId ?? '')
+      await tenant(request, workspaceId)
+      const window = rateLimit(`observations:${callerOf(request)}`, { max: 30, windowMs: 60_000 })
+      if (!window.ok) return send(response, 429, { error: `Too many requests. Try again in ${window.retryAfterSeconds} seconds.` })
+
       const ids = value => (Array.isArray(value) ? value : []).filter(id => typeof id === 'string' && /^[a-z][a-z0-9.-]{1,60}$/.test(id)).slice(0, 200)
+      // One workspace is one company, once, however many times it reports. Without this the threshold
+      // counts requests rather than companies, and a single caller can outvote an industry alone.
+      const alreadyCounted = await countedIndustries(workspaceId)
+      const firstTime = input.newCompany === true && !alreadyCounted.includes(segments[2])
       const profile = await recordObservations(segments[2], {
         kept: ids(input.kept), removed: ids(input.removed), added: ids(input.added),
-        label: String(input.label ?? '').slice(0, 120), newCompany: input.newCompany === true,
+        label: String(input.label ?? '').slice(0, 120), newCompany: firstTime,
       })
+      if (firstTime) await markIndustryCounted(workspaceId, segments[2], alreadyCounted)
       return send(response, 200, industryVerdict(profile))
     }
     return send(response, 405, { error: 'Method not allowed.' })
@@ -264,6 +312,8 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && segments[1] === 'research' && segments.length === 2) {
+    const toll = modelToll(request)
+    if (toll) return send(response, toll.status, { error: toll.error }, 'application/json; charset=utf-8')
     const input = await body(request)
     await tenant(request, String(input.workspaceId ?? ''))
     const description = String(input.description ?? '').trim().slice(0, 4000)
@@ -289,6 +339,8 @@ async function api(request, response, url) {
    * a second copy kept here would drift and start rejecting capabilities that exist.
    */
   if (request.method === 'POST' && segments[1] === 'discovery' && segments[2] === 'turn') {
+    const toll = modelToll(request)
+    if (toll) return send(response, toll.status, { error: toll.error }, 'application/json; charset=utf-8')
     const input = await body(request)
     const mode = ['DISCOVER', 'ARCHITECT', 'REVIEW_ARCHITECTURE'].includes(input.mode) ? input.mode : 'DISCOVER'
     const capabilityIds = Array.isArray(input.capabilityIds) ? input.capabilityIds.filter(id => typeof id === 'string' && /^[a-z][a-z0-9.-]{1,60}$/.test(id)).slice(0, 400) : []

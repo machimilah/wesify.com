@@ -293,7 +293,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     localStorage.setItem(`bo-workspace-config:${workspaceId}`, JSON.stringify(config))
     localStorage.setItem('bo-workspace-id', workspaceId)
     // What this company was given becomes evidence for the next company in the same industry.
-    void recordIndustryObservations(config.industrySubsector, { kept: config.capabilities ?? [], label: config.industryLabel, newCompany: true })
+    void recordIndustryObservations(config.industrySubsector, workspaceId, { kept: config.capabilities ?? [], label: config.industryLabel, newCompany: true })
     onAnswersChange(nextAnswers)
     onBlueprintChange(blueprint)
     const now = new Date().toISOString()

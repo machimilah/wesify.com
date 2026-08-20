@@ -27,6 +27,10 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `ANTHROPIC_API_KEY` | Entrevista e investigación en el servidor |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-opus-5`) |
+| `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
+| `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
+
+Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
 ## Índice de páginas
 
@@ -57,6 +61,7 @@ smoke end-to-end en navegador. Cada bloque se puede lanzar por separado:
 | `npm run test:industry` | Conocimiento compartido por industria: umbrales, empates sin decidir, anonimato |
 | `npm run test:interview` | La entrevista en el servidor, la respuesta que vuelve, y que no se descargue el modelo del navegador |
 | `npm run test:stripe` | Conector Stripe: claves rechazadas, credencial cifrada, sincronización que no destruye datos |
+| `npm run test:limits` | Límite por IP, techo diario de llamadas al modelo, y que los endpoints gratuitos no se vean afectados |
 | `npm run test:research-ui` | Diario de razonamiento, fuentes citadas y capacidades investigadas en el workspace |
 | `npm run test:launch` | Abrir un Command Center terminado: sin overlay de construcción |
 | `npm run test:smoke` | Recorrido completo en navegador, rutas indexadas y Links |
