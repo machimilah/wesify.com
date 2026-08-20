@@ -1,0 +1,16 @@
+node_modules/
+dist/
+generated-projects/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.attic/
+
+# Dev server logs
+*.log
+
+# LaTeX build artifacts
+docs/*.aux
+docs/*.out
+docs/*.toc

@@ -1,0 +1,610 @@
+import { createServer } from 'node:http'
+import { createHash, timingSafeEqual } from 'node:crypto'
+import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { buildProject, currentManifest, listVersions, projectPaths, promoteProject, rollbackProject, runtimePath } from './project-builder.mjs'
+import { reasoningAvailable, researchCompany } from './reasoning.mjs'
+import { runDiscoveryTurn } from './discoveryAgent.mjs'
+import { credentialFor, listConnections, recordSync, removeConnection, saveConnection } from './connections.mjs'
+import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
+import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
+
+const requestedPort = Number(process.argv[process.argv.indexOf('--port') + 1])
+const port = Number.isFinite(requestedPort) ? requestedPort : Number(process.env.BO_API_PORT || 8787)
+const distRoot = path.resolve(process.cwd(), 'dist')
+const discoveryRoot = path.resolve(process.cwd(), 'generated-projects', '.discovery-sessions')
+const accessRoot = path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.workspace-access')
+const initialBuilds = new Map()
+
+function send(response, status, value, type = 'application/json; charset=utf-8') {
+  response.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'permissions-policy': 'camera=(), microphone=(), geolocation=()' })
+  response.end(type.startsWith('application/json') ? JSON.stringify(value) : value)
+}
+
+async function body(request) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of request) {
+    size += chunk.length
+    if (size > 2_000_000) throw new Error('Request is too large.')
+    chunks.push(chunk)
+  }
+  try { return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {} }
+  catch { throw Object.assign(new Error('Invalid JSON request.'), { status: 400 }) }
+}
+
+async function tenant(request, workspaceId) {
+  const header = String(request.headers['x-bo-workspace-id'] ?? '').toLowerCase()
+  if (!header || header !== workspaceId.toLowerCase()) throw Object.assign(new Error('Workspace access denied.'), { status: 403 })
+  const token = String(request.headers['x-bo-access-token'] ?? '')
+  if (!/^[a-zA-Z0-9_-]{32,200}$/.test(token)) throw Object.assign(new Error('Workspace session is missing or invalid.'), { status: 401 })
+  const digest = createHash('sha256').update(token).digest('hex')
+  const file = path.join(accessRoot, `${workspaceId.toLowerCase()}.json`)
+  let stored
+  try { stored = JSON.parse(await readFile(file, 'utf8')) } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+    await mkdir(accessRoot, { recursive: true })
+    await writeFile(file, `${JSON.stringify({ workspaceId, digest, createdAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
+    return
+  }
+  const supplied = Buffer.from(digest)
+  const expected = Buffer.from(String(stored.digest ?? ''))
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw Object.assign(new Error('Workspace session is not authorized.'), { status: 403 })
+}
+
+function authorize(manifest, request, permission) {
+  const roleId = String(request.headers['x-bo-role'] ?? '')
+  const role = manifest.permissions?.find(candidate => candidate.id === roleId)
+  if (!role?.permissions?.includes(permission) && !role?.permissions?.includes('admin')) throw Object.assign(new Error('Your role does not allow this action.'), { status: 403 })
+}
+
+async function readData(workspaceId) {
+  try { return JSON.parse(await readFile(projectPaths(workspaceId).data, 'utf8')) } catch { return {} }
+}
+
+async function writeData(workspaceId, value) {
+  const file = projectPaths(workspaceId).data
+  await mkdir(path.dirname(file), { recursive: true })
+  const candidate = `${file}.next`
+  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await rename(candidate, file)
+}
+
+/**
+ * Folds what another system holds into the workspace, without ever taking anything away.
+ *
+ * Matching is on the id the other system gave the record, kept in `connection.externalId`. A record
+ * the operator typed into BO has no external id, so it can never be matched, overwritten or removed
+ * by a sync — the worst a bad mapping can do here is add rows.
+ *
+ * Records that vanish from the other side are marked, not deleted. A customer disappearing from
+ * Stripe is a fact worth showing; silently removing them from BO would be BO deciding something it
+ * has no business deciding.
+ */
+async function mergeConnectedRecords(workspaceId, providerId, pulled) {
+  const data = await readData(workspaceId)
+  const at = new Date().toISOString()
+  const counts = {}
+
+  for (const [entityId, incoming] of Object.entries(pulled)) {
+    const existing = Array.isArray(data[entityId]) ? data[entityId] : []
+    const byExternalId = new Map(existing.filter(record => record?.connection?.externalId).map(record => [record.connection.externalId, record]))
+    const seen = new Set()
+    let added = 0
+    let updated = 0
+
+    for (const item of incoming) {
+      seen.add(item.externalId)
+      const current = byExternalId.get(item.externalId)
+      const connection = { providerId, externalId: item.externalId, lastSyncedAt: at, remoteUpdatedAt: item.remoteUpdatedAt || at, missingSince: '' }
+      if (current) {
+        Object.assign(current, item.values, { connection, updatedAt: at })
+        updated += 1
+      } else {
+        existing.push({ id: crypto.randomUUID(), ...item.values, connection, createdAt: at, updatedAt: at })
+        added += 1
+      }
+    }
+
+    let missing = 0
+    for (const [externalId, record] of byExternalId) {
+      if (seen.has(externalId) || record.connection.missingSince) continue
+      record.connection = { ...record.connection, missingSince: at }
+      missing += 1
+    }
+
+    data[entityId] = existing
+    counts[entityId] = { added, updated, missing }
+  }
+
+  await writeData(workspaceId, data)
+  return counts
+}
+
+async function audit(workspaceId, event, request, detail = {}) {
+  const root = projectPaths(workspaceId).root
+  await mkdir(root, { recursive: true })
+  const record = { id: crypto.randomUUID(), workspaceId, event, role: String(request.headers['x-bo-role'] ?? 'system'), at: new Date().toISOString(), detail }
+  await appendFile(path.join(root, 'audit.jsonl'), `${JSON.stringify(record)}\n`, 'utf8')
+}
+
+async function readAudit(workspaceId) {
+  try {
+    const lines = (await readFile(path.join(projectPaths(workspaceId).root, 'audit.jsonl'), 'utf8')).split(/\r?\n/).filter(Boolean)
+    return lines.slice(-100).reverse().map(line => JSON.parse(line))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return []
+    throw error
+  }
+}
+
+function emptyAutomationWorkspace() { return { connectors: [], automations: [], runs: [] } }
+function automationFile(workspaceId) { return path.join(projectPaths(workspaceId).root, 'automations.json') }
+async function readAutomationWorkspace(workspaceId) {
+  try { return JSON.parse(await readFile(automationFile(workspaceId), 'utf8')) } catch (error) {
+    if (error?.code === 'ENOENT') return emptyAutomationWorkspace()
+    throw error
+  }
+}
+async function writeAutomationWorkspace(workspaceId, value) {
+  const file = automationFile(workspaceId)
+  await mkdir(path.dirname(file), { recursive: true })
+  const candidate = `${file}.${crypto.randomUUID()}.next`
+  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await rename(candidate, file)
+}
+function safeWebhookUrl(value) {
+  let url
+  try { url = new URL(String(value ?? '')) } catch { throw Object.assign(new Error('Enter a valid HTTPS webhook URL.'), { status: 400 }) }
+  if (url.protocol !== 'https:' || url.username || url.password) throw Object.assign(new Error('Webhook connectors require a credential-free HTTPS URL.'), { status: 400 })
+  const hostname = url.hostname.toLowerCase()
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.local') || /^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) throw Object.assign(new Error('Private-network webhook targets are not allowed.'), { status: 400 })
+  return url.toString()
+}
+function publicAutomationWorkspace(value) {
+  return { connectors: value.connectors.map(({ endpointUrl, ...connector }) => connector), automations: value.automations, runs: value.runs.slice(-100).reverse() }
+}
+async function executeManagedAutomation(workspaceId, automation, event, entityId, record, dryRun = false) {
+  const state = await readAutomationWorkspace(workspaceId)
+  const connector = state.connectors.find(item => item.id === automation.action.connectorId)
+  const startedAt = new Date().toISOString()
+  const run = { id: crypto.randomUUID(), automationId: automation.id, automationName: automation.name, status: dryRun ? 'simulated' : 'success', event, entityId, recordId: String(record?.id ?? ''), startedAt, finishedAt: startedAt }
+  if (!connector) { run.status = 'failed'; run.error = 'Connector not found.' }
+  else if (!dryRun) {
+    try {
+      const response = await fetch(connector.endpointUrl, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'BO-Automation/1.0' }, body: JSON.stringify({ source: 'BO', workspaceId, automation: { id: automation.id, name: automation.name }, event: { type: event, entityId, occurredAt: startedAt }, record }), signal: AbortSignal.timeout(12_000) })
+      run.responseStatus = response.status
+      if (!response.ok) { run.status = 'failed'; run.error = `Webhook returned ${response.status}.` }
+    } catch (error) { run.status = 'failed'; run.error = error instanceof Error ? error.message : 'Webhook delivery failed.' }
+  }
+  run.finishedAt = new Date().toISOString()
+  const latest = await readAutomationWorkspace(workspaceId)
+  await writeAutomationWorkspace(workspaceId, { ...latest, runs: [...latest.runs.slice(-199), run] })
+  return run
+}
+async function triggerManagedAutomations(workspaceId, event, entityId, record) {
+  const state = await readAutomationWorkspace(workspaceId)
+  const matching = state.automations.filter(item => item.enabled && item.trigger.event === event && item.trigger.entityId === entityId)
+  await Promise.allSettled(matching.map(item => executeManagedAutomation(workspaceId, item, event, entityId, record)))
+}
+
+function discoveryFile(workspaceId) {
+  if (!/^[a-zA-Z0-9-]{8,80}$/.test(workspaceId)) throw Object.assign(new Error('Invalid workspace id.'), { status: 400 })
+  return path.join(discoveryRoot, `${workspaceId}.json`)
+}
+
+async function readDiscoverySession(workspaceId) {
+  try { return JSON.parse(await readFile(discoveryFile(workspaceId), 'utf8')) } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+async function writeDiscoverySession(workspaceId, value) {
+  if (!value || value.workspaceId !== workspaceId || !Array.isArray(value.messages) || typeof value.phase !== 'string') {
+    throw Object.assign(new Error('Invalid discovery session.'), { status: 400 })
+  }
+  await mkdir(discoveryRoot, { recursive: true })
+  const file = discoveryFile(workspaceId)
+  const candidate = `${file}.${crypto.randomUUID()}.next`
+  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await rename(candidate, file)
+}
+
+function validateRecord(entity, input, partial = false) {
+  const allowed = new Set(entity.fields.map(field => field.id))
+  const output = {}
+  for (const [key, value] of Object.entries(input ?? {})) if (allowed.has(key)) output[key] = value
+  if (!partial) for (const field of entity.fields.filter(field => field.required)) if (output[field.id] === undefined || output[field.id] === '') throw Object.assign(new Error(`${field.label} is required.`), { status: 400 })
+  return output
+}
+
+function validateRelations(entity, values, data) {
+  for (const field of entity.fields.filter(field => field.type === 'relation' && field.relationEntityId)) {
+    const value = values[field.id]
+    if (value && !(data[field.relationEntityId] ?? []).some(record => record.id === value)) throw Object.assign(new Error(`${field.label} must reference an existing record.`), { status: 400 })
+  }
+}
+
+function triggerWorkflows(manifest, data, entityId, event, record) {
+  const notifications = data._notifications ?? []
+  for (const workflow of manifest.workflows ?? []) {
+    const trigger = workflow.trigger
+    if (!workflow.enabled || trigger.entityId !== entityId || trigger.event !== event) continue
+    if (trigger.field && String(record[trigger.field] ?? '') !== String(trigger.equals ?? '')) continue
+    if (workflow.action.type === 'notify') notifications.push({ id: crypto.randomUUID(), message: workflow.action.message, entityId, recordId: record.id, createdAt: new Date().toISOString(), read: false })
+  }
+  return { ...data, _notifications: notifications }
+}
+
+async function api(request, response, url) {
+  if (request.method === 'GET' && url.pathname === '/api/health') return send(response, 200, { status: 'healthy' })
+  const segments = url.pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'api') return false
+
+  // Industry knowledge is shared across companies and holds only aggregate counts, so it needs no
+  // workspace token: there is nothing in it belonging to any one company.
+  if (segments[1] === 'industries') {
+    if (request.method === 'GET' && segments.length === 2) return send(response, 200, await listIndustries())
+    if (request.method === 'GET' && segments[2]) return send(response, 200, industryVerdict(await readIndustryProfile(segments[2])))
+    if (request.method === 'POST' && segments[2] && segments[3] === 'observations') {
+      const input = await body(request)
+      const ids = value => (Array.isArray(value) ? value : []).filter(id => typeof id === 'string' && /^[a-z][a-z0-9.-]{1,60}$/.test(id)).slice(0, 200)
+      const profile = await recordObservations(segments[2], {
+        kept: ids(input.kept), removed: ids(input.removed), added: ids(input.added),
+        label: String(input.label ?? '').slice(0, 120), newCompany: input.newCompany === true,
+      })
+      return send(response, 200, industryVerdict(profile))
+    }
+    return send(response, 405, { error: 'Method not allowed.' })
+  }
+
+  if (request.method === 'GET' && segments[1] === 'research' && segments[2] === 'status') {
+    return send(response, 200, { available: reasoningAvailable(), model: process.env.BO_REASONING_MODEL || 'claude-opus-5' })
+  }
+
+  if (request.method === 'POST' && segments[1] === 'research' && segments.length === 2) {
+    const input = await body(request)
+    await tenant(request, String(input.workspaceId ?? ''))
+    const description = String(input.description ?? '').trim().slice(0, 4000)
+    if (!description) return send(response, 400, { error: 'A company description is required.' })
+    const capabilityIds = Array.isArray(input.capabilityIds) ? input.capabilityIds.filter(id => typeof id === 'string' && /^[a-z][a-z0-9.-]{1,60}$/.test(id)).slice(0, 200) : []
+    const conversation = Array.isArray(input.conversation)
+      ? input.conversation.filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string').slice(-20).map(item => ({ role: item.role, content: item.content.slice(0, 2000) }))
+      : []
+    const research = await researchCompany({ description, conversation, catalog: String(input.catalog ?? '').slice(0, 20000), capabilityIds })
+    await audit(String(input.workspaceId), 'research.completed', request, { model: research.model, findings: research.findings.length, sources: research.sources.length })
+    // One company pays for the research; every later company in the same industry inherits it.
+    if (/^\d{3}$/.test(String(input.subsector ?? ''))) {
+      await saveResearch(input.subsector, { ...research, label: String(input.industryLabel ?? '') }).catch(() => undefined)
+    }
+    return send(response, 200, research)
+  }
+
+  /**
+   * One turn of the interview.
+   *
+   * No workspace token: the operator has not got a workspace yet — this call is what produces one.
+   * The catalog and module list come from the client because they are the client's own definitions;
+   * a second copy kept here would drift and start rejecting capabilities that exist.
+   */
+  if (request.method === 'POST' && segments[1] === 'discovery' && segments[2] === 'turn') {
+    const input = await body(request)
+    const mode = ['DISCOVER', 'ARCHITECT', 'REVIEW_ARCHITECTURE'].includes(input.mode) ? input.mode : 'DISCOVER'
+    const capabilityIds = Array.isArray(input.capabilityIds) ? input.capabilityIds.filter(id => typeof id === 'string' && /^[a-z][a-z0-9.-]{1,60}$/.test(id)).slice(0, 400) : []
+    const modules = Array.isArray(input.modules) ? input.modules.filter(id => typeof id === 'string' && /^[a-z][a-z-]{1,40}$/.test(id)).slice(0, 60) : []
+    const conversation = Array.isArray(input.conversation)
+      ? input.conversation.filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string').slice(-24).map(item => ({ role: item.role, content: item.content.slice(0, 2000) }))
+      : []
+    const turn = await runDiscoveryTurn({
+      mode, conversation, modules, capabilityIds,
+      businessState: input.businessState && typeof input.businessState === 'object' ? input.businessState : null,
+      catalog: String(input.catalog ?? '').slice(0, 20000),
+      forceArchitecture: input.forceArchitecture === true,
+      industry: String(input.industry ?? '').slice(0, 120),
+    })
+    return send(response, 200, turn)
+  }
+
+  /**
+   * Connected apps: /api/connections/:workspaceId[/:providerId[/sync]]
+   *
+   * Read-only for now, and the read direction is the safe one. Nothing here ever returns a stored
+   * credential, and a sync never deletes a record the operator created in BO — records that came from
+   * the other system are updated in place and matched on the id that system gave them.
+   */
+  if (segments[1] === 'connections' && segments[2]) {
+    const workspaceId = segments[2]
+    await tenant(request, workspaceId)
+    const providerId = segments[3]
+
+    if (request.method === 'GET' && !providerId) return send(response, 200, await listConnections(workspaceId))
+
+    if (providerId && providerId !== 'stripe') return send(response, 404, { error: 'BO has no connector for that app yet.' })
+
+    if (request.method === 'POST' && providerId === 'stripe' && !segments[4]) {
+      const input = await body(request)
+      const credential = checkStripeKey(input.apiKey)
+      const account = await verifyStripe(credential)
+      const saved = await saveConnection(workspaceId, 'stripe', { credential, mode: 'read', account: account.livemode ? 'Live' : 'Test' })
+      await audit(workspaceId, 'connection.created', request, { providerId: 'stripe', mode: 'read' })
+      return send(response, 200, saved)
+    }
+
+    if (request.method === 'POST' && providerId === 'stripe' && segments[4] === 'sync') {
+      const credential = await credentialFor(workspaceId, 'stripe')
+      try {
+        const pulled = await pullStripe(credential)
+        const counts = await mergeConnectedRecords(workspaceId, 'stripe', pulled)
+        const connection = await recordSync(workspaceId, 'stripe', { counts })
+        await audit(workspaceId, 'connection.synced', request, { providerId: 'stripe', ...counts })
+        return send(response, 200, { connection, counts })
+      } catch (error) {
+        await recordSync(workspaceId, 'stripe', { error: error?.message ?? 'Sync failed.' })
+        throw error
+      }
+    }
+
+    if (request.method === 'DELETE' && providerId === 'stripe') {
+      const removed = await removeConnection(workspaceId, 'stripe')
+      if (removed) await audit(workspaceId, 'connection.removed', request, { providerId: 'stripe' })
+      return send(response, 200, { removed })
+    }
+
+    return send(response, 405, { error: 'Method not allowed.' })
+  }
+
+  if (segments[1] === 'discovery' && segments[2] === 'sessions' && segments[3]) {
+    const workspaceId = segments[3]
+    await tenant(request, workspaceId)
+    if (request.method === 'GET') {
+      const session = await readDiscoverySession(workspaceId)
+      return send(response, 200, session)
+    }
+    if (request.method === 'PUT') {
+      const session = await body(request)
+      await writeDiscoverySession(workspaceId, session)
+      return send(response, 200, session)
+    }
+    return send(response, 405, { error: 'Method not allowed.' })
+  }
+
+  if (request.method === 'POST' && segments[1] === 'builds') {
+    const input = await body(request)
+    await tenant(request, input.workspaceId)
+    const existing = await currentManifest(input.workspaceId)
+    if (existing?.specification?.profile?.description === input.specification?.profile?.description) return send(response, 200, existing)
+    const pending = initialBuilds.get(input.workspaceId)
+    if (pending) return send(response, 200, await pending)
+    const build = (async () => {
+      const project = await buildProject({ workspaceId: input.workspaceId, specification: input.specification, changeDescription: input.changeDescription, changeType: 'initial' })
+      await audit(input.workspaceId, 'project.created', request, { version: project.version })
+      return project
+    })()
+    initialBuilds.set(input.workspaceId, build)
+    try { return send(response, 201, await build) }
+    finally { initialBuilds.delete(input.workspaceId) }
+  }
+
+  if (segments[1] !== 'projects' || !segments[2]) return send(response, 404, { error: 'Not found.' })
+  const workspaceId = segments[2]
+  await tenant(request, workspaceId)
+
+  if (request.method === 'GET' && segments.length === 3) {
+    const manifest = await currentManifest(workspaceId)
+    return manifest ? send(response, 200, manifest) : send(response, 404, { error: 'Project not built.' })
+  }
+  if (request.method === 'GET' && segments[3] === 'versions') return send(response, 200, await listVersions(workspaceId))
+  if (request.method === 'POST' && segments[3] === 'changes') {
+    const input = await body(request)
+    const current = await currentManifest(workspaceId)
+    if (!current) return send(response, 404, { error: 'Project not built.' })
+    authorize(current, request, 'admin')
+    const project = await buildProject({ workspaceId, specification: input.specification, changeDescription: input.changeDescription ?? 'Updated Command Center', changeType: input.changeType ?? 'workspace-change', promote: false })
+    await audit(workspaceId, 'project.change_prepared', request, { version: project.version, changeType: input.changeType ?? 'workspace-change' })
+    return send(response, 201, project)
+  }
+  if (request.method === 'POST' && segments[3] === 'promote') {
+    const input = await body(request)
+    const current = await currentManifest(workspaceId)
+    if (current) authorize(current, request, 'admin')
+    const project = await promoteProject(workspaceId, input.version)
+    await audit(workspaceId, 'project.version_promoted', request, { version: input.version })
+    return send(response, 200, project)
+  }
+  if (request.method === 'POST' && segments[3] === 'rollback') {
+    const input = await body(request)
+    const current = await currentManifest(workspaceId)
+    if (current) authorize(current, request, 'admin')
+    const project = await rollbackProject(workspaceId, input.version)
+    await audit(workspaceId, 'project.version_rolled_back', request, { version: input.version })
+    return send(response, 200, project)
+  }
+  if (request.method === 'GET' && segments[3] === 'runtime.mjs') {
+    const file = await runtimePath(workspaceId, url.searchParams.get('version'))
+    if (!file) return send(response, 404, 'Not found.', 'text/plain; charset=utf-8')
+    return send(response, 200, await readFile(file, 'utf8'), 'text/javascript; charset=utf-8')
+  }
+
+  const manifest = await currentManifest(workspaceId)
+  if (!manifest) return send(response, 404, { error: 'Project not built.' })
+
+  if (request.method === 'GET' && segments[3] === 'audit') {
+    authorize(manifest, request, 'admin')
+    return send(response, 200, await readAudit(workspaceId))
+  }
+
+  if (segments[3] === 'connectors' && request.method === 'POST' && segments.length === 4) {
+    authorize(manifest, request, 'admin')
+    const input = await body(request)
+    if (!['make-webhook', 'generic-webhook'].includes(input.type) || !String(input.name ?? '').trim()) return send(response, 400, { error: 'Connector name and supported type are required.' })
+    const endpointUrl = safeWebhookUrl(input.endpointUrl)
+    const state = await readAutomationWorkspace(workspaceId)
+    const connector = { id: crypto.randomUUID(), name: String(input.name).trim().slice(0, 100), type: input.type, endpointUrl, endpointHost: new URL(endpointUrl).hostname, status: 'connected', createdAt: new Date().toISOString() }
+    await writeAutomationWorkspace(workspaceId, { ...state, connectors: [...state.connectors, connector] })
+    await audit(workspaceId, 'connector.created', request, { connectorId: connector.id, type: connector.type })
+    const { endpointUrl: hidden, ...safe } = connector
+    return send(response, 201, safe)
+  }
+
+  if (segments[3] === 'automations') {
+    if (request.method === 'GET' && segments.length === 4) {
+      authorize(manifest, request, 'view')
+      return send(response, 200, publicAutomationWorkspace(await readAutomationWorkspace(workspaceId)))
+    }
+    if (request.method === 'POST' && segments.length === 4) {
+      authorize(manifest, request, 'admin')
+      const input = await body(request)
+      const state = await readAutomationWorkspace(workspaceId)
+      if (!manifest.entities.some(item => item.id === input.entityId) || !['created', 'updated'].includes(input.event) || !state.connectors.some(item => item.id === input.connectorId)) return send(response, 400, { error: 'Choose a valid record type, trigger, and connector.' })
+      const now = new Date().toISOString()
+      const automation = { id: crypto.randomUUID(), name: String(input.name ?? '').trim().slice(0, 120) || `${input.entityId} ${input.event}`, enabled: false, trigger: { entityId: input.entityId, event: input.event }, action: { type: 'webhook', connectorId: input.connectorId }, createdAt: now, updatedAt: now }
+      await writeAutomationWorkspace(workspaceId, { ...state, automations: [...state.automations, automation] })
+      await audit(workspaceId, 'automation.created', request, { automationId: automation.id })
+      return send(response, 201, automation)
+    }
+    const automationId = segments[4]
+    const state = await readAutomationWorkspace(workspaceId)
+    const automation = state.automations.find(item => item.id === automationId)
+    if (!automation) return send(response, 404, { error: 'Automation not found.' })
+    if (request.method === 'PATCH' && segments.length === 5) {
+      authorize(manifest, request, 'admin')
+      const input = await body(request)
+      const updated = { ...automation, enabled: Boolean(input.enabled), updatedAt: new Date().toISOString() }
+      await writeAutomationWorkspace(workspaceId, { ...state, automations: state.automations.map(item => item.id === updated.id ? updated : item) })
+      await audit(workspaceId, updated.enabled ? 'automation.enabled' : 'automation.disabled', request, { automationId: updated.id })
+      return send(response, 200, updated)
+    }
+    if (request.method === 'POST' && segments[5] === 'test') {
+      authorize(manifest, request, 'admin')
+      const input = await body(request)
+      const record = { id: 'test-record', test: true, message: 'BO automation test' }
+      const run = await executeManagedAutomation(workspaceId, automation, 'test', automation.trigger.entityId, record, input.dryRun !== false)
+      await audit(workspaceId, 'automation.tested', request, { automationId: automation.id, status: run.status })
+      return send(response, 200, run)
+    }
+  }
+
+  if (segments[3] === 'notifications') {
+    const data = await readData(workspaceId)
+    const notifications = data._notifications ?? []
+    if (request.method === 'GET' && segments.length === 4) {
+      authorize(manifest, request, 'view')
+      return send(response, 200, notifications.slice().reverse())
+    }
+    if (request.method === 'PATCH' && segments[4]) {
+      authorize(manifest, request, 'edit')
+      const input = await body(request)
+      const notification = notifications.find(item => item.id === segments[4])
+      if (!notification) return send(response, 404, { error: 'Notification not found.' })
+      const updated = { ...notification, read: Boolean(input.read) }
+      await writeData(workspaceId, { ...data, _notifications: notifications.map(item => item.id === updated.id ? updated : item) })
+      await audit(workspaceId, 'notification.updated', request, { notificationId: updated.id, read: updated.read })
+      return send(response, 200, updated)
+    }
+  }
+
+  if (segments[3] === 'records' && segments[4]) {
+    const entityId = segments[4]
+    const entity = manifest.entities.find(item => item.id === entityId)
+    if (!entity) return send(response, 404, { error: 'Entity not found.' })
+    const data = await readData(workspaceId)
+    const collection = data[entityId] ?? []
+    if (request.method === 'GET' && segments.length === 5) {
+      authorize(manifest, request, 'view')
+      let result = collection
+      const filterField = url.searchParams.get('filterField')
+      const filterValue = url.searchParams.get('filterValue')
+      if (filterField && filterValue !== null) result = result.filter(record => String(record[filterField] ?? '') === filterValue)
+      const sort = url.searchParams.get('sort')
+      if (sort) result = result.slice().sort((a, b) => String(a[sort] ?? '').localeCompare(String(b[sort] ?? '')))
+      return send(response, 200, result)
+    }
+    if (request.method === 'POST' && segments.length === 5) {
+      authorize(manifest, request, 'create')
+      const values = validateRecord(entity, await body(request))
+      validateRelations(entity, values, data)
+      const now = new Date().toISOString()
+      const record = { id: crypto.randomUUID(), workspaceId, ...values, createdAt: now, updatedAt: now }
+      let next = { ...data, [entityId]: [...collection, record] }
+      next = triggerWorkflows(manifest, next, entityId, 'created', record)
+      await writeData(workspaceId, next)
+      await audit(workspaceId, 'record.created', request, { entityId, recordId: record.id })
+      await triggerManagedAutomations(workspaceId, 'created', entityId, record)
+      return send(response, 201, record)
+    }
+    const recordId = segments[5]
+    const current = collection.find(record => record.id === recordId)
+    if (!current) return send(response, 404, { error: 'Record not found.' })
+    if (request.method === 'PATCH') {
+      authorize(manifest, request, 'edit')
+      const values = validateRecord(entity, await body(request), true)
+      validateRelations(entity, values, data)
+      const record = { ...current, ...values, workspaceId, updatedAt: new Date().toISOString() }
+      let next = { ...data, [entityId]: collection.map(item => item.id === recordId ? record : item) }
+      next = triggerWorkflows(manifest, next, entityId, 'updated', record)
+      await writeData(workspaceId, next)
+      await audit(workspaceId, 'record.updated', request, { entityId, recordId })
+      await triggerManagedAutomations(workspaceId, 'updated', entityId, record)
+      return send(response, 200, record)
+    }
+    if (request.method === 'DELETE') {
+      authorize(manifest, request, 'delete')
+      await writeData(workspaceId, { ...data, [entityId]: collection.filter(record => record.id !== recordId) })
+      await audit(workspaceId, 'record.deleted', request, { entityId, recordId })
+      return send(response, 200, { deleted: true })
+    }
+  }
+
+  if (request.method === 'GET' && segments[3] === 'records') {
+    authorize(manifest, request, 'view')
+    const data = await readData(workspaceId)
+    return send(response, 200, Object.fromEntries(manifest.entities.map(entity => [entity.id, data[entity.id] ?? []])))
+  }
+
+  if (request.method === 'POST' && segments[3] === 'query') {
+    authorize(manifest, request, 'view')
+    const input = await body(request)
+    const data = await readData(workspaceId)
+    if (input.query === 'most-expensive-project') {
+      const costs = new Map()
+      for (const record of data['project-costs'] ?? []) costs.set(record.project, (costs.get(record.project) ?? 0) + Number(record.amount ?? 0))
+      const winner = [...costs.entries()].sort((a, b) => b[1] - a[1])[0]
+      const project = (data.projects ?? []).find(item => item.id === winner?.[0])
+      return send(response, 200, winner ? { project, cost: winner[1] } : { project: null, cost: 0 })
+    }
+    return send(response, 400, { error: 'Unknown business query.' })
+  }
+
+  return send(response, 404, { error: 'Not found.' })
+}
+
+async function staticFile(response, url) {
+  const relative = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '')
+  const candidate = path.resolve(distRoot, relative)
+  if (!candidate.startsWith(distRoot)) return send(response, 403, 'Forbidden', 'text/plain; charset=utf-8')
+  try {
+    const info = await stat(candidate)
+    if (!info.isFile()) throw new Error('Not a file')
+    const ext = path.extname(candidate)
+    const type = ext === '.js' ? 'text/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.html' ? 'text/html; charset=utf-8' : 'application/octet-stream'
+    return send(response, 200, await readFile(candidate), type)
+  } catch {
+    try { return send(response, 200, await readFile(path.join(distRoot, 'index.html')), 'text/html; charset=utf-8') } catch { return send(response, 404, 'BO frontend is not built.', 'text/plain; charset=utf-8') }
+  }
+}
+
+const server = createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+    if (await api(request, response, url) !== false) return
+    await staticFile(response, url)
+  } catch (error) {
+    const status = Number(error?.status) || 500
+    send(response, status, { error: status === 500 ? 'BO could not complete the operation.' : error.message, detail: process.env.NODE_ENV === 'development' ? error.message : undefined })
+  }
+})
+
+server.listen(port, '127.0.0.1', () => console.log(`BO project service listening on ${port}`))
+
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))

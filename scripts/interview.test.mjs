@@ -1,0 +1,187 @@
+import { chromium } from 'playwright-core'
+import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
+
+/**
+ * The interview runs on the server, and the browser model is not downloaded when it does.
+ *
+ * BO's first minute used to be a one-gigabyte model download, a WebGPU requirement, and then a
+ * questionnaire asking a plumber what their company sells. This covers the replacement: the turn goes
+ * to the server, the question and its suggested answers reach the screen, the answer goes back with
+ * the conversation attached, and the architecture that follows is the one the server produced.
+ *
+ * It also holds the fallback. With no key configured the server must decline and BO must keep going
+ * on its own, because a product that stops working without a paid API is not a product.
+ */
+
+const anthropicPort = 8941
+const apiPort = 8942
+const vitePort = 4179
+
+const turns = []
+const question = {
+  businessState: {
+    companySummary: 'A plumbing service business', industry: 'Plumbing', facts: [{ topic: 'Delivery', value: 'Technicians visit customer homes', status: 'explicit', confidence: 0.9 }],
+    businessModel: ['Field service'], productsOrServices: ['Plumbing callouts'], customers: ['Homeowners'], revenueModel: [], team: [], operations: ['Technicians visit customer homes'],
+    resources: [], locations: [], currentTools: [], painPoints: [], goals: [], knownEntities: ['Jobs'], knownWorkflows: [], uncertainties: [], assumptions: [], softwareImplications: [],
+  },
+  decision: 'ASK_QUESTION',
+  acknowledgment: 'Understood.',
+  nextQuestion: { text: 'Do your technicians carry stock in their vans?', reason: 'Decides van inventory.', suggestedAnswers: ['Yes, each van holds parts', 'No, they collect per job'] },
+  architectureContext: emptyArchitecture(),
+}
+const architecture = {
+  ...question,
+  decision: 'READY_TO_ARCHITECT',
+  acknowledgment: 'Ready.',
+  nextQuestion: { text: '', reason: '', suggestedAnswers: [] },
+  architectureContext: {
+    title: 'Plumbing Command Center', summary: 'Dispatch and billing in one place.', explanation: 'Work orders connect customers, technicians and invoices.',
+    modules: ['customers', 'field-service', 'finance'], startView: 'field-service',
+    capabilities: ['Work orders'], capabilityIds: ['crm.contacts', 'service.field-work'], excludedCapabilityIds: ['manufacturing.production'],
+    pages: ['Clients', 'Work orders', 'Invoices'],
+    entities: [{ name: 'Work orders', module: 'field-service', purpose: 'Dispatch jobs' }],
+    workflows: [], metrics: ['Open work orders'], processStages: ['New', 'Scheduled', 'Complete'], pipelineStages: [], billingCadence: 'On completion',
+  },
+}
+
+function emptyArchitecture() {
+  return {
+    title: '', summary: '', explanation: '', modules: [], startView: 'overview', capabilities: [], capabilityIds: [], excludedCapabilityIds: [],
+    pages: [], entities: [], workflows: [], metrics: [], processStages: [], pipelineStages: [], billingCadence: '',
+  }
+}
+
+const sse = (response, events) => {
+  response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+  for (const event of events) response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+  response.end()
+}
+const start = () => ({ type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } })
+const text = value => [
+  { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+  { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: value } },
+  { type: 'content_block_stop', index: 0 },
+]
+const end = () => [{ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } }, { type: 'message_stop' }]
+
+const anthropic = createServer(async (request, response) => {
+  const chunks = []
+  for await (const chunk of request) chunks.push(chunk)
+  const payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+  const prompt = String(payload.system ?? '')
+  const asked = String(payload.messages?.[0]?.content ?? '')
+  turns.push({ consultant: prompt.includes("BO's business consultant"), architect: prompt.includes('Business Application Architect'), asked })
+  // First interview turn asks; the second, after the operator answers, is ready to build.
+  const answered = /Operator:.*van/i.test(asked)
+  const body = prompt.includes('Business Application Architect') || answered ? architecture : question
+  sse(response, [start(), ...text(JSON.stringify(body)), ...end()])
+})
+await new Promise(resolve => anthropic.listen(anthropicPort, '127.0.0.1', resolve))
+
+const api = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], {
+  cwd: process.cwd(),
+  env: { ...process.env, ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicPort}`, ANTHROPIC_API_KEY: 'sk-ant-mock' },
+  stdio: 'pipe',
+})
+for (let attempt = 0; attempt < 60; attempt += 1) {
+  try { if ((await fetch(`http://127.0.0.1:${apiPort}/api/health`)).ok) break } catch { /* starting */ }
+  await new Promise(resolve => setTimeout(resolve, 100))
+  if (attempt === 59) throw new Error('Could not start the project service.')
+}
+
+const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], {
+  cwd: process.cwd(), env: { ...process.env, BO_API_PORT: String(apiPort) }, stdio: 'pipe',
+})
+for (let attempt = 0; attempt < 60; attempt += 1) {
+  try { if ((await fetch(`http://127.0.0.1:${vitePort}/`)).ok) break } catch { /* starting */ }
+  await new Promise(resolve => setTimeout(resolve, 100))
+  if (attempt === 59) throw new Error('Could not start the frontend server.')
+}
+
+const browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const errors = []
+page.on('pageerror', error => errors.push(error.message))
+page.on('console', message => message.type() === 'error' && errors.push(message.text()))
+
+// Anything fetched from a model host means the browser engine started loading despite the server.
+const modelRequests = []
+page.on('request', item => { if (/huggingface|mlc-ai|\.wasm$|params_shard/i.test(item.url())) modelRequests.push(item.url()) })
+
+try {
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.evaluate(() => localStorage.clear())
+  await page.reload({ waitUntil: 'networkidle' })
+
+  await page.getByTestId('company-brief').fill('We run a plumbing service business.')
+  await page.getByTestId('start-building').click()
+  await page.waitForURL('**/build/*')
+
+  // The consultant asks about this company, not about what a company is.
+  await page.getByText('Do your technicians carry stock in their vans?', { exact: true }).waitFor({ timeout: 30_000 })
+  const shortcut = page.getByRole('button', { name: 'Yes, each van holds parts' })
+  await shortcut.waitFor()
+
+  /**
+   * The interview has to be worth sitting through.
+   *
+   * The question is the thing the operator is being asked to do, so it goes above BO's own notes
+   * rather than under a wall of them; it says how far in they are; and it does not print a different
+   * "still open" line beside the question actually on screen.
+   */
+  const progress = page.getByTestId('question-progress')
+  await progress.waitFor()
+  const progressText = await progress.innerText()
+  if (!/Question 2/i.test(progressText)) throw new Error(`The interview does not say how far in it is: ${progressText}`)
+  if (!/\d+% understood/.test(progressText)) throw new Error(`The interview shows no measure of progress: ${progressText}`)
+
+  // It reads as a conversation: BO's working, then the question, then the box you answer in. The
+  // question being anywhere but last is what made the old build feel like a form with a log stapled
+  // underneath it.
+  const threadShape = await page.evaluate(() => {
+    const thread = document.querySelector('[data-testid="build-thread"]')
+    const question = document.querySelector('[data-testid="discovery-question"]')
+    const thinking = document.querySelector('[data-testid="agent-thinking"]')
+    if (!thread || !question) return null
+    return {
+      questionIsLast: thread.lastElementChild === question,
+      thinkingBeforeQuestion: !thinking || Boolean(thinking.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING),
+      composerAfterThread: Boolean(thread.compareDocumentPosition(document.querySelector('.bo-composer')) & Node.DOCUMENT_POSITION_FOLLOWING),
+    }
+  })
+  if (!threadShape) throw new Error('The build screen is not a single thread.')
+  if (!threadShape.questionIsLast) throw new Error('Something is stacked below the question BO is waiting on.')
+  if (!threadShape.thinkingBeforeQuestion) throw new Error('BO shows its working after the question instead of before it.')
+  if (!threadShape.composerAfterThread) throw new Error('The reply box is not under the conversation.')
+
+  // BO's working starts collapsed and opens in one click. Shown by default it was the first thing
+  // between the operator and the question, which is exactly what a chat does not do.
+  if (await page.getByTestId('agent-thinking').count()) throw new Error('BO put its working in front of the question by default.')
+  await page.getByRole('button', { name: /Thinking|Thought this through|Understanding|Designing|Researching/ }).first().click()
+  const journalText = await page.getByTestId('agent-thinking').innerText()
+  if (journalText.trim().length < 40) throw new Error(`Opening BO's working showed nothing worth reading: ${journalText}`)
+  if (/Still open:/i.test(journalText)) throw new Error('BO predicted a different next question beside the one it asked.')
+
+  const first = turns.find(turn => turn.consultant)
+  if (!first) throw new Error(`The interview did not reach the server. Turns seen: ${JSON.stringify(turns.map(turn => turn.asked.slice(0, 60)))}`)
+  if (!first.asked.includes('plumbing service business')) throw new Error('The server was not told what the operator wrote.')
+
+  // Answering carries the conversation back, so the next turn is not asked in a vacuum.
+  await shortcut.click()
+  await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
+  const withAnswer = turns.find(turn => /Operator:.*van/i.test(turn.asked))
+  if (!withAnswer) throw new Error('The answer was not sent back with the next turn.')
+
+  // The workspace BO offers is the one the server designed.
+  await page.getByText('Plumbing Command Center', { exact: true }).waitFor()
+  if (modelRequests.length) throw new Error(`The browser model was downloaded even though the server ran the interview: ${modelRequests.slice(0, 3).join(', ')}`)
+
+  if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
+  console.log('Interview test passed: the server ran the interview, asked about this company, carried the answer forward, built from it, and never downloaded the browser model.')
+} finally {
+  await browser.close()
+  vite.kill()
+  api.kill()
+  anthropic.close()
+}

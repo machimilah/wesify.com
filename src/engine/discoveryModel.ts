@@ -1,0 +1,418 @@
+import type { ChatCompletionMessageParam, InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm'
+import { moduleIds } from './blueprint'
+import {
+  emptyArchitecture,
+  emptyBusinessState,
+  hasUsableArchitecture,
+  isDuplicateQuestion,
+  parseDiscoveryResponse,
+  type ArchitectureContext,
+  type BusinessState,
+  type DiscoveryAgentResponse,
+  type DiscoverySession,
+} from './businessDiscovery'
+import { capabilityCatalogPrompt, capabilityIds, planCapabilities } from './capabilityCatalog'
+import { researchBusiness, type BusinessResearch } from './businessResearch'
+import { selectCompanyTemplate } from './companyTemplates'
+import { requestDiscoveryTurn, serverInterviewAvailable } from './discoveryTurnClient'
+
+const MODEL_F16 = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
+const MODEL_F32 = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
+const MODULES = [...moduleIds]
+let enginePromise: Promise<MLCEngineInterface> | null = null
+const progressListeners = new Set<(value: string) => void>()
+let lastProgress = ''
+
+export interface DiscoveryModelRequest {
+  mode: 'DISCOVER' | 'ARCHITECT' | 'REVIEW_ARCHITECTURE'
+  session: DiscoverySession
+  forceArchitecture?: boolean
+  repairInstruction?: string
+}
+
+export interface DiscoveryStreamHandlers {
+  onText?: (text: string) => void
+  onActivity?: (text: string) => void
+}
+
+export interface BusinessDiscoveryModel {
+  generate(request: DiscoveryModelRequest, stream?: DiscoveryStreamHandlers): Promise<DiscoveryAgentResponse>
+}
+
+declare global {
+  interface Window {
+    __BO_DISCOVERY_MODEL_MOCK__?: (request: DiscoveryModelRequest, stream?: DiscoveryStreamHandlers) => Promise<DiscoveryAgentResponse>
+  }
+}
+
+const responseSchema = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    businessState: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        companySummary: { type: 'string', maxLength: 280 }, industry: { type: 'string', maxLength: 80 },
+        facts: { type: 'array', maxItems: 24, items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', maxLength: 60 }, value: { type: 'string', maxLength: 160 }, status: { type: 'string', enum: ['explicit', 'inferred', 'unknown', 'irrelevant'] }, confidence: { type: 'number', minimum: 0, maximum: 1 } }, required: ['topic', 'value', 'status', 'confidence'] } },
+        businessModel: list(), productsOrServices: list(), customers: list(), revenueModel: list(), team: list(), operations: list(), resources: list(), locations: list(), currentTools: list(), painPoints: list(), goals: list(), knownEntities: list(), knownWorkflows: list(), uncertainties: list(), assumptions: list(), softwareImplications: list(),
+      },
+      required: ['companySummary', 'industry', 'facts', 'businessModel', 'productsOrServices', 'customers', 'revenueModel', 'team', 'operations', 'resources', 'locations', 'currentTools', 'painPoints', 'goals', 'knownEntities', 'knownWorkflows', 'uncertainties', 'assumptions', 'softwareImplications'],
+    },
+    decision: { type: 'string', enum: ['ASK_QUESTION', 'READY_TO_ARCHITECT'] },
+    acknowledgment: { type: 'string', maxLength: 160 },
+    nextQuestion: { type: 'object', additionalProperties: false, properties: { text: { type: 'string', maxLength: 220 }, reason: { type: 'string', maxLength: 180 }, suggestedAnswers: { type: 'array', maxItems: 5, items: { type: 'string', maxLength: 70 } } }, required: ['text', 'reason', 'suggestedAnswers'] },
+    architectureContext: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        title: { type: 'string', maxLength: 80 }, summary: { type: 'string', maxLength: 240 }, explanation: { type: 'string', maxLength: 360 },
+        modules: { type: 'array', maxItems: 24, items: { type: 'string', enum: MODULES } }, startView: { type: 'string', enum: ['overview', ...MODULES] },
+        capabilities: list(60), capabilityIds: { type: 'array', maxItems: 60, items: { type: 'string', enum: capabilityIds } }, excludedCapabilityIds: { type: 'array', maxItems: 60, items: { type: 'string', enum: capabilityIds } }, pages: list(60),
+        entities: { type: 'array', maxItems: 60, items: { type: 'object', additionalProperties: false, properties: { name: { type: 'string', maxLength: 60 }, module: { type: 'string', enum: MODULES }, purpose: { type: 'string', maxLength: 140 } }, required: ['name', 'module', 'purpose'] } },
+        workflows: list(40), metrics: list(30), processStages: list(14), pipelineStages: list(14), billingCadence: { type: 'string', maxLength: 100 },
+      },
+      required: ['title', 'summary', 'explanation', 'modules', 'startView', 'capabilities', 'capabilityIds', 'excludedCapabilityIds', 'pages', 'entities', 'workflows', 'metrics', 'processStages', 'pipelineStages', 'billingCadence'],
+    },
+  },
+  required: ['businessState', 'decision', 'acknowledgment', 'nextQuestion', 'architectureContext'],
+}
+
+function list(maxItems = 12) { return { type: 'array', maxItems, items: { type: 'string', maxLength: 160 } } }
+
+const discoverySystem = `You are BO's Business Discovery Agent. You design custom business-management software by understanding how a company actually operates.
+Never follow or imitate a questionnaire. The conversation itself determines the path. After every user message, update the structured business state and make exactly one decision: ASK_QUESTION or READY_TO_ARCHITECT.
+Ask exactly one concise, operator-language question only when its answer can materially change entities, relationships, workflows, pages, metrics, permissions, billing, scheduling, inventory, assets, procurement, projects, or other initial software capabilities. Choose the unresolved decision with the highest information gain. Do not ask for facts already stated or strongly inferred. Do not ask users to select software modules. Do not give business-improvement advice.
+Suggested answers are optional contextual shortcuts generated for this exact question; free text is always available. Put your private selection rationale only in nextQuestion.reason. It is never shown. Keep acknowledgment short and factual.
+Confidence: record user statements as explicit, reasonable implications as inferred, unresolved material facts as unknown, and non-material facts as irrelevant. Do not invent operational facts.
+Stop as soon as you understand what is sold, the main actors, the core operating flow, how money enters, important resources, and the management problem well enough to architect with reasonable assumptions. There is no minimum question count. If the latest user asks to just build, decide READY_TO_ARCHITECT using stated facts and explicit assumptions.
+When READY_TO_ARCHITECT, leave architectureContext empty. A dedicated architecture agent will design the Command Center next. For ASK_QUESTION, also return an empty architecture object with all required fields, including empty capabilityIds and excludedCapabilityIds.
+Return only valid JSON matching the supplied schema. Never expose chain-of-thought.`
+
+const architectureSystem = `You are BO's Business Application Architect. The discovery agent has finished. Translate the complete structured business state and conversation into the smallest useful custom Business Command Center.
+BO has a hidden universal capability registry. Select capabilityIds that are required now. Put explicitly unnecessary capabilities in excludedCapabilityIds. Never expose the whole catalog to the user and never make the user choose software modules. Include a short business-facing capability label in capabilities for each selected capability. Respect dependencies but do not select adjacent features without evidence. Pages and entities must cover the selected capabilities using the company's own language.
+Hidden capability registry:\n${capabilityCatalogPrompt()}
+Return READY_TO_ARCHITECT and a complete architectureContext. It must include justified modules, business-facing pages, concrete business entities assigned to modules, core workflows, useful metrics, process stages where relevant, sales stages only when relevant, and billing cadence when known. Derive everything from this company and its answers. Preserve the supplied business state. nextQuestion must be empty. Return only schema-valid JSON and never expose private reasoning.`
+
+const criticSystem = `You are BO's architecture critic. Review the proposed Business Command Center only against the discovered structured business state and conversation. Validate capabilityIds against the hidden catalog, move unnecessary selections to excludedCapabilityIds, add only major missing operational capabilities, preserve required dependencies, and simplify where possible. Keep pages limited to selected capabilities and use the company's language. Return READY_TO_ARCHITECT with a refined architecture. Return only schema-valid JSON. Do not expose private reasoning.`
+
+function reportProgress(report: InitProgressReport) {
+  const percent = Math.round(report.progress * 100)
+  const label = percent < 100 ? `Preparing BO ${percent}%` : 'BO is ready'
+  lastProgress = label
+  progressListeners.forEach(listener => listener(label))
+}
+
+async function preferredModel() {
+  const gpu = navigator.gpu
+  const adapter = await gpu.requestAdapter()
+  return adapter?.features.has('shader-f16') ? MODEL_F16 : MODEL_F32
+}
+
+function getEngine() {
+  if (!('gpu' in navigator)) throw new Error('BO needs WebGPU for its private local AI. Open BO in a current version of Chrome or Edge with hardware acceleration enabled.')
+  enginePromise ??= Promise.all([import('@mlc-ai/web-llm'), preferredModel()]).then(([{ CreateWebWorkerMLCEngine }, model]) => CreateWebWorkerMLCEngine(
+      new Worker(new URL('./local-ai.worker.ts', import.meta.url), { type: 'module' }),
+      model,
+      { initProgressCallback: reportProgress },
+    )).catch(error => { enginePromise = null; throw error })
+  return enginePromise
+}
+
+async function withTimeout<T>(engine: MLCEngineInterface, task: Promise<T>, milliseconds: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([task, new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { engine.interruptGenerate(); reject(new Error('The local AI took too long. Close other GPU-heavy tabs and retry.')) }, milliseconds)
+  })]).finally(() => clearTimeout(timer))
+}
+
+async function loadEngineWithTimeout() {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    getEngine(),
+    new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The local AI download stalled. Check your connection and retry.')), 180_000) }),
+  ]).finally(() => clearTimeout(timer))
+}
+
+export async function prepareBusinessDiscoveryModel(onProgress?: (value: string) => void) {
+  if (window.__BO_DISCOVERY_MODEL_MOCK__) return
+  // A gigabyte nobody is going to use. When the server runs the interview, the browser model is only
+  // ever reached if that fails, and paying for it up front is the whole reason the first minute of BO
+  // used to be slow.
+  if (await serverInterviewAvailable()) return
+  if (onProgress) { progressListeners.add(onProgress); if (lastProgress) onProgress(lastProgress) }
+  try { await loadEngineWithTimeout() }
+  finally { if (onProgress) progressListeners.delete(onProgress) }
+}
+
+function conversationForModel(session: DiscoverySession) {
+  return session.messages.slice(-14).map(message => ({ role: message.role, content: message.content }))
+}
+
+function partialJsonString(source: string, parent: string, key: string) {
+  const parentIndex = source.indexOf(`"${parent}"`)
+  if (parentIndex < 0) return ''
+  const keyIndex = source.indexOf(`"${key}"`, parentIndex)
+  if (keyIndex < 0) return ''
+  const colon = source.indexOf(':', keyIndex)
+  const quote = source.indexOf('"', colon + 1)
+  if (quote < 0) return ''
+  let output = ''
+  let escaped = false
+  for (let index = quote + 1; index < source.length; index += 1) {
+    const char = source[index]
+    if (escaped) { output += char === 'n' ? '\n' : char; escaped = false; continue }
+    if (char === '\\') { escaped = true; continue }
+    if (char === '"') break
+    output += char
+  }
+  return output
+}
+
+function parseJsonContent(content: string) {
+  const start = content.indexOf('{')
+  const end = content.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('The model returned incomplete structured output.')
+  return JSON.parse(content.slice(start, end + 1)) as unknown
+}
+
+export async function generateLocalStructuredJson<T>({ messages, schema, maxTokens = 700, temperature = 0.1, onActivity }: { messages: ChatCompletionMessageParam[]; schema: Record<string, unknown>; maxTokens?: number; temperature?: number; onActivity?: (text: string) => void }): Promise<T> {
+  if (onActivity) { progressListeners.add(onActivity); if (lastProgress) onActivity(lastProgress) }
+  const engine = await loadEngineWithTimeout().finally(() => { if (onActivity) progressListeners.delete(onActivity) })
+  const chunks = await engine.chat.completions.create({ messages, response_format: { type: 'json_object', schema: JSON.stringify(schema) }, temperature, max_tokens: maxTokens, stream: true })
+  const content = await withTimeout(engine, (async () => {
+    let value = ''
+    for await (const chunk of chunks) value += chunk.choices[0]?.delta.content ?? ''
+    return value
+  })(), 60_000)
+  return parseJsonContent(content) as T
+}
+
+function modelMessages(request: DiscoveryModelRequest): ChatCompletionMessageParam[] {
+  const instruction = request.mode === 'REVIEW_ARCHITECTURE' ? criticSystem : request.mode === 'ARCHITECT' ? architectureSystem : discoverySystem
+  const context = {
+    mode: request.mode,
+    forceArchitecture: Boolean(request.forceArchitecture),
+    businessState: request.session.businessState,
+    conversation: conversationForModel(request.session),
+    priorQuestions: request.session.messages.filter(message => message.role === 'assistant' && message.content.includes('?')).map(message => message.content),
+    proposedArchitecture: request.mode === 'REVIEW_ARCHITECTURE' ? request.session.architecture : undefined,
+    repairInstruction: request.repairInstruction || undefined,
+  }
+  return [{ role: 'system', content: instruction }, { role: 'user', content: `Analyze this complete discovery context. JSON only.\n${JSON.stringify(context)}` }]
+}
+
+function schemaForMode(mode: DiscoveryModelRequest['mode']) {
+  const schema = JSON.parse(JSON.stringify(responseSchema)) as {
+    properties: {
+      decision: { enum: string[] }
+      nextQuestion: { properties: { text: Record<string, unknown> } }
+      architectureContext: { properties: { modules: Record<string, unknown>; capabilityIds: Record<string, unknown>; pages: Record<string, unknown>; entities: Record<string, unknown> } }
+    }
+  }
+  if (mode !== 'DISCOVER') {
+    schema.properties.decision.enum = ['READY_TO_ARCHITECT']
+    schema.properties.architectureContext.properties.modules.minItems = 1
+    schema.properties.architectureContext.properties.capabilityIds.minItems = 1
+    schema.properties.architectureContext.properties.pages.minItems = 2
+    schema.properties.architectureContext.properties.entities.minItems = 1
+  }
+  return schema
+}
+
+function fallbackArchitecture(state: BusinessState): ArchitectureContext {
+  const initial = emptyArchitecture()
+  const plan = planCapabilities(state, initial)
+  const selected = plan.selected
+  const modules = [...new Set(selected.map(item => item.module))]
+  const pages = [...new Set(['Dashboard', ...selected.flatMap(item => item.pages.map(page => page.label))])]
+  const entities = selected.flatMap(item => item.entities.map(entity => ({ name: entity.pluralLabel, module: item.module, purpose: `${item.label}: ${item.description}` })))
+    .filter((entity, index, collection) => collection.findIndex(candidate => candidate.name === entity.name) === index)
+    .slice(0, 60)
+  const capabilities = selected.map(item => item.label)
+  const industry = state.industry || 'Business'
+  const operation = state.operations.slice(0, 3).join(', ') || state.knownWorkflows.slice(0, 2).join(', ') || 'the core operating flow'
+  const revenue = state.revenueModel.join(', ') || 'the confirmed billing process'
+  const conclusions = plan.research.findings.slice(0, 3).map(finding => finding.conclusion.replace(/^This company /, '').replace(/^The company /, ''))
+  return {
+    title: `${industry} Command Center`,
+    summary: `Run ${operation} and ${revenue} from one connected workspace.`,
+    explanation: `${conclusions.length ? `BO concluded this company ${conclusions.join('; ')}. ` : ''}That points to ${capabilities.slice(0, 6).join(', ')}${capabilities.length > 6 ? ', and the operating controls they depend on' : ''}. Capabilities without evidence in what you described stay hidden.`,
+    modules,
+    startView: modules.includes('projects') ? 'projects' : modules.includes('sales') ? 'sales' : modules[0] ?? 'overview',
+    capabilities,
+    capabilityIds: selected.map(item => item.id),
+    excludedCapabilityIds: plan.excluded,
+    pages,
+    entities,
+    workflows: [...new Set(selected.flatMap(item => (item.workflows ?? []).map(workflow => workflow.name)))].slice(0, 40),
+    metrics: [...new Set(selected.flatMap(item => (item.metrics ?? []).map(metric => metric.label)))].slice(0, 30),
+    processStages: state.operations.length ? state.operations.slice(0, 14) : ['New', 'Planned', 'In progress', 'Complete'],
+    pipelineStages: selected.some(item => item.id === 'crm.pipeline') ? ['New', 'Qualified', 'Proposal', 'Won', 'Lost'] : [],
+    billingCadence: state.revenueModel.join(', '),
+  }
+}
+
+export function resilientArchitecture(state: BusinessState, proposed?: ArchitectureContext | null) {
+  return proposed && hasUsableArchitecture(proposed) ? proposed : fallbackArchitecture(state)
+}
+
+function fallbackArchitectureResponse(request: DiscoveryModelRequest): DiscoveryAgentResponse {
+  const architectureContext = resilientArchitecture(request.session.businessState, request.session.architecture)
+  return {
+    businessState: request.session.businessState,
+    decision: 'READY_TO_ARCHITECT',
+    acknowledgment: 'I have enough operational detail to assemble the first Command Center.',
+    nextQuestion: { text: '', reason: '', suggestedAnswers: [] },
+    architectureContext,
+  }
+}
+
+/** Everything the company has said, plus everything BO has already asked, in one research corpus. */
+function researchInput(session: DiscoverySession, state: BusinessState = session.businessState) {
+  const spoken = session.messages.filter(message => message.role === 'user').map(message => message.content)
+  const text = [
+    ...spoken, state.companySummary, state.industry,
+    ...state.businessModel, ...state.productsOrServices, ...state.customers, ...state.revenueModel, ...state.team,
+    ...state.operations, ...state.resources, ...state.locations, ...state.goals, ...state.knownEntities, ...state.knownWorkflows,
+    ...state.facts.filter(fact => fact.status === 'explicit' || fact.status === 'inferred').map(fact => `${fact.topic}: ${fact.value}`),
+  ].filter(Boolean).join('. ')
+  const asked = session.messages.filter(message => message.role === 'assistant' && message.content.includes('?')).map(message => message.content)
+  return { text, asked }
+}
+
+/** The operating model BO has established so far, with the evidence behind each conclusion. */
+export function researchSession(session: DiscoverySession, state: BusinessState = session.businessState): BusinessResearch {
+  return researchBusiness(researchInput(session, state))
+}
+
+/**
+ * The next question worth a person's time: the unresolved operating-model dimension that settles the
+ * most capability decisions. Returns null once nothing left to ask would change what BO builds.
+ */
+function criticalDiscoveryQuestion(state: BusinessState, session: DiscoverySession) {
+  const research = researchSession(session, state)
+  const question = research.questions.find(candidate => candidate.essential)
+  if (!question) return null
+  return { text: question.text, reason: question.reason, suggestedAnswers: question.suggestedAnswers }
+}
+
+function deterministicBusinessState(session: DiscoverySession): BusinessState {
+  const state = { ...emptyBusinessState(), ...session.businessState }
+  const userMessages = session.messages.filter(message => message.role === 'user').map(message => message.content)
+  const brief = userMessages[0] ?? ''
+  const combined = userMessages.join(' ').toLowerCase()
+  const template = selectCompanyTemplate(brief)
+  const pairs = session.messages.map((message, index) => ({ message, previous: session.messages[index - 1] })).filter(item => item.message.role === 'user' && item.previous?.role === 'assistant')
+  const answerFor = (pattern: RegExp) => pairs.slice().reverse().find(item => pattern.test(item.previous.content))?.message.content
+  const offer = answerFor(/sell|offer|provide|deliver/i)
+  const customer = answerFor(/customer|client|buyer|patient|guest|tenant/i)
+  const revenue = answerFor(/charge|pay|billing|invoice|subscription|revenue/i)
+  const operations = answerFor(/work start|process|happens after|main steps|completion/i)
+  const team = answerFor(/team|employee|staff|who does|handles.*work/i)
+  return {
+    ...state,
+    companySummary: state.companySummary || brief,
+    industry: state.industry || template.label,
+    businessModel: state.businessModel.length ? state.businessModel : [template.label],
+    productsOrServices: state.productsOrServices.length ? state.productsOrServices : offer ? [offer] : [],
+    customers: state.customers.length ? state.customers : customer ? [customer] : [],
+    revenueModel: state.revenueModel.length ? state.revenueModel : revenue ? [revenue] : /subscription|retainer|monthly/.test(combined) ? ['Recurring'] : [],
+    team: state.team.length ? state.team : team ? [team] : /solo|just me|only me/.test(combined) ? ['Solo operator'] : [],
+    operations: state.operations.length ? state.operations : operations ? operations.split(/(?:,|→| then | and then )/i).map(item => item.trim()).filter(Boolean).slice(0, 12) : [],
+    knownEntities: state.knownEntities.length ? state.knownEntities : template.coreRecords,
+    softwareImplications: state.softwareImplications.length ? state.softwareImplications : template.blueprint.modules,
+  }
+}
+
+function fallbackDiscoveryResponse(request: DiscoveryModelRequest): DiscoveryAgentResponse {
+  const businessState = deterministicBusinessState(request.session)
+  const nextQuestion = criticalDiscoveryQuestion(businessState, request.session)
+  if (!nextQuestion || request.forceArchitecture) return { businessState, decision: 'READY_TO_ARCHITECT', acknowledgment: 'I have enough confirmed operating detail to build the first version.', nextQuestion: { text: '', reason: '', suggestedAnswers: [] }, architectureContext: emptyArchitecture() }
+  return { businessState, decision: 'ASK_QUESTION', acknowledgment: 'I saved the confirmed details and can continue without the local AI model.', nextQuestion, architectureContext: emptyArchitecture() }
+}
+
+async function generateOnce(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}) {
+  if (window.__BO_DISCOVERY_MODEL_MOCK__) return window.__BO_DISCOVERY_MODEL_MOCK__(request, stream)
+  stream.onActivity?.(request.mode === 'REVIEW_ARCHITECTURE' ? 'Reviewing the Command Center' : request.mode === 'ARCHITECT' ? 'Designing your Command Center' : 'Understanding your business')
+  if (stream.onActivity) progressListeners.add(stream.onActivity)
+  const engine = await loadEngineWithTimeout().finally(() => { if (stream.onActivity) progressListeners.delete(stream.onActivity) })
+  const chunks = await engine.chat.completions.create({
+    messages: modelMessages(request),
+    response_format: { type: 'json_object', schema: JSON.stringify(schemaForMode(request.mode)) },
+    temperature: request.mode === 'DISCOVER' ? 0.25 : 0.1,
+    max_tokens: request.mode === 'DISCOVER' ? 760 : 1900,
+    stream: true,
+  })
+  const content = await withTimeout(engine, (async () => {
+    let value = ''
+    let visible = ''
+    for await (const chunk of chunks) {
+      value += chunk.choices[0]?.delta.content ?? ''
+      const nextVisible = partialJsonString(value, 'nextQuestion', 'text') || partialJsonString(value, 'architectureContext', 'summary')
+      if (nextVisible && nextVisible !== visible) { visible = nextVisible; stream.onText?.(visible) }
+    }
+    return value
+  })(), 75_000)
+  return parseDiscoveryResponse(parseJsonContent(content))
+}
+
+export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
+  async generate(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+    let repairInstruction = request.repairInstruction ?? ''
+    let lastError: unknown
+    const maxAttempts = request.mode === 'DISCOVER' ? 2 : 3
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const result = await generateOnce({ ...request, repairInstruction }, stream)
+        if (request.mode === 'DISCOVER' && result.decision === 'ASK_QUESTION' && isDuplicateQuestion(result.nextQuestion.text, request.session)) {
+          throw new Error('The proposed question repeats information already resolved.')
+        }
+        if (request.mode !== 'DISCOVER' && !hasUsableArchitecture(result.architectureContext)) throw new Error('The architecture is incomplete.')
+        if (request.mode === 'DISCOVER' && result.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture) {
+          const nextQuestion = criticalDiscoveryQuestion(result.businessState, request.session)
+          if (nextQuestion) return { ...result, decision: 'ASK_QUESTION', acknowledgment: result.acknowledgment || 'I understand the current operating model.', nextQuestion, architectureContext: emptyArchitecture() }
+        }
+        console.info('[BO discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
+        return result
+      } catch (error) {
+        lastError = error
+        repairInstruction = `Your previous response was invalid: ${error instanceof Error ? error.message : 'schema failure'}. Preserve the business facts, return every required field, and choose a different non-duplicate question if asking.`
+        stream.onActivity?.('Checking the response')
+      }
+    }
+    if (request.mode !== 'DISCOVER') {
+      stream.onActivity?.('Completing the operating architecture')
+      return fallbackArchitectureResponse(request)
+    }
+    stream.onActivity?.('Continuing with BO’s built-in business model')
+    return fallbackDiscoveryResponse(request)
+  }
+}
+
+/**
+ * The interview BO actually runs.
+ *
+ * Server first when a frontier model is configured: it answers in seconds, works in every browser,
+ * and asks about the company instead of asking the company to define itself. The browser model is
+ * the fallback, and it is a real one — BO stays usable with no key, no network and no WebGPU, only
+ * with blunter questions.
+ */
+class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
+  private readonly local = new LocalBusinessDiscoveryModel()
+
+  async generate(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+    // A mock stands in for the model, not for the pipeline around it: it falls through to the local
+    // path so the repair loop and the question BO insists on asking still apply to it.
+    if (!window.__BO_DISCOVERY_MODEL_MOCK__ && await serverInterviewAvailable()) {
+      stream.onActivity?.(request.mode === 'DISCOVER' ? 'Understanding your business' : 'Designing your Command Center')
+      const turn = await requestDiscoveryTurn(request, request.session.businessState.industry)
+      // A duplicate question is worse than a blunt one: it tells the operator BO was not listening.
+      if (turn && !(request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && isDuplicateQuestion(turn.nextQuestion.text, request.session))) {
+        if (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)) return turn
+      }
+    }
+    return this.local.generate(request, stream)
+  }
+}
+
+export const businessDiscoveryModel: BusinessDiscoveryModel = new ServerFirstDiscoveryModel()
+
+export function architecturePlaceholder() { return emptyArchitecture() }

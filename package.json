@@ -1,0 +1,44 @@
+{
+  "name": "bo-business-os",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/dev.mjs",
+    "build": "tsc -b && vite build",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:project-service": "node scripts/project-service.test.mjs",
+    "test:reasoning": "node scripts/reasoning.test.mjs",
+    "test:industry": "node scripts/industry.test.mjs",
+    "test:interview": "node scripts/interview.test.mjs",
+    "test:stripe": "node scripts/stripe.test.mjs",
+    "test:research-ui": "node scripts/research-ui.test.mjs",
+    "test:launch": "node scripts/launch.test.mjs",
+    "verify": "npm run test && npm run build && npm run test:project-service && npm run test:reasoning && npm run test:industry && npm run test:interview && npm run test:stripe && npm run test:research-ui && npm run test:launch && npm run test:smoke",
+    "test": "vitest run",
+    "preview": "vite preview --host 0.0.0.0",
+    "start": "node server/index.mjs",
+    "project-service": "node server/index.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@gsap/react": "^2.1.2",
+    "@mlc-ai/web-llm": "^0.2.84",
+    "@vitejs/plugin-react": "latest",
+    "gsap": "^3.15.0",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@testing-library/react": "latest",
+    "@types/node": "^26.1.2",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "jsdom": "latest",
+    "playwright-core": "^1.62.1",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

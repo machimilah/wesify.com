@@ -1,0 +1,35 @@
+Create BO, an AI-native Business Command, ERP and CRM Center that lets a company prompt its way into a complete, personalized administration platform.  (Think of it as an odoo, or miccrosoft dynamics.... but prompting and without overbloating the user with functionalities they won't use.)
+
+The experience begins with a minimal homepage containing one ChatGPT-style prompt box. The user describes their company in a single sentence, such as: “I run a marketing agency managing recurring campaigns for technology companies.”
+
+BO then opens a split-screen workspace. On the left, an AI business-discovery agent asks one concise question at a time about what the company sells, its customers, payments, workflows, team, resources, approvals, and daily operations. Questions must be answerable through contextual options or one short phrase. On the right, the user watches their Command Center being constructed live. Never display invented records, fake metrics, or unexplained dummy information.
+
+The AI will determine which business systems are necessary for the type of business described. BO has a hidden universal capability library comparable to an ERP or CRM, covering sales, clients, projects, tasks, billing, expenses, inventory, procurement, manufacturing, documents, team management, reporting, governance, and other business operations. However, each company only sees the sections relevant to its specific operating model. Additional systems can be added later by prompting BO or adding manually. 
+
+While building, display an ongoing business-facing reasoning journal explaining conclusions such as: “This company delivers recurring client work, so BO is connecting clients, campaigns, tasks, team capacity, invoices, and expenses.” Do not reveal private chain-of-thought. Show concise operational conclusions and visible construction progress.
+
+Once enough information has been collected, present the proposed Command Center for approval. After confirmation, animate the preview into a full-screen working application.
+
+The completed Command Center must be operational rather than informational. It should let users create, edit, relate, search, and manage real business records. Every visible section must have its own indexed URL, such as /clients, /projects, /invoices, /team, or /links. The interface should include only a dark left sidebar and the main workspace—no top navigation bar.
+
+The Home section provides live KPIs, an action queue, recent activity, operational alerts, and a short setup checklist. All figures must be calculated from real workspace data.
+
+The Today section consolidates deadlines, overdue invoices, approvals, low stock, blocked work, and other urgent actions.
+
+The AI Assistant allows natural-language operations such as:
+“Create a new client called Acme.”
+“Show me the project costing us the most.”
+“Add an account tier field to clients.”
+“Alert me when an invoice becomes overdue.”
+
+Normal record operations can execute immediately. Structural changes must generate a tested preview that the user can approve or reject.
+
+Every Command Center must include a Links section: a graphical automation builder inspired by Make. Users drag BO events and connected services onto a dotted canvas, reposition nodes, and connect them visually. A Link can trigger when a selected record is created or updated and send the event to Make or another HTTPS webhook. Links start paused, support safe simulation, can be enabled or disabled, and include execution history. The architecture should later support filters, routers, delays, data transformations, and multi-step actions.
+
+The visual language should be minimal, calm, premium, and operational: warm off-white surfaces, dark charcoal navigation, subtle green accents, compact typography, restrained borders, generous spacing, and no decorative clutter. Empty states must be honest and useful. Never show fake activity to make the product appear populated.
+
+BO’s core promise is:
+
+“Describe your company. BO builds the exact system needed to run it—one prompt away.”
+
+The problem and Idea I want to make worth having, is that the AI is like a researcher or has some type of intelligence that determines what the company needs through research and intelligent decision making.
