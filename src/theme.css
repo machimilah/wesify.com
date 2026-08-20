@@ -1,0 +1,80 @@
+/**
+ * BO's light and dark themes, as one set of tokens.
+ *
+ * These are not invented colors. BO already had two complete, hand-tuned palettes living in
+ * different screens — a light one (Dashboard, Home) and a dark one (Builder's chat panel, the
+ * sidebar, dark preview surfaces) — nobody had ever unified them into something a person could
+ * switch between. This file names both palettes as one token set and lets every screen draw from
+ * whichever half is active, instead of each screen being permanently pinned to one.
+ *
+ * Loaded first, before styles.css / schema.css / landing.css, so every rule in those files can
+ * reference `var(--token)` and pick up whichever theme is active.
+ *
+ * Theme selection: a `data-theme="dark"` attribute on <html>, toggled in Settings and persisted to
+ * localStorage (`bo-theme`) by `src/engine/theme.ts`. No `prefers-color-scheme` fallback — the
+ * default is always light until a person chooses otherwise, so nothing changes for someone who has
+ * never opened the toggle.
+ */
+
+:root {
+  /* Surfaces, darkest to lightest role, not literal lightness */
+  --bg: #f4f3ef;
+  --bg-alt: #f1f1ed;
+  --surface: #fafaf7;
+  --surface-2: #ffffff;
+  --surface-hover: #f2f4f0;
+
+  /* Structure */
+  --border: #dcddd8;
+  --border-strong: #d9dbd6;
+
+  /* Ink */
+  --text: #171a17;
+  --text-2: #565f56;
+  --text-3: #7d847d;
+  --icon-ink: #181b18;
+
+  /* Brand green */
+  --accent: #2c6b45;
+  --accent-strong: #1c6b45;
+  --accent-soft: #dcede0;
+
+  /* Status */
+  --danger: #8a3a31;
+  --danger-soft: #fbeeec;
+  --warning: #7c5713;
+  --warning-soft: #f5ead9;
+
+  /* A permanently dark filled chip (selected/pressed states that must read the same in both
+     themes, e.g. a chosen answer pill) and two indicator colors that read as "the light is on" /
+     "something needs attention" regardless of theme, the way a status LED does not change color
+     depending on the room lighting. */
+  --solid-fill: #202420;
+  --online: #7cc99b;
+  --notify: #b4472f;
+}
+
+:root[data-theme='dark'] {
+  --bg: #151715;
+  --bg-alt: #1b1e1b;
+  --surface: #202420;
+  --surface-2: #1c201d;
+  --surface-hover: #292d29;
+
+  --border: #2b2e2a;
+  --border-strong: #343834;
+
+  --text: #e9ebe7;
+  --text-2: #9aa199;
+  --text-3: #7f877f;
+  --icon-ink: #eceee9;
+
+  --accent: #b8d8bf;
+  --accent-strong: #b6d7bd;
+  --accent-soft: rgba(184, 216, 191, .14);
+
+  --danger: #e7b6ae;
+  --danger-soft: #2c2220;
+  --warning: #e0ac66;
+  --warning-soft: #2e2415;
+}

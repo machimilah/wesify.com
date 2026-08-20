@@ -3,6 +3,7 @@ import {
   Link2, MessageSquare, Receipt, RefreshCw, Sparkles, TrendingUp, Users, Wrench,
 } from 'lucide-react'
 import { Brand } from './Brand'
+import { ThemeToggle } from './ThemeToggle'
 
 /**
  * The page someone lands on before they have an account.
@@ -87,6 +88,7 @@ export function Landing({ onStart, signedIn }: { onStart: () => void; signedIn: 
         <a href="#how">How it works</a>
         <a href="#examples">What you get</a>
       </div>
+      <ThemeToggle/>
       <button onClick={onStart} data-testid="landing-nav-start">{signedIn ? 'Open BO' : 'Sign in'}</button>
     </nav>
 

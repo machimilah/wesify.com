@@ -4,6 +4,7 @@ import { ArrowUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { prepareBusinessDiscoveryModel } from '../engine/discoveryModel'
 import { Brand } from './Brand'
+import { ThemeToggle } from './ThemeToggle'
 
 gsap.registerPlugin(useGSAP)
 
@@ -65,7 +66,7 @@ export function Home({ initialValue = '', onSubmit }: { initialValue?: string; o
   }
 
   return <main className="bo-home">
-    <header><Brand /></header>
+    <header><Brand /><ThemeToggle className="bo-home__theme-toggle"/></header>
     <section className="bo-home__center">
       <h1>Build your company</h1>
       <p>Tell me how your business works. I’ll build the system you need to run it.</p>

@@ -20,6 +20,7 @@ import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoveryS
 import { generateWorkspaceConfigurationFromDiscovery, type WorkspaceConfiguration } from '../engine/workspaceSchema'
 import { faceForNavigation } from './faces'
 import { Brand } from './Brand'
+import { ThemeToggle } from './ThemeToggle'
 import { DashboardSurface } from './Dashboard'
 
 gsap.registerPlugin(useGSAP)
@@ -372,6 +373,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             </li>
           ))}
         </ol>
+        <ThemeToggle/>
       </header>
 
       {/* One thread, oldest first. The question BO is asking is simply the newest thing in it. */}

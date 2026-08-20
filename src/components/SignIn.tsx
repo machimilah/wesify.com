@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { registerAccount, signIn, type Account } from '../engine/authClient'
 import { Brand } from './Brand'
+import { ThemeToggle } from './ThemeToggle'
 
 /**
  * The way in, when BO has accounts.
@@ -37,6 +38,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
   }
 
   return <main className="bo-signin">
+    <ThemeToggle className="bo-signin__theme-toggle"/>
     <form onSubmit={submit} data-testid="signin-form">
       <Brand/>
       <h1>{creating ? 'Create your BO account' : 'Welcome back'}</h1>

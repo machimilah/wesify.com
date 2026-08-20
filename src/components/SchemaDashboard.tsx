@@ -22,6 +22,7 @@ import { createAutomationConnector, createManagedAutomation, loadAutomationWorks
 import { humanize, readStorage } from '../engine/shared'
 import { faceFor, faceForNavigation } from './faces'
 import { Brand } from './Brand'
+import { ThemeToggle } from './ThemeToggle'
 
 const emptyAutomationWorkspace: AutomationWorkspace = { connectors: [], automations: [], runs: [] }
 
@@ -372,7 +373,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
 
   return <div className="bo-dashboard bo-schema-workspace">
     <aside className="bo-dashboard__sidebar">
-      <Brand inverse/>
+      <div className="bo-dashboard__sidebar-head"><Brand inverse/><ThemeToggle/></div>
       <nav>
         {primaryNavigation.map(navigationButton)}
         <section className="bo-sidebar-group">{groupedNavigation.map(group => group.nested ? groupButton(group) : navigationButton(group.items[0]))}</section>
