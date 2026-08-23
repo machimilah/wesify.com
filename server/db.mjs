@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url'
 /**
  * BO's database, when it has one.
  *
- * The workspace data still lives in JSON files. This is deliberately not that migration: accounts are
- * the thing standing between BO and a second person using it, and moving every record at the same
- * time would mean neither landing. Postgres arrives first for the things files genuinely cannot do —
- * a unique email, a session that expires, a workspace that belongs to someone.
+ * Accounts arrived first, because they are what stands between BO and a second person using the
+ * product at all. Workspace records — the actual clients, invoices and work orders an operator
+ * creates — followed once accounts existed to own them; see records.mjs for that migration.
  *
  * `DATABASE_URL` is a Supabase connection string. Without one, BO runs exactly as it did before, with
- * no accounts. That keeps the prototype usable and the test suite honest; it is not a permanent state,
- * and `databaseAvailable()` is what the rest of the server asks before enforcing anything.
+ * no accounts and workspace data back in local JSON files. That keeps the prototype usable with zero
+ * infrastructure and keeps the test suite honest about which path it is exercising;
+ * `databaseAvailable()` is what the rest of the server asks before choosing either.
  */
 
 const migrationsDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations')
@@ -57,6 +57,30 @@ export async function queryOne(text, values = []) {
 }
 
 /**
+ * Runs `run` against one checked-out connection inside BEGIN/COMMIT, rolling back on any error.
+ *
+ * Needed wherever a write has to be all-or-nothing across several statements — replacing every
+ * record a workspace holds, for instance, where a crash partway through must never leave the
+ * workspace with half its records deleted and the other half not yet re-inserted.
+ */
+export async function withTransaction(run) {
+  const pooled = await getPool()
+  const client = await pooled.connect()
+  try {
+    await client.query('begin')
+    const scoped = (text, values = []) => (values.length ? client.query(text, values) : client.query(text))
+    const result = await run(scoped)
+    await client.query('commit')
+    return result
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+/**
  * Applies every migration that has not run yet, in filename order.
  *
  * Recorded by name rather than by count, so a migration inserted out of order is noticed instead of
@@ -73,7 +97,12 @@ export async function migrate() {
   for (const name of files) {
     if (applied.has(name)) continue
     const sql = await readFile(path.join(migrationsDirectory, name), 'utf8')
-    for (const statement of sql.split(/;\s*$/m).map(item => item.trim()).filter(Boolean)) await query(statement)
+    // Full-line comments are stripped before splitting on `;`. Without this, a migration ending in an
+    // explanatory comment after its last real statement — normal in this codebase's style — leaves a
+    // trailing comment-only fragment that is not blank once trimmed, so it gets sent as a "statement"
+    // and fails wherever the driver cannot parse a bare comment on its own.
+    const withoutComments = sql.replace(/^\s*--.*$/gm, '')
+    for (const statement of withoutComments.split(/;\s*$/m).map(item => item.trim()).filter(Boolean)) await query(statement)
     await query('insert into schema_migrations (name) values ($1)', [name])
     ran.push(name)
   }

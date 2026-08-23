@@ -40,9 +40,11 @@ Para activar las cuentas hacen falta dos cosas:
 1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer los hashes de contraseña y de sesión. Es idempotente: volver a ejecutarlo no rompe nada.
 2. Poner la cadena de conexión (**Connect → Session pooler**, puerto `5432`) en `.env.local` como `DATABASE_URL`.
 
-Al arrancar, el servidor debe decir `listening on 8787 with accounts`. El fichero deja registrada la migración `001_accounts.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/002_*.sql`) se aplican solas al arrancar.
+Al arrancar, el servidor debe decir `listening on 8787 with accounts`. El fichero deja registradas las migraciones `001_accounts.sql` y `002_records.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/003_*.sql`) se aplican solas al arrancar.
 
-Los registros del workspace —clientes, facturas, órdenes de trabajo— siguen en ficheros JSON bajo `generated-projects/`, no en Postgres. Las cuentas van primero porque son lo que separa a BO de que lo use una segunda persona.
+Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
+
+Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
 
 ## Índice de páginas
 
@@ -107,7 +109,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. El servidor ya tiene cuentas, sesiones y propiedad de workspaces sobre Postgres, **pero la interfaz todavía no tiene pantalla de acceso**: con `DATABASE_URL` configurada, el frontend aún no envía la sesión. Faltan también facturación y despliegue. Los datos viven en `localStorage` y en ficheros JSON del servidor, lo que sirve para un prototipo y no para varios usuarios a la vez.
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Lo que falta para poder venderlo: recuperación de contraseña, facturación y despliegue.
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

@@ -185,8 +185,8 @@ export async function buildProject({ workspaceId, specification, changeDescripti
   const history = await readJson(path.join(projectRoot(workspaceId), 'history.json'), [])
   await writeJson(path.join(projectRoot(workspaceId), 'history.json'), [...history, { version, previousVersion: manifest.previousVersion, changeDescription, changedFiles: manifest.generatedFiles, schemaChanged: changeType !== 'initial', createdAt: manifest.lastBuild, status: manifest.buildStatus }])
   if (promote) await writeJson(path.join(projectRoot(workspaceId), 'current.json'), { version, promotedAt: new Date().toISOString() })
-  const dataFile = path.join(projectRoot(workspaceId), 'data.json')
-  if (!(await readJson(dataFile))) await writeJson(dataFile, {})
+  // No seeding here: a workspace with no records yet reads back as {} on its own, whether that read
+  // comes from an absent file or an empty query, so there was never anything for this to do.
   return manifest
 }
 

@@ -2,21 +2,24 @@
 -- BO — complete Supabase setup
 --
 -- Paste the whole file into the Supabase SQL editor (Dashboard → SQL Editor → New query)
--- and run it once. Safe to run again: every statement is idempotent, so re-running it
--- changes nothing and destroys nothing.
+-- and run it once. Safe to run again — including if you already ran an earlier version of
+-- this file: every statement is idempotent, so re-running it only adds what is missing and
+-- never destroys anything.
 --
 -- What this creates
 --   users              accounts (email + scrypt password hash)
 --   sessions           one row per signed-in browser, storing only a hash of the token
 --   workspaces         a Command Center, owned by one account
 --   workspace_members  who may open a workspace, and as what role
+--   records            every record a workspace holds — clients, invoices, work orders,
+--                      anything an operator creates — as one row per record
 --   schema_migrations  BO's own migration ledger, so the server does not re-run this
 --
 -- What this deliberately does NOT create
---   Workspace records — clients, invoices, work orders and so on — still live in JSON
---   files under generated-projects/, not in Postgres. Accounts came first because they
---   are what stands between BO and a second person using it. Moving every record is a
---   later migration, and it will arrive as server/migrations/002_*.sql.
+--   The generated Command Center itself — the versioned manifest, and the runtime.mjs /
+--   service / page files BO writes per build — stays on local disk under
+--   generated-projects/. Those are regenerable build output, not data an operator typed
+--   in, so losing them costs a rebuild rather than costing anyone their records.
 --
 -- After running this
 --   Put the Session pooler connection string in .env.local as DATABASE_URL, then start
@@ -66,9 +69,25 @@ create table if not exists workspace_members (
   primary key (workspace_id, user_id)
 );
 
+-- One generic table rather than one table per entity type, because an entity's shape —
+-- its fields — is decided by BO's AI architect per workspace at build time, not known in
+-- advance. BO already treats a record as an opaque JSON object everywhere except where it
+-- checks required fields against the entity definition, so a jsonb payload keeps that
+-- contract instead of fighting it with per-workspace dynamic DDL. `_notifications` is
+-- stored the same way, as entity_id = '_notifications'.
+create table if not exists records (
+  workspace_id text        not null references workspaces(id) on delete cascade,
+  entity_id    text        not null,
+  id           text        not null,
+  data         jsonb       not null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, entity_id, id)
+);
+
 -- BO's migration ledger. The server creates this itself on first start, but creating it
--- here lets the last section record 001 as already applied, so the server does not try
--- to run a migration whose work you have just done by hand.
+-- here lets the last section record 001 and 002 as already applied, so the server does
+-- not try to redo work you have just done by hand.
 create table if not exists schema_migrations (
   name       text primary key,
   applied_at timestamptz not null default now()
@@ -93,6 +112,10 @@ create index if not exists workspaces_owner_id_idx on workspaces (owner_id);
 -- load for a signed-in operator.
 create index if not exists workspace_members_user_id_idx on workspace_members (user_id);
 
+-- records needs no extra index: every query BO makes is "every record of this entity in
+-- this workspace" or "every record in this workspace", and the primary key above already
+-- leads with (workspace_id, entity_id) — exactly what both access patterns filter on.
+
 
 -- -------------------------------------------------------------------------------------
 -- 3. Keep these tables off the public API
@@ -103,10 +126,11 @@ create index if not exists workspace_members_user_id_idx on workspace_members (u
 -- roles. `anon` is reachable by anyone holding the publishable key — which is public by
 -- design and ships in the browser bundle.
 --
--- So without this section, a stranger could read every row of `users` (password hashes)
--- and `sessions` (live session token hashes) over HTTP. BO never uses PostgREST: it
--- connects straight to Postgres as the table owner, and RLS does not apply to the owner,
--- so locking these down costs the application nothing.
+-- So without this section, a stranger could read every row of `users` (password hashes),
+-- `sessions` (live session token hashes), and `records` (every client and invoice every
+-- workspace holds) over HTTP. BO never uses PostgREST: it connects straight to Postgres
+-- as the table owner, and RLS does not apply to the owner, so locking these down costs
+-- the application nothing.
 --
 -- Two independent locks, because either one alone can be undone by accident later:
 --   RLS with no policies  → the API can see the table but never any rows
@@ -117,6 +141,7 @@ alter table users             enable row level security;
 alter table sessions          enable row level security;
 alter table workspaces        enable row level security;
 alter table workspace_members enable row level security;
+alter table records           enable row level security;
 alter table schema_migrations enable row level security;
 
 -- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
@@ -138,9 +163,10 @@ begin
   execute 'revoke all on table sessions          from anon, authenticated';
   execute 'revoke all on table workspaces        from anon, authenticated';
   execute 'revoke all on table workspace_members from anon, authenticated';
+  execute 'revoke all on table records           from anon, authenticated';
   execute 'revoke all on table schema_migrations from anon, authenticated';
 
-  -- The same protection for tables a future BO migration creates, so 002 and beyond are
+  -- The same protection for tables a future BO migration creates, so 003 and beyond are
   -- not silently published the moment they are added.
   -- To undo for a table you genuinely want public:
   --   grant select on table <name> to anon;  -- plus a suitable RLS policy
@@ -153,22 +179,22 @@ $$;
 
 
 -- -------------------------------------------------------------------------------------
--- 4. Record migration 001 as applied
+-- 4. Record migrations 001 and 002 as applied
 --
 -- BO runs pending migrations from server/migrations/ on start, tracked by filename. This
--- file does the same work as 001_accounts.sql, so recording it prevents a duplicate run.
--- ON CONFLICT keeps this file safe to run twice.
+-- file does the same work as 001_accounts.sql and 002_records.sql, so recording both
+-- prevents a duplicate run. ON CONFLICT keeps this file safe to run twice.
 -- -------------------------------------------------------------------------------------
 
 insert into schema_migrations (name)
-values ('001_accounts.sql')
+values ('001_accounts.sql'), ('002_records.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
 -- 5. Verify
 --
--- Expect exactly five rows, and on every one of them:
+-- Expect exactly six rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
@@ -191,5 +217,5 @@ from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relkind = 'r'
-  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'schema_migrations')
+  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records', 'schema_migrations')
 order by c.relname;

@@ -11,6 +11,7 @@ import { runDiscoveryTurn } from './discoveryAgent.mjs'
 import { credentialFor, listConnections, recordSync, removeConnection, saveConnection } from './connections.mjs'
 import { callerOf, rateLimit, spendModelCall } from './limits.mjs'
 import { databaseAvailable, migrate } from './db.mjs'
+import { readWorkspaceData, writeWorkspaceData } from './records.mjs'
 import { authenticate, claimWorkspace, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
@@ -95,17 +96,11 @@ function authorize(manifest, request, permission) {
   if (!role?.permissions?.includes(permission) && !role?.permissions?.includes('admin')) throw Object.assign(new Error('Your role does not allow this action.'), { status: 403 })
 }
 
-async function readData(workspaceId) {
-  try { return JSON.parse(await readFile(projectPaths(workspaceId).data, 'utf8')) } catch { return {} }
-}
-
-async function writeData(workspaceId, value) {
-  const file = projectPaths(workspaceId).data
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.next`
-  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
-}
+// Storage moved to records.mjs (Postgres when configured, the original JSON file otherwise); these
+// two names stay so every call site below — written against "read the whole object, write the whole
+// object back" — did not have to change.
+const readData = readWorkspaceData
+const writeData = writeWorkspaceData
 
 /**
  * Folds what another system holds into the workspace, without ever taking anything away.
