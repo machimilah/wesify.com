@@ -128,14 +128,36 @@ try {
   assert.equal(notifications.status, 200)
   assert.deepEqual(notifications.payload, [], 'a workspace with no notifications must read back empty, not error')
 
-  // 8. Deleting the account cascades all the way down: workspace, then every record it held.
+  // 8. Everything the workspace holds comes back out in one file.
+  //
+  //    BO's billing screen tells people their records stay "readable and exportable" if a plan
+  //    lapses. That sentence is only true if this endpoint exists and returns everything, so this
+  //    checks the promise rather than the handler: the records, and the field definitions without
+  //    which a pile of rows is not the same thing as having your data.
+  const exported = await json(`/api/projects/${workspaceId}/export`, { headers: auth })
+  assert.equal(exported.status, 200)
+  assert.equal(exported.payload.workspaceId, workspaceId)
+  assert.equal(exported.payload.records.projects.length, 1)
+  assert.equal(exported.payload.records['project-costs'].length, 2)
+  assert.equal(exported.payload.records.customers ?? undefined, undefined, 'the deleted customer came back in the export')
+  assert.ok(exported.payload.specification, 'the export carries no specification, so the records have no meaning')
+  assert.deepEqual(exported.payload.entities.map(entity => entity.id).sort(), ['customers', 'project-costs', 'projects'])
+  assert.ok(Array.isArray(exported.payload.notifications))
+  assert.ok(exported.payload.exportedAt)
+
+  //    Exporting is reading, so a role with only `view` may do it — otherwise the one person most
+  //    likely to be leaving would be the one unable to take their data with them.
+  const viewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { ...auth, 'x-bo-role': 'viewer' } })
+  assert.equal(viewerExport.status, 403, 'a role that cannot even view the workspace could still export it')
+
+  // 9. Deleting the account cascades all the way down: workspace, then every record it held.
   await query('delete from users where email = $1', ['owner@example.com'])
   const survivingRecords = (await query('select * from records where workspace_id = $1', [workspaceId])).rows
   assert.equal(survivingRecords.length, 0, 'records outlived the workspace and the account that owned it')
   const survivingWorkspace = (await query('select * from workspaces where id = $1', [workspaceId])).rows
   assert.equal(survivingWorkspace.length, 0)
 
-  console.log('Records test passed: records are real Postgres rows, no data.json is written once a database is configured, create/list/update/delete behave exactly as the file storage did, a cross-entity query works against the grouped result, notifications share the same storage, and deleting an account cascades through its workspace to every record it held.')
+  console.log('Records test passed: records are real Postgres rows, no data.json is written once a database is configured, create/list/update/delete behave exactly as the file storage did, a cross-entity query works against the grouped result, notifications share the same storage, everything comes back out through the export with the definitions that give it meaning, and deleting an account cascades through its workspace to every record it held.')
 } finally {
   await new Promise(resolve => server.close(resolve))
   await rm(generatedRoot, { recursive: true, force: true })

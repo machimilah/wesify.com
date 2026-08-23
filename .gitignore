@@ -14,3 +14,6 @@ generated-projects/
 docs/*.aux
 docs/*.out
 docs/*.toc
+
+# Coverage reports are generated on every run and belong to whoever ran it.
+coverage/

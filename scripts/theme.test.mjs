@@ -146,7 +146,75 @@ try {
   if (dashboardOffendersDark.length) throw new Error(`Invisible content in dark mode on the Command Center: ${dashboardOffendersDark.join(', ')}`)
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, and no element on the landing page, the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme.')
+  /**
+   * Where the keyboard is.
+   *
+   * Several inputs across BO set `outline: 0` to get the border they wanted, and for a long time
+   * nothing put a focus style back. Anyone navigating by keyboard — by preference, by injury, or
+   * because their mouse died — moved through the product blind, unable to tell which field would
+   * receive the next keystroke. This walks the workspace by Tab and insists every stop is visible.
+   */
+  //
+  // Tabbed for real rather than focused by script: `:focus-visible` is the browser's judgement
+  // about whether focus deserves to be shown, and it does not consider a scripted `.focus()` to
+  // qualify. Only actual keyboard input tests the thing a keyboard user would experience.
+  const seen = new Set()
+  const missing = new Set()
+  let checked = 0
+  await page.evaluate(() => document.body.focus())
+  for (let step = 0; step < 30; step += 1) {
+    await page.keyboard.press('Tab')
+    const stop = await page.evaluate(() => {
+      const node = document.activeElement
+      if (!node || node === document.body) return null
+      const style = getComputedStyle(node)
+      const name = `${node.tagName.toLowerCase()}${node.className ? `.${String(node.className).split(' ')[0]}` : ''}`
+      const ring = (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) || style.boxShadow !== 'none'
+      return { name, ring }
+    })
+    if (!stop || seen.has(stop.name)) continue
+    seen.add(stop.name)
+    checked += 1
+    if (!stop.ring) missing.add(stop.name)
+  }
+  if (checked < 5) throw new Error(`Only ${checked} focusable elements were reached by Tab, so this proves nothing.`)
+  if (missing.size) throw new Error(`These have no visible keyboard focus: ${[...missing].join(', ')}`)
+
+  /**
+   * Nothing may push the page sideways on a phone.
+   *
+   * A workspace is a lot of table on a small screen, and one element that will not shrink turns
+   * every screen into a horizontal scroll — the failure that makes a product feel broken on a phone
+   * without anything actually being broken. Wide content is allowed to scroll inside itself; the
+   * document is not.
+   */
+  for (const [width, height] of [[390, 844], [820, 1180]]) {
+    await page.setViewportSize({ width, height })
+    await page.waitForTimeout(200)
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      culprits: [...document.querySelectorAll('body *')]
+        .filter(node => node.getBoundingClientRect().right > document.documentElement.clientWidth + 1 && getComputedStyle(node).position !== 'fixed')
+        .slice(0, 5)
+        .map(node => `${node.tagName.toLowerCase()}.${String(node.className || '').split(' ')[0]}`),
+    }))
+    if (overflow.scrollWidth > overflow.clientWidth + 1) {
+      throw new Error(`The page scrolls sideways at ${width}px (${overflow.scrollWidth} > ${overflow.clientWidth}): ${[...new Set(overflow.culprits)].join(', ')}`)
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  // Every control a person can reach must say what it does. An icon-only button reads to a screen
+  // reader as "button" and nothing else, which is the same as unlabelled.
+  const unnamed = await page.evaluate(() => [...document.querySelectorAll('button, a[href], input, select, textarea')]
+    .filter(node => node.getClientRects().length > 0)
+    .filter(node => !(node.textContent ?? '').trim() && !node.getAttribute('aria-label') && !node.getAttribute('title')
+      && !node.getAttribute('aria-labelledby') && !(node.id && document.querySelector(`label[for="${node.id}"]`)) && !node.closest('label'))
+    .map(node => `${node.tagName.toLowerCase()}.${String(node.className || '').split(' ')[0]}`))
+  if (unnamed.length) throw new Error(`These controls have no accessible name: ${[...new Set(unnamed)].join(', ')}`)
+
+  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, no element on the landing page, the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme, every control BO can reach by keyboard shows where the focus is, none of them is left without an accessible name, and nothing pushes the page sideways on a phone or a tablet.')
 } finally {
   await browser.close()
   vite.kill()

@@ -47,7 +47,15 @@ export function saysSignal(text: string, signal: string) {
   let pattern = signalPatterns.get(signal)
   if (!pattern) {
     const escaped = signal.replace(/[.*+?^${}()|[\]\\]/g, character => `\\${character}`)
-    pattern = new RegExp(String.raw`\b${escaped}(?:e?s)?\b`, 'i')
+    // `\b` is a transition between a word character and a non-word one, so it can only be used at an
+    // end of the signal that is itself a word character. A signal like "c++" or "node.js" ends in
+    // punctuation, and a trailing `\b` there asks for a boundary that never occurs — the signal
+    // would silently never match anything. Every catalog signal today is plain words; this is here
+    // so that adding one that is not does not quietly stop selecting the capability behind it.
+    const opening = /^\w/.test(signal) ? String.raw`\b` : String.raw`(?<!\w)`
+    // The plural is only offered where it means something: "invoices" for "invoice", not "c++s".
+    const closing = /\w$/.test(signal) ? String.raw`(?:e?s)?\b` : String.raw`(?!\w)`
+    pattern = new RegExp(`${opening}${escaped}${closing}`, 'i')
     signalPatterns.set(signal, pattern)
   }
   return pattern.test(text)

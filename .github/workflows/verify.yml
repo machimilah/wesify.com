@@ -36,6 +36,11 @@ jobs:
 
       - run: npm run verify
 
+      # A dependency with a known high-severity advisory is a vulnerability BO ships whether or not
+      # anybody looked. This fails the build rather than printing a warning nobody reads.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
   image:
     # Proving the image builds is separate from proving the code works: a broken Dockerfile is a
     # deployment failure, not a test failure, and seeing which of the two went red saves the guessing.

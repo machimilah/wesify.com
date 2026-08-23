@@ -92,6 +92,28 @@ export function loadWorkspaceAudit(workspaceId: string) {
   return request<WorkspaceAuditEvent[]>(workspaceId, `/api/projects/${workspaceId}/audit`)
 }
 
+/**
+ * Downloads everything the workspace holds, as one file.
+ *
+ * BO tells people their records stay theirs even if they stop paying. This is what makes that a
+ * fact rather than a reassurance — and it is fetched rather than linked because the request needs
+ * the workspace headers, which a plain anchor cannot send.
+ */
+export async function exportWorkspace(workspaceId: string) {
+  const payload = await request<Record<string, unknown>>(workspaceId, `/api/projects/${workspaceId}/export`)
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `bo-${workspaceId}-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  // Revoked on the next tick rather than immediately: some browsers have not started reading the
+  // blob by the time click() returns, and revoking early gives the person an empty file.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return payload
+}
+
 export async function executeGeneratedRecordAction(workspaceId: string, action: WorkspaceAction) {
   if (action.type === 'create_record') return request<Record<string, unknown>>(workspaceId, `/api/projects/${workspaceId}/records/${action.entityId}`, { method: 'POST', body: JSON.stringify(action.values) })
   if (action.type === 'update_record') return request<Record<string, unknown>>(workspaceId, `/api/projects/${workspaceId}/records/${action.entityId}/${action.recordId}`, { method: 'PATCH', body: JSON.stringify(action.values) })

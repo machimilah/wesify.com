@@ -78,3 +78,32 @@
   --warning: #e0ac66;
   --warning-soft: #2e2415;
 }
+
+/**
+ * Where the keyboard is.
+ *
+ * Several inputs across BO set `outline: 0` to get the border they wanted, and nothing put a focus
+ * style back. For anyone navigating by keyboard — by preference, by injury, or because their mouse
+ * just died — that meant moving through the product completely blind, with no way to tell which
+ * field would receive the next keystroke.
+ *
+ * `:focus-visible` rather than `:focus`, so it appears for the keyboard and not on every mouse
+ * click. Two rings in opposite tones: the accent one carries the meaning, and the outer one keeps it
+ * visible against whichever surface it happens to land on, in either theme.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Inside dark panels the ring has to be the light tone rather than the text tone, or it disappears
+   into the surface it is drawn on. */
+:where(.bo-builder__chat, .bo-schema-sidebar, .bo-landing-shot__window) :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: #f0f2ee;
+}
+
+/* Someone tabbing through a long workspace should not have to hunt for what just moved. */
+@media (prefers-reduced-motion: no-preference) {
+  :where(a, button, input, select, textarea, [tabindex]) { scroll-margin: 24px; }
+}

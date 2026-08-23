@@ -41,8 +41,20 @@ export function safeWebhookUrl(value) {
   let url
   try { url = new URL(String(value ?? '')) } catch { throw Object.assign(new Error('Enter a valid HTTPS webhook URL.'), { status: 400 }) }
   if (url.protocol !== 'https:' || url.username || url.password) throw Object.assign(new Error('Webhook connectors require a credential-free HTTPS URL.'), { status: 400 })
-  const hostname = url.hostname.toLowerCase()
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.local') || /^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
+
+  // The brackets matter: `new URL('https://[::1]/').hostname` is `[::1]`, brackets included, so a
+  // check against the bare address never matches and IPv6 loopback walks straight through.
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const private4 = /^(10\.|127\.|0\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/
+  // ::1 loopback, fc00::/7 unique-local, fe80::/10 link-local, and ::ffff:10.0.0.1 style mappings of
+  // a private v4 address into v6 — all of them reach the same places by another spelling.
+  const private6 = /^(::1|::|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/
+  const mapped4 = hostname.startsWith('::ffff:') ? hostname.slice(7) : ''
+
+  if (
+    hostname === 'localhost' || hostname.endsWith('.local') || hostname.endsWith('.internal') || hostname.endsWith('.localhost')
+    || private4.test(hostname) || private6.test(hostname) || (mapped4 && private4.test(mapped4))
+  ) {
     throw Object.assign(new Error('Private-network webhook targets are not allowed.'), { status: 400 })
   }
   return url.toString()
