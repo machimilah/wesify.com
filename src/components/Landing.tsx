@@ -26,7 +26,7 @@ export function Landing({ onStart, onSubmit, signedIn }: {
     </nav>
 
     <section>
-      <h1>Describe your company.<br/><i>Get the software to run it.</i></h1>
+      <h1>Manage your business with no extra steps.</h1>
       <CompanyPrompt onSubmit={onSubmit} testId="landing-brief" starterTestId="landing-starter"/>
     </section>
   </main>
