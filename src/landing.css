@@ -1,13 +1,16 @@
 /**
  * The public landing page.
  *
- * One sentence, one button, and nothing else on the screen. It used to be six sections of argument —
- * a hero mockup, stats, steps, example companies, reasons — and all of it was asking a stranger to
- * believe claims about software they had not seen. The workspace BO builds in a minute makes that
- * case far better than a page can, so the page now says one thing and gets out of the way.
+ * One sentence and the box to answer it in. It used to be six sections of argument — a hero mockup,
+ * stats, steps, example companies, reasons — all of it asking a stranger to believe claims about
+ * software they had not seen. The workspace BO builds in a minute makes that case far better than a
+ * page can, so the page stops describing the product and simply starts it.
  *
- * That restraint is also the product's own claim: BO builds only what a company runs on. A landing
- * page stacked with panels arguing for restraint would be contradicting itself in its own layout.
+ * That restraint is also the product's own claim: BO builds only what a company runs on. A page
+ * stacked with panels arguing for restraint would be contradicting itself in its own layout.
+ *
+ * The prompt itself is styled in styles.css and shared with the signed-in start page — it is the
+ * same box doing the same job, and a second copy of it here would drift from that one.
  */
 
 .bo-landing {
@@ -55,35 +58,25 @@
 .bo-landing nav > button { min-height: 40px; padding: 0 18px; border: 1px solid var(--line); border-radius: 99px; color: var(--ink); background: var(--paper); font-size: 13px; font-weight: 600; }
 .bo-landing nav > button:hover { border-color: var(--brand); color: var(--brand); }
 
-/* The one piece of text on the page. Sized so each of its two sentences holds its own line: the
-   line break in the markup is the only one intended, and a width cap that forced a second wrap
-   would turn a two-line statement into a four-line paragraph. */
+/* The sentence and the box under it, as one centred column. */
+.bo-landing > section {
+  width: min(720px, 100%);
+  display: grid;
+  gap: clamp(22px, 4vh, 38px);
+  /* Centres the starter label under its centred row of buttons. The prompt sets its own left
+     alignment, so the text someone types is unaffected by this. */
+  text-align: center;
+}
+
+/* Sized so each of its two sentences holds its own line: the break in the markup is the only one
+   intended, and a width cap that forced a second wrap would turn a two-line statement into a
+   four-line paragraph. */
 .bo-landing h1 {
   margin: 0;
-  font: 700 clamp(30px, 5vw, 62px)/1.12 'Ubuntu', sans-serif;
+  font: 700 clamp(28px, 4.4vw, 54px)/1.12 'Ubuntu', sans-serif;
   letter-spacing: -.04em;
   text-align: center;
 }
 .bo-landing h1 i { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; font-style: normal; }
 
-.bo-landing-cta {
-  min-height: 54px;
-  padding: 0 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  border-radius: 99px;
-  color: white;
-  background: var(--gradient);
-  font-size: 15px;
-  font-weight: 700;
-  box-shadow: 0 12px 30px rgba(23, 96, 63, .26);
-  transition: transform .15s ease, box-shadow .15s ease;
-}
-.bo-landing-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(23, 96, 63, .32); }
 
-@media (prefers-reduced-motion: reduce) {
-  .bo-landing-cta { transition: none; }
-  .bo-landing-cta:hover { transform: none; }
-}

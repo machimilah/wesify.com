@@ -110,7 +110,7 @@ try {
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('The theme did not survive a reload.')
 
   // 4. It follows the operator into the product, not just the marketing page.
-  await page.getByTestId('landing-get-started').click()
+  await page.getByTestId('landing-nav-start').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving from the landing page into the product.')
 

@@ -29,6 +29,9 @@ export default function App() {
 
   const [accounts, setAccounts] = useState<boolean | undefined>(undefined)
   const [account, setAccount] = useState<Account | null>(null)
+  // What a stranger typed on the public page, held across the sign-in screen so it is not asked for
+  // twice. Deliberately not persisted: a sentence typed and abandoned is not something to keep.
+  const [pendingBrief, setPendingBrief] = useState('')
 
   const navigate = (nextPath: string) => { window.history.pushState({}, '', nextPath); setPath(nextPath) }
 
@@ -75,7 +78,31 @@ export default function App() {
    * so it waits. With no database configured there are no accounts and none of this appears.
    */
   const start = () => navigate(accounts && !account ? '/signin' : '/start')
-  if (path === '/') return <Landing onStart={start} signedIn={Boolean(account)}/>
+
+  /** Starts a fresh company from one sentence. Everything a previous workspace left behind goes. */
+  function build(brief: string) {
+    const workspaceId = crypto.randomUUID()
+    localStorage.removeItem('bo-records'); localStorage.removeItem('bo-actions'); localStorage.removeItem('bo-workspace-config'); localStorage.removeItem('bo-workspace-records'); localStorage.removeItem('bo-ai-history'); localStorage.removeItem('bo-active-workspace-id')
+    setAnswers({ companyDescription: brief }); setBlueprint(null); setPendingBrief('')
+    navigate(`/build/${workspaceId}`)
+  }
+
+  /**
+   * Typing on the public page asks who you are, then builds what you typed.
+   *
+   * The sentence is not thrown away at the sign-in screen and asked for again afterwards. Someone
+   * who has just described their company has done the only work this product needs from them, and
+   * making them do it twice to prove they have an account is a way to lose them between the two.
+   */
+  if (path === '/') return <Landing
+    onStart={start}
+    signedIn={Boolean(account)}
+    onSubmit={brief => {
+      if (!accounts || account) return build(brief)
+      setPendingBrief(brief)
+      navigate('/signin')
+    }}
+  />
 
   if (accounts === undefined) return <main className="bo-home"/>
 
@@ -83,11 +110,11 @@ export default function App() {
   // is the entire reason they are here.
   if (path === '/reset') return <ResetPassword
     token={new URLSearchParams(window.location.search).get('token') ?? ''}
-    onSignedIn={account => { setAccount(account); navigate('/start') }}
+    onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/start') }}
     onGiveUp={() => navigate('/signin')}
   />
 
-  if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); navigate('/start') }}/>
+  if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/start') }}/>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.
@@ -121,8 +148,5 @@ export default function App() {
   }
 
   // Anything else is the prompt: the page a signed-in operator starts a new company from.
-  return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={(brief) => {
-    const workspaceId = crypto.randomUUID()
-    localStorage.removeItem('bo-records'); localStorage.removeItem('bo-actions'); localStorage.removeItem('bo-workspace-config'); localStorage.removeItem('bo-workspace-records'); localStorage.removeItem('bo-ai-history'); localStorage.removeItem('bo-active-workspace-id'); setAnswers({ companyDescription: brief }); setBlueprint(null); navigate(`/build/${workspaceId}`)
-  }}/>
+  return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={build}/>
 }
