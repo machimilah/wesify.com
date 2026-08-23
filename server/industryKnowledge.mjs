@@ -1,5 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { allProfiles, checkSubsector, readProfile, writeProfile } from './industryStore.mjs'
 
 /**
  * What BO knows about an industry, rather than what BO assumes about it.
@@ -16,37 +15,28 @@ import path from 'node:path'
  *
  * Observation outranks research, and research outranks the ontology. Only aggregate counts are
  * stored: never a company name, never a record, never anything that identifies who did what.
+ *
+ * Where any of it is kept is industryStore.mjs's problem rather than this file's: Postgres when BO
+ * has a database, JSON files when it does not. What is decided from it is decided here, and is pure.
  */
-
-const root = () => path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.industry-knowledge')
 
 /** Enough companies that a pattern is a pattern and not one opinionated operator. */
 export const MIN_COMPANIES = 5
 /** How lopsided the split must be before BO changes what it builds. */
 export const VERDICT_SHARE = 0.6
 
-const subsectorFile = subsector => {
-  if (!/^\d{3}$/.test(String(subsector))) throw Object.assign(new Error('A NAICS subsector is three digits.'), { status: 400 })
-  return path.join(root(), `${subsector}.json`)
-}
+/**
+ * How long a researched answer speaks for.
+ *
+ * Research is a snapshot of what the open web said about an industry on one day. Industries change —
+ * a payment rule, a platform everyone moved to, a licence that stopped being required — and research
+ * with no expiry means a finding from years ago keeps deciding what today's operator is given, with
+ * exactly the confidence it had when it was true. Past this it is still shown, marked stale, but it
+ * no longer decides anything.
+ */
+export const RESEARCH_FRESH_DAYS = 180
 
-const emptyProfile = subsector => ({ subsector, label: '', researched: null, observed: {}, companies: 0, updatedAt: '' })
-
-export async function readIndustryProfile(subsector) {
-  try { return JSON.parse(await readFile(subsectorFile(subsector), 'utf8')) }
-  catch (error) {
-    if (error?.code === 'ENOENT') return emptyProfile(subsector)
-    throw error
-  }
-}
-
-async function writeIndustryProfile(profile) {
-  const file = subsectorFile(profile.subsector)
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.${crypto.randomUUID()}.next`
-  await writeFile(candidate, `${JSON.stringify(profile, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
-}
+export const readIndustryProfile = readProfile
 
 /**
  * Records what one company did, as counts only.
@@ -56,6 +46,7 @@ async function writeIndustryProfile(profile) {
  * capabilities it touched, so a single busy operator cannot outvote an industry.
  */
 export async function recordObservations(subsector, { kept = [], removed = [], added = [], label = '', newCompany = false }) {
+  checkSubsector(subsector)
   const profile = await readIndustryProfile(subsector)
   const bump = (capabilityId, field) => {
     const entry = profile.observed[capabilityId] ?? { kept: 0, removed: 0, added: 0 }
@@ -68,11 +59,12 @@ export async function recordObservations(subsector, { kept = [], removed = [], a
   if (newCompany) profile.companies += 1
   if (label && !profile.label) profile.label = label
   profile.updatedAt = new Date().toISOString()
-  await writeIndustryProfile(profile)
+  await writeProfile(profile)
   return profile
 }
 
 export async function saveResearch(subsector, research) {
+  checkSubsector(subsector)
   const profile = await readIndustryProfile(subsector)
   profile.researched = {
     capabilityIds: research.capabilityIds ?? [],
@@ -84,8 +76,16 @@ export async function saveResearch(subsector, research) {
   }
   if (research.label && !profile.label) profile.label = research.label
   profile.updatedAt = profile.researched.at
-  await writeIndustryProfile(profile)
+  await writeProfile(profile)
   return profile
+}
+
+/** Whether a profile's research is recent enough to still decide anything. */
+export function researchIsFresh(profile, now = Date.now()) {
+  const at = profile?.researched?.at
+  if (!at) return false
+  const age = now - new Date(at).getTime()
+  return Number.isFinite(age) && age >= 0 && age <= RESEARCH_FRESH_DAYS * 24 * 60 * 60 * 1000
 }
 
 /**
@@ -112,15 +112,19 @@ export function industryVerdict(profile) {
     else if (keepShare >= VERDICT_SHARE && added > 0) include.push({ capabilityId, reason: `${kept + added} of ${decisions} companies in this industry kept or added it`, basis: 'observed' })
   }
 
-  // Research only speaks where behaviour has not.
+  // Research only speaks where behaviour has not, and only while it is still recent. Stale research
+  // is kept and still shown — it remains the best account anyone has of how the industry once worked
+  // — but it stops deciding, because an answer nobody has rechecked in half a year is not evidence.
   const decided = new Set([...include, ...exclude].map(item => item.capabilityId))
-  for (const capabilityId of profile.researched?.capabilityIds ?? []) {
-    if (decided.has(capabilityId)) continue
-    include.push({ capabilityId, reason: profile.researched.summary || 'Researched for this industry', basis: 'researched' })
-  }
-  for (const capabilityId of profile.researched?.excludedCapabilityIds ?? []) {
-    if (decided.has(capabilityId)) continue
-    exclude.push({ capabilityId, reason: 'Research found no evidence this industry needs it', basis: 'researched' })
+  if (researchIsFresh(profile)) {
+    for (const capabilityId of profile.researched?.capabilityIds ?? []) {
+      if (decided.has(capabilityId)) continue
+      include.push({ capabilityId, reason: profile.researched.summary || 'Researched for this industry', basis: 'researched' })
+    }
+    for (const capabilityId of profile.researched?.excludedCapabilityIds ?? []) {
+      if (decided.has(capabilityId)) continue
+      exclude.push({ capabilityId, reason: 'Research found no evidence this industry needs it', basis: 'researched' })
+    }
   }
 
   const included = new Set(include.map(item => item.capabilityId))
@@ -131,17 +135,22 @@ export function industryVerdict(profile) {
     include: include.filter(item => !exclude.some(other => other.capabilityId === item.capabilityId)),
     exclude: exclude.filter(item => !(item.basis === 'researched' && included.has(item.capabilityId))),
     sources: profile.researched?.sources ?? [],
+    // Said plainly rather than left to be worked out from a date: research that has stopped
+    // deciding anything should not look identical to research that still is.
+    research: profile.researched
+      ? { at: profile.researched.at, stale: !researchIsFresh(profile), summary: profile.researched.summary ?? '' }
+      : null,
   }
 }
 
 /** Every industry BO has learned something about, for inspection. */
 export async function listIndustries() {
-  try {
-    const files = await readdir(root())
-    return (await Promise.all(files.filter(name => /^\d{3}\.json$/.test(name)).map(name => readIndustryProfile(name.slice(0, 3)))))
-      .map(profile => ({ subsector: profile.subsector, label: profile.label, companies: profile.companies, researched: Boolean(profile.researched), capabilities: Object.keys(profile.observed ?? {}).length }))
-  } catch (error) {
-    if (error?.code === 'ENOENT') return []
-    throw error
-  }
+  return (await allProfiles()).map(profile => ({
+    subsector: profile.subsector,
+    label: profile.label,
+    companies: profile.companies,
+    researched: Boolean(profile.researched),
+    researchStale: Boolean(profile.researched) && !researchIsFresh(profile),
+    capabilities: Object.keys(profile.observed ?? {}).length,
+  }))
 }

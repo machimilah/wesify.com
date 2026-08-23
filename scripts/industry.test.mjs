@@ -13,7 +13,7 @@ import path from 'node:path'
  */
 
 const root = await mkdtemp(path.join(tmpdir(), 'bo-industry-'))
-const { industryVerdict, recordObservations, readIndustryProfile, saveResearch, MIN_COMPANIES } =
+const { industryVerdict, recordObservations, readIndustryProfile, saveResearch, MIN_COMPANIES, RESEARCH_FRESH_DAYS } =
   await import('../server/industryKnowledge.mjs')
 
 process.env.BO_GENERATED_ROOT = root
@@ -124,7 +124,30 @@ try {
   // Reading stays open: the knowledge is aggregate and belongs to everyone using BO.
   assert.equal((await fetch(`http://127.0.0.1:${port}/api/industries/541`)).status, 200)
 
-  console.log('Industry test passed: no verdict without evidence, a threshold before deciding, splits left open, behaviour beating research, per-company counting, anonymity, input validation, anonymous writes refused, and one workspace counting once however often it reports.')
+  /**
+   * Research stops deciding once nobody has rechecked it.
+   *
+   * A researched answer is what the open web said on one day. Industries change, and research with
+   * no expiry means a finding from years ago keeps choosing what today's operator is given with
+   * exactly the confidence it had when it was true. It is still kept and still shown — it remains
+   * the best account anyone has of how the industry once worked — but it stands down.
+   */
+  const stale = {
+    subsector: '999', label: 'Stale', companies: 0, observed: {},
+    researched: { capabilityIds: ['work.projects'], excludedCapabilityIds: ['inventory.stock'], summary: 'Once true', sources: [], model: 'test', at: new Date(Date.now() - (RESEARCH_FRESH_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString() },
+  }
+  const staleVerdict = industryVerdict(stale)
+  assert.deepEqual(staleVerdict.include, [], 'research nobody has rechecked in half a year still decided what to build')
+  assert.deepEqual(staleVerdict.exclude, [], 'stale research still excluded a capability')
+  assert.equal(staleVerdict.research.stale, true, 'stale research is not marked as stale')
+  assert.ok(staleVerdict.research.at, 'stale research was discarded rather than kept and marked')
+
+  const fresh = { ...stale, researched: { ...stale.researched, at: new Date().toISOString() } }
+  const freshVerdict = industryVerdict(fresh)
+  assert.ok(freshVerdict.include.some(item => item.capabilityId === 'work.projects'), 'fresh research stopped deciding anything')
+  assert.equal(freshVerdict.research.stale, false)
+
+  console.log('Industry test passed: no verdict without evidence, a threshold before deciding, splits left open, behaviour beating research, per-company counting, anonymity, input validation, anonymous writes refused, one workspace counting once however often it reports, and research standing down once it is too old to be evidence.')
 } finally {
   api.kill()
   await rm(root, { recursive: true, force: true })

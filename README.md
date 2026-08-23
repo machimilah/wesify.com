@@ -52,9 +52,11 @@ Para activar las cuentas hacen falta dos cosas:
 1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer los hashes de contraseña y de sesión. Es idempotente: volver a ejecutarlo no rompe nada.
 2. Poner la cadena de conexión (**Connect → Session pooler**, puerto `5432`) en `.env.local` como `DATABASE_URL`.
 
-Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. El fichero deja registradas las migraciones `001_accounts.sql` y `002_records.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/003_*.sql`) se aplican solas al arrancar.
+Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. El fichero deja registradas todas las migraciones de `server/migrations/`, así que el servidor no repite el trabajo ya hecho a mano; las que se añadan después se aplican solas al arrancar.
 
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
+
+Con `DATABASE_URL` también vive en Postgres lo que BO ha aprendido de cada industria: qué sistemas conservaron, quitaron o añadieron las empresas reales de ese sector. Es lo único que BO tiene que no se puede copiar leyendo el producto, y estaba en el mismo disco que un redespliegue borra. Solo agregados: nunca el nombre de una empresa, nunca un registro.
 
 Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
 
@@ -110,7 +112,7 @@ docker run -p 8787:8787 \
 
 Detalles que importan:
 
-- **El volumen no es opcional.** Con `DATABASE_URL` los registros están a salvo en Postgres, pero el Command Center generado, las credenciales de las apps conectadas y el conocimiento de sector siguen bajo `/data`. Sin volumen, un redespliegue los borra.
+- **El volumen no es opcional.** Con `DATABASE_URL` los registros y el conocimiento de sector están a salvo en Postgres, pero el Command Center generado y las credenciales de las apps conectadas siguen bajo `/data`. Sin volumen, un redespliegue las borra.
 - **Los secretos van en el entorno, nunca en la imagen.** `.dockerignore` excluye `.env.local` justamente por eso: una imagen se sube a un registro y sus capas son legibles por cualquiera que la tenga.
 - **La imagen corre como usuario `node`, no como root**, y expone `/api/health`, que es lo que usan tanto el `HEALTHCHECK` como cualquier plataforma para saber si el contenedor sirve.
 - El servidor cierra ordenadamente con `SIGTERM`, así que las peticiones en vuelo terminan antes de que muera el proceso.
@@ -140,11 +142,14 @@ smoke end-to-end en navegador. Cada bloque se puede lanzar por separado:
 
 | Comando | Qué cubre |
 | --- | --- |
-| `npm test` | Motores de investigación, taxonomía de industrias, catálogo de capacidades, esquema de workspace |
+| `npm test` | Motores de investigación, taxonomía, catálogo, esquema, tema, y la traducción de lo que dice el modelo a lo que le pasa al workspace. Con cobertura medida y con umbral: si baja, falla |
 | `npm run build` | Tipos y build de producción |
 | `npm run test:project-service` | Acceso, CRUD, automatizaciones, versiones y auditoría |
 | `npm run test:reasoning` | Investigación frontera: dos pasadas, reanudación, rechazos, validación HTTP |
-| `npm run test:industry` | Conocimiento compartido por industria: umbrales, empates sin decidir, anonimato |
+| `npm run test:industry` | Conocimiento compartido por industria: umbrales, empates sin decidir, anonimato, investigación que caduca |
+| `npm run test:industry-store` | Que lo aprendido viva en Postgres y no en el disco que borra cada redespliegue |
+| `npm run test:security` | Cabeceras en toda respuesta, CSP sin script inline, SSRF, cuerpo máximo, errores que no filtran nada |
+| `npm run test:structure` | Ningún fichero por encima de 800 líneas, ningún marcador TODO, ninguna credencial en el código |
 | `npm run test:interview` | La entrevista en el servidor, la respuesta que vuelve, y que no se descargue el modelo del navegador |
 | `npm run test:stripe` | Conector Stripe: claves rechazadas, credencial cifrada, sincronización que no destruye datos |
 | `npm run test:limits` | Límite por IP, techo diario de llamadas al modelo, y que los endpoints gratuitos no se vean afectados |

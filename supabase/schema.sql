@@ -17,6 +17,7 @@
 --   subscriptions      what plan an account is on, and what Stripe last said about it
 --   stripe_events      every webhook already handled, so a retry does not do the work twice
 --   rebuilds           one row per rebuild, because rebuilds are what the plans meter
+--   industry_knowledge what companies in an industry kept, removed and added — counts only
 --   schema_migrations  BO's own migration ledger, so the server does not re-run this
 --
 -- What this deliberately does NOT create
@@ -135,6 +136,19 @@ create table if not exists rebuilds (
   created_at   timestamptz not null default now()
 );
 
+-- What BO has learned about each industry: what real companies kept, removed and added
+-- after being handed a workspace. It is the only thing BO owns that cannot be copied by
+-- reading the product, and it was sitting in JSON files on the same local disk a redeploy
+-- wipes. One row per NAICS subsector; only aggregate counts, never who did what.
+create table if not exists industry_knowledge (
+  subsector  text        primary key,
+  label      text        not null default '',
+  companies  integer     not null default 0,
+  observed   jsonb       not null default '{}'::jsonb,
+  researched jsonb,
+  updated_at timestamptz not null default now()
+);
+
 -- BO's migration ledger. The server creates this itself on first start, but creating it
 -- here lets the last section record every migration as already applied, so the server does
 -- not try to redo work you have just done by hand.
@@ -206,6 +220,7 @@ alter table password_resets   enable row level security;
 alter table subscriptions     enable row level security;
 alter table stripe_events     enable row level security;
 alter table rebuilds          enable row level security;
+alter table industry_knowledge enable row level security;
 alter table schema_migrations enable row level security;
 
 -- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
@@ -232,6 +247,7 @@ begin
   execute 'revoke all on table subscriptions     from anon, authenticated';
   execute 'revoke all on table stripe_events     from anon, authenticated';
   execute 'revoke all on table rebuilds          from anon, authenticated';
+  execute 'revoke all on table industry_knowledge from anon, authenticated';
   execute 'revoke all on table schema_migrations from anon, authenticated';
 
   -- The same protection for tables a future BO migration creates, so 003 and beyond are
@@ -255,14 +271,15 @@ $$;
 -- -------------------------------------------------------------------------------------
 
 insert into schema_migrations (name)
-values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'), ('004_billing.sql')
+values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'),
+       ('004_billing.sql'), ('005_industry_knowledge.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
 -- 5. Verify
 --
--- Expect exactly ten rows, and on every one of them:
+-- Expect exactly eleven rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
@@ -287,5 +304,5 @@ where n.nspname = 'public'
   and c.relkind = 'r'
   and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records',
                     'password_resets', 'subscriptions', 'stripe_events', 'rebuilds',
-                    'schema_migrations')
+                    'industry_knowledge', 'schema_migrations')
 order by c.relname;
