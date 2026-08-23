@@ -39,10 +39,30 @@ export interface DiscoveryQuestion {
   suggestedAnswers: string[]
 }
 
+/**
+ * A field the architect asked for on one entity.
+ *
+ * `relatedTo` is another entity's name rather than an id, because the architect is working in the
+ * company's language and has not been told what BO will slug things to. It is resolved — and
+ * discarded if it points at nothing — where the workspace is compiled.
+ */
+export const architectureFieldTypes = ['text', 'long-text', 'number', 'currency', 'date', 'boolean', 'email', 'phone', 'select', 'relation', 'file'] as const
+export type ArchitectureFieldType = typeof architectureFieldTypes[number]
+
+export interface ArchitectureField {
+  label: string
+  type: ArchitectureFieldType
+  required?: boolean
+  options?: string[]
+  relatedTo?: string
+}
+
 export interface ArchitectureEntity {
   name: string
   module: ModuleId
   purpose: string
+  /** Absent when the model did not offer any, which is the in-browser path. BO infers them then. */
+  fields?: ArchitectureField[]
 }
 
 export interface ArchitectureContext {
@@ -157,7 +177,23 @@ export function isArchitectureContext(value: unknown): value is ArchitectureCont
     && strings(value.pages, 80) && strings(value.workflows, 80) && strings(value.metrics, 80)
     && strings(value.processStages) && strings(value.pipelineStages) && typeof value.billingCadence === 'string'
     && Array.isArray(value.entities) && value.entities.length <= 60 && value.entities.every(entity => isObject(entity)
-      && typeof entity.name === 'string' && moduleIds.includes(entity.module as ModuleId) && typeof entity.purpose === 'string')
+      && typeof entity.name === 'string' && moduleIds.includes(entity.module as ModuleId) && typeof entity.purpose === 'string'
+      && isArchitectureFields(entity.fields))
+}
+
+/**
+ * Fields are optional, and anything malformed makes the whole entity untrusted rather than being
+ * quietly patched. A half-read field list is worse than none: BO would build a record form around a
+ * shape nobody chose, and the operator has no way to tell that is what happened.
+ */
+function isArchitectureFields(value: unknown): boolean {
+  if (value === undefined) return true
+  return Array.isArray(value) && value.length <= 14 && value.every(field => isObject(field)
+    && typeof field.label === 'string' && field.label.trim().length > 0 && field.label.length <= 40
+    && architectureFieldTypes.includes(field.type as ArchitectureFieldType)
+    && (field.required === undefined || typeof field.required === 'boolean')
+    && (field.options === undefined || strings(field.options, 8))
+    && (field.relatedTo === undefined || typeof field.relatedTo === 'string'))
 }
 
 export function hasUsableArchitecture(value: ArchitectureContext) {

@@ -1,6 +1,6 @@
 import type { Answers } from '../types'
 import type { AIBlueprint, ModuleId } from './blueprint'
-import type { ArchitectureContext, BusinessState } from './businessDiscovery'
+import type { ArchitectureContext, ArchitectureField, BusinessState } from './businessDiscovery'
 import { planCapabilities, type CatalogEntity } from './capabilityCatalog'
 import { selectCompanyTemplate } from './companyTemplates'
 import { slug } from './shared'
@@ -233,8 +233,64 @@ function inferredStatuses(name: string, architecture: ArchitectureContext) {
   return ['Active', 'Paused', 'Archived']
 }
 
-function customEntity(name: string, module: string, purpose: string, architecture: ArchitectureContext, entityIds: string[]): EntityDefinition {
+/**
+ * The fields the architect asked for, turned into a record shape BO will actually build.
+ *
+ * Nothing here trusts the model. Labels become ids by the same slug every other id uses; a relation
+ * whose target does not exist is dropped rather than pointed at nothing; a select with no options is
+ * demoted to text rather than rendering an empty dropdown; duplicates collapse. What survives is
+ * whatever a company would recognise as their own form.
+ */
+function architectedFields(proposed: ArchitectureField[], entityIds: string[], selfId: string): FieldDefinition[] {
+  const fields: FieldDefinition[] = []
+  for (const item of proposed) {
+    const id = slug(item.label)
+    if (!id || fields.some(existing => existing.id === id)) continue
+
+    if (item.type === 'relation') {
+      // The architect names the other entity in the company's words; this is where those words have
+      // to resolve to something real. "Related work" pointing at an entity nobody built is a form
+      // field that can never be filled in.
+      const target = slug(item.relatedTo ?? '')
+      const resolved = entityIds.find(candidate => candidate === target)
+        ?? entityIds.find(candidate => candidate === `${target}s`)
+        ?? entityIds.find(candidate => `${candidate}s` === target)
+      if (!resolved || resolved === selfId) continue
+      fields.push({ id, label: item.label, type: 'relation', relationEntityId: resolved, ...(item.required ? { required: true } : {}) })
+      continue
+    }
+
+    const options = (item.options ?? []).map(option => option.trim()).filter(Boolean)
+    // A dropdown with nothing in it is worse than a text box: it looks like a decision BO made and
+    // then failed to follow through on.
+    const type = item.type === 'select' && options.length < 2 ? 'text' : item.type
+    fields.push({ id, label: item.label, type, ...(type === 'select' ? { options } : {}), ...(item.required ? { required: true } : {}) })
+  }
+  return fields
+}
+
+function customEntity(name: string, module: string, purpose: string, architecture: ArchitectureContext, entityIds: string[], proposed?: ArchitectureField[]): EntityDefinition {
   const id = slug(name)
+
+  /**
+   * When the architect described the record, that description is the record.
+   *
+   * Everything below this is the older inference: match the entity's name against a list of patterns
+   * and attach whatever those patterns imply. It is why two companies in the same trade used to get
+   * identical forms however differently they answered — the model chose the noun and hand-written
+   * rules chose the substance. It is still here because the in-browser model does not return fields,
+   * and a workspace built with no key has to be built from something.
+   */
+  const architected = proposed?.length ? architectedFields(proposed, entityIds, id) : []
+  if (architected.length >= 3) {
+    const singularName = name.replace(/s$/i, '') || name
+    const primary = architected.find(item => item.required && item.type === 'text') ?? architected.find(item => item.type === 'text') ?? architected[0]
+    // Every record needs somewhere to put the thing that did not fit a field, and a status is what
+    // every board, filter and workflow in BO groups by.
+    const withStatus = architected.some(item => item.id === 'status') ? architected : [...architected, statuses(...inferredStatuses(name, architecture))]
+    const withNotes = withStatus.some(item => item.type === 'long-text') ? withStatus : [...withStatus, field('notes', 'Notes', 'long-text')]
+    return { id, label: singularName, pluralLabel: name, module, primaryField: primary.id, fields: withNotes }
+  }
   const lower = `${name} ${purpose}`.toLowerCase()
   const primaryField = /invoice/.test(lower) ? 'number' : /task/.test(lower) ? 'title' : /expense|cost/.test(lower) ? 'description' : 'name'
   const primaryLabel = primaryField === 'number' ? 'Invoice number' : primaryField === 'title' ? 'Task' : primaryField === 'description' ? 'Description' : name.replace(/s$/i, '') || 'Name'
@@ -331,7 +387,7 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   const uniqueArchitectureEntities = architecture.entities.filter((item, index, items) => slug(item.name) && items.findIndex(candidate => slug(candidate.name) === slug(item.name)) === index)
   const entityIds = [...new Set([...entities.map(item => item.id), ...uniqueArchitectureEntities.map(item => slug(item.name))])]
   for (const proposed of uniqueArchitectureEntities) {
-    const compiled = customEntity(proposed.name, proposed.module, proposed.purpose, architecture, entityIds)
+    const compiled = customEntity(proposed.name, proposed.module, proposed.purpose, architecture, entityIds, proposed.fields)
     const existing = semanticEntityMatch(entities, proposed.name, proposed.purpose)
     if (existing) {
       const singular = proposed.name.replace(/s$/i, '') || proposed.name

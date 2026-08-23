@@ -42,6 +42,8 @@ const architectSystem = `You are BO's Business Application Architect. The interv
 
 Select the capabilityIds this company needs now from the supplied catalog, and put deliberately rejected ones in excludedCapabilityIds. Respect dependencies. Never add an adjacent capability without evidence from what the operator said: an unused page is worse than a missing one, because it is the exact failure that makes every other business suite feel wrong.
 
+Give every entity its fields, in the company's own words. This is the part that makes the workspace theirs rather than a generic one with their name on it: a plumber's work order has a service address and a technician, a law firm's matter has a court date and a responsible partner, and nothing about the word "job" or "case" should decide that. Choose what the operator actually needs to see and type on that record — usually five to ten fields, the ones they would put on paper. Use relatedTo to point at another entity in this same list where a record genuinely belongs to another. Do not add fields nobody mentioned and nobody would fill in: an empty column is the thing that makes software feel like somebody else's.
+
 Name pages and entities in the company's own language — not BO's, and not another vendor's. Include the modules, workflows, metrics, process stages, sales stages where relevant, and billing cadence that follow from this company. Return READY_TO_ARCHITECT, an empty nextQuestion, and only schema-valid JSON.`
 
 const stringList = (maxItems = 12, maxLength = 160) => ({ type: 'array', maxItems, items: { type: 'string', maxLength } })
@@ -74,7 +76,48 @@ export function discoverySchema(capabilityIds, modules) {
           title: { type: 'string', maxLength: 80 }, summary: { type: 'string', maxLength: 240 }, explanation: { type: 'string', maxLength: 360 },
           modules: { type: 'array', maxItems: 24, items: { type: 'string', enum: modules } }, startView: { type: 'string', enum: ['overview', ...modules] },
           capabilities: stringList(60), capabilityIds: { type: 'array', maxItems: 60, items: { type: 'string', enum: capabilityIds } }, excludedCapabilityIds: { type: 'array', maxItems: 60, items: { type: 'string', enum: capabilityIds } }, pages: stringList(60),
-          entities: { type: 'array', maxItems: 60, items: { type: 'object', additionalProperties: false, properties: { name: { type: 'string', maxLength: 60 }, module: { type: 'string', enum: modules }, purpose: { type: 'string', maxLength: 140 } }, required: ['name', 'module', 'purpose'] } },
+          /**
+           * An entity now arrives with its own fields.
+           *
+           * Until this, the architect supplied a noun and BO decided what was inside it by matching
+           * the noun against a list of patterns — an entity called anything with "invoice" in it got
+           * a number field, anything with "job" got a customer relation. That is why two companies in
+           * the same trade got identical record shapes however differently they answered: the model
+           * was choosing labels while hand-written rules chose the substance.
+           *
+           * Fields are optional. When the model omits them BO falls back to the same inference it
+           * always used, which is what keeps the no-API-key path working.
+           */
+          entities: {
+            type: 'array', maxItems: 60,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 60 },
+                module: { type: 'string', enum: modules },
+                purpose: { type: 'string', maxLength: 140 },
+                fields: {
+                  type: 'array', maxItems: 14,
+                  items: {
+                    type: 'object', additionalProperties: false,
+                    properties: {
+                      label: { type: 'string', maxLength: 40 },
+                      type: { type: 'string', enum: ['text', 'long-text', 'number', 'currency', 'date', 'boolean', 'email', 'phone', 'select', 'relation', 'file'] },
+                      required: { type: 'boolean' },
+                      // Only read for select fields, and only ever offered as a starting point: an
+                      // operator can edit these afterwards like any other part of the workspace.
+                      options: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 40 } },
+                      // The name of another entity in this same list. Validated against it, because a
+                      // relation to something that does not exist is a broken record form.
+                      relatedTo: { type: 'string', maxLength: 60 },
+                    },
+                    required: ['label', 'type'],
+                  },
+                },
+              },
+              required: ['name', 'module', 'purpose'],
+            },
+          },
           workflows: stringList(40), metrics: stringList(30), processStages: stringList(14), pipelineStages: stringList(14), billingCadence: { type: 'string', maxLength: 100 },
         },
         required: ['title', 'summary', 'explanation', 'modules', 'startView', 'capabilities', 'capabilityIds', 'excludedCapabilityIds', 'pages', 'entities', 'workflows', 'metrics', 'processStages', 'pipelineStages', 'billingCadence'],
