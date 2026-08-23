@@ -102,7 +102,7 @@ async function openSection(page, id) {
 try {
   // A person meets the landing page first, so the end-to-end journey starts there.
   await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' })
-  await page.getByTestId('landing-examples').waitFor()
+  await page.getByTestId('landing-get-started').waitFor({ timeout: 20_000 })
   await page.getByTestId('landing-get-started').click()
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })

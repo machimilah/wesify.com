@@ -121,7 +121,7 @@ Cada push ejecuta [`.github/workflows/verify.yml`](.github/workflows/verify.yml)
 
 | Ruta | Vista |
 | --- | --- |
-| `/` | Landing pública: cómo funciona BO y qué construye. No pide cuenta |
+| `/` | Landing pública: una frase y un botón. No pide cuenta |
 | `/start` | El prompt inicial. Con cuentas activadas, exige haber entrado |
 | `/build/:id` | Conversación y construcción en vivo |
 | `/home`, `/today`, `/clients`, `/invoices`, `/links`, … | Secciones del Command Center, cada una con su URL indexada |

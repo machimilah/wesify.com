@@ -59,7 +59,6 @@ try {
 
   // 1. The landing page is public. Nobody signs up for something they have not seen.
   await page.getByTestId('landing-get-started').waitFor({ timeout: 20_000 })
-  await page.getByTestId('landing-examples').waitFor()
   if (await page.getByTestId('signin-form').count()) throw new Error('The landing page was hidden behind a sign-in screen.')
   if (await page.getByTestId('company-brief').count()) throw new Error('BO showed the product before anyone signed in.')
 

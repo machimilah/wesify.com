@@ -1,151 +1,89 @@
 /**
  * The public landing page.
  *
- * Light, bold and product-first, where the rest of BO is dark and quiet. That is deliberate: the app
- * is a place to work and should recede, while this page has about four seconds to make one claim.
+ * One sentence, one button, and nothing else on the screen. It used to be six sections of argument —
+ * a hero mockup, stats, steps, example companies, reasons — and all of it was asking a stranger to
+ * believe claims about software they had not seen. The workspace BO builds in a minute makes that
+ * case far better than a page can, so the page now says one thing and gets out of the way.
  *
- * The tile tints are the same ones the real Command Center uses, so the workspace in the hero is
- * recognisably the workspace someone gets rather than an illustration of one.
+ * That restraint is also the product's own claim: BO builds only what a company runs on. A landing
+ * page stacked with panels arguing for restraint would be contradicting itself in its own layout.
  */
 
 .bo-landing {
   --ink: #12160f;
-  --muted: #5c655a;
   --line: #e2e6dd;
   --paper: #ffffff;
-  --wash: #f4f6f1;
   --brand: #17603f;
-  --brand-deep: #0e3f2a;
   --gradient: linear-gradient(104deg, #17603f 0%, #2a8f6a 52%, #3fa8a0 100%);
+  position: relative;
   min-height: 100vh;
+  padding: clamp(90px, 12vh, 130px) clamp(20px, 5vw, 44px);
+  display: grid;
+  /* The sentence and the button are the only things in the centring, so they sit in the middle of
+     the page rather than below it. The nav is lifted out of the flow to keep it that way. */
+  place-content: center;
+  justify-items: center;
+  gap: clamp(26px, 4.5vh, 44px);
   color: var(--ink);
   background: var(--paper);
   font-synthesis-weight: none;
 }
 
-/* Dark theme: the same bold, product-first page, just inverted. The gradient stops brighten a touch
-   — a mark that reads as vivid on white goes muddy on near-black unless it is lifted slightly. */
+/* The same page inverted. The gradient stops lift a touch: a mark that reads as vivid on white goes
+   muddy on near-black unless it is brightened slightly. */
 :root[data-theme='dark'] .bo-landing {
   --ink: #eef0ea;
-  --muted: #98a091;
   --line: #2a2e26;
   --paper: #12140f;
-  --wash: #191c17;
   --brand: #4fcf95;
-  --brand-deep: #2f8f68;
   --gradient: linear-gradient(104deg, #1f7a52 0%, #3aab80 52%, #4fc4bc 100%);
 }
 
-.bo-landing nav,
-.bo-landing > header,
-.bo-landing section,
-.bo-landing > footer { max-width: 1180px; margin: 0 auto; padding-inline: clamp(20px, 5vw, 44px); }
-
-/* Navigation ---------------------------------------------------------------- */
-.bo-landing nav { height: 76px; display: flex; align-items: center; gap: 26px; }
-.bo-landing nav .brand { color: var(--ink); }
+.bo-landing nav {
+  position: absolute;
+  inset: 0 clamp(20px, 5vw, 44px) auto;
+  height: 76px;
+  max-width: 1180px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.bo-landing nav .brand { margin-right: auto; color: var(--ink); }
 .bo-landing nav .brand-mark { color: white; background: var(--brand); }
-.bo-landing nav > div { flex: 1; display: flex; gap: 24px; }
-.bo-landing nav a { color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; }
-.bo-landing nav a:hover { color: var(--ink); }
 .bo-landing nav > button { min-height: 40px; padding: 0 18px; border: 1px solid var(--line); border-radius: 99px; color: var(--ink); background: var(--paper); font-size: 13px; font-weight: 600; }
 .bo-landing nav > button:hover { border-color: var(--brand); color: var(--brand); }
 
-/* Hero ---------------------------------------------------------------------- */
-.bo-landing-hero { padding-top: clamp(36px, 5vw, 68px); padding-bottom: clamp(40px, 6vw, 80px); text-align: center; }
-.bo-landing-eyebrow { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 99px; color: var(--brand); background: #e7f2ec; font-size: 12px; font-weight: 700; letter-spacing: .01em; }
-.bo-landing h1 { margin: 22px 0 20px; font: 700 clamp(40px, 6.6vw, 76px)/1.03 'Ubuntu', sans-serif; letter-spacing: -.045em; }
+/* The one piece of text on the page. Sized so each of its two sentences holds its own line: the
+   line break in the markup is the only one intended, and a width cap that forced a second wrap
+   would turn a two-line statement into a four-line paragraph. */
+.bo-landing h1 {
+  margin: 0;
+  font: 700 clamp(30px, 5vw, 62px)/1.12 'Ubuntu', sans-serif;
+  letter-spacing: -.04em;
+  text-align: center;
+}
 .bo-landing h1 i { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; font-style: normal; }
-.bo-landing-hero > p { max-width: 620px; margin: 0 auto; color: var(--muted); font-size: clamp(15px, 1.5vw, 19px); line-height: 1.6; }
-.bo-landing-actions { margin: 30px 0 0; display: grid; gap: 12px; justify-items: center; }
-.bo-landing-actions span { color: var(--muted); font-size: 12px; }
-.bo-landing-cta { min-height: 54px; padding: 0 28px; display: inline-flex; align-items: center; gap: 10px; border: 0; border-radius: 99px; color: white; background: var(--gradient); font-size: 15px; font-weight: 700; box-shadow: 0 12px 30px rgba(23, 96, 63, .26); transition: transform .15s ease, box-shadow .15s ease; }
+
+.bo-landing-cta {
+  min-height: 54px;
+  padding: 0 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 99px;
+  color: white;
+  background: var(--gradient);
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(23, 96, 63, .26);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
 .bo-landing-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(23, 96, 63, .32); }
 
-/* The workspace in the hero -------------------------------------------------- */
-.bo-landing-shot { margin-top: clamp(40px, 5vw, 64px); display: grid; gap: 16px; justify-items: center; }
-.bo-landing-shot__prompt { width: min(560px, 100%); padding: 15px 18px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 10px 26px rgba(18, 22, 15, .06); text-align: left; }
-.bo-landing-shot__prompt svg { flex: 0 0 auto; color: var(--brand); }
-.bo-landing-shot__prompt em { color: var(--muted); font-size: 13px; font-style: normal; line-height: 1.5; }
-.bo-landing-shot__window { width: 100%; display: grid; grid-template-columns: 186px 1fr; overflow: hidden; border-radius: 20px; background: #181c18; box-shadow: 0 34px 80px rgba(18, 22, 15, .28); text-align: left; }
-.bo-landing-shot__window aside { padding: 18px 14px; display: grid; align-content: start; gap: 3px; background: #14170f14; }
-.bo-landing-shot__window aside b { margin-bottom: 14px; display: flex; gap: 5px; }
-.bo-landing-shot__window aside b i { width: 8px; height: 8px; border-radius: 50%; background: #3b423b; }
-.bo-landing-shot__window aside span { padding: 8px 11px; border-radius: 8px; color: #949c93; font-size: 11.5px; }
-.bo-landing-shot__window aside span.active { color: #f0f2ee; background: #262a25; font-weight: 600; }
-.bo-landing-shot__panel { padding: clamp(20px, 3vw, 34px); background: #f7f8f4; }
-.bo-landing-shot__window h4 { margin: 0 0 18px; font: 700 clamp(22px, 2.6vw, 32px) 'Ubuntu', sans-serif; letter-spacing: -.035em; color: #12160f; }
-.bo-landing-shot__tiles { display: grid; gap: 11px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.bo-landing-shot__tiles article { padding: 16px 14px; display: grid; gap: 9px; justify-items: center; border: 1px solid #e6e8e1; border-radius: 14px; background: white; }
-.bo-landing-shot__tiles strong { font-size: 11.5px; text-align: center; }
-
-/* Shared tinted glyph -------------------------------------------------------- */
-.bo-landing [class*='tint-'] { display: grid; place-items: center; border-radius: 11px; }
-.bo-landing-shot__tiles span { width: 40px; height: 40px; }
-.bo-landing .tint-sky { color: #1f5f86; background: #e2effa; }
-.bo-landing .tint-indigo { color: #34449c; background: #e6e9fb; }
-.bo-landing .tint-violet { color: #5b3a9c; background: #efe7fb; }
-.bo-landing .tint-teal { color: #146f6b; background: #dff2f0; }
-.bo-landing .tint-green { color: #1c6b45; background: #e2f2e8; }
-.bo-landing .tint-amber { color: #8a5a12; background: #fbeeda; }
-.bo-landing .tint-rose { color: #97374a; background: #fbe5e9; }
-.bo-landing .tint-olive { color: #5b6a24; background: #eef2dc; }
-:root[data-theme='dark'] .bo-landing .tint-sky { color: #7ec2e0; background: #1b2c33; }
-:root[data-theme='dark'] .bo-landing .tint-indigo { color: #a8b3ec; background: #232a42; }
-:root[data-theme='dark'] .bo-landing .tint-violet { color: #c9a8e8; background: #2c2338; }
-:root[data-theme='dark'] .bo-landing .tint-teal { color: #7fd0c9; background: #1a2c2a; }
-:root[data-theme='dark'] .bo-landing .tint-green { color: #8ecda3; background: #1c2c22; }
-:root[data-theme='dark'] .bo-landing .tint-amber { color: #e0b060; background: #332a16; }
-:root[data-theme='dark'] .bo-landing .tint-rose { color: #e8a294; background: #362520; }
-:root[data-theme='dark'] .bo-landing .tint-olive { color: #c3cc7a; background: #2a2e18; }
-
-/* Stats ---------------------------------------------------------------------- */
-.bo-landing-stats { padding-block: clamp(34px, 4vw, 52px); display: grid; gap: 20px; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.bo-landing-stats article { display: grid; gap: 5px; }
-.bo-landing-stats strong { font: 700 clamp(30px, 3.6vw, 44px) 'Ubuntu', sans-serif; letter-spacing: -.045em; background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.bo-landing-stats span { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
-
-/* Section shell -------------------------------------------------------------- */
-.bo-landing section { padding-block: clamp(56px, 7vw, 100px); }
-.bo-landing h2 { margin: 0 0 12px; font: 700 clamp(28px, 3.6vw, 44px)/1.12 'Ubuntu', sans-serif; letter-spacing: -.04em; }
-.bo-landing-lede { max-width: 640px; margin: 0 0 34px; color: var(--muted); font-size: 15px; line-height: 1.6; }
-
-/* Steps ---------------------------------------------------------------------- */
-.bo-landing-steps > div, .bo-landing-difference > div { margin-top: 34px; display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.bo-landing-steps article { padding: 26px 24px; display: grid; gap: 10px; align-content: start; border: 1px solid var(--line); border-radius: 20px; background: var(--wash); }
-.bo-landing-steps span, .bo-landing-difference span { width: 44px; height: 44px; }
-.bo-landing-steps b { color: #9aa398; font-size: 11px; font-weight: 800; letter-spacing: .16em; }
-.bo-landing-steps strong, .bo-landing-difference strong { font: 700 19px 'Ubuntu', sans-serif; letter-spacing: -.025em; }
-.bo-landing-steps p, .bo-landing-difference p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.65; }
-
-/* Examples ------------------------------------------------------------------- */
-.bo-landing-examples { background: var(--wash); max-width: none; }
-.bo-landing-examples > * { max-width: 1180px; margin-inline: auto; }
-.bo-landing-examples > div { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.bo-landing-examples article { padding: 20px 20px 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 6px 18px rgba(18, 22, 15, .04); }
-.bo-landing-examples article > header { margin-bottom: 15px; display: flex; align-items: center; gap: 11px; }
-.bo-landing-examples article header span { width: 34px; height: 34px; flex: 0 0 34px; }
-.bo-landing-examples article strong { flex: 1; font-size: 14.5px; }
-.bo-landing-examples article em { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-style: normal; }
-.bo-landing-examples ul { margin: 0; padding: 0; display: grid; gap: 8px; list-style: none; }
-.bo-landing-examples li { display: flex; align-items: center; gap: 9px; color: var(--ink); font-size: 13px; }
-.bo-landing-examples li svg { flex: 0 0 auto; color: var(--brand); }
-
-/* Closing -------------------------------------------------------------------- */
-.bo-landing-close { text-align: center; }
-.bo-landing-close p { max-width: 500px; margin: 0 auto 28px; color: var(--muted); font-size: 15px; line-height: 1.6; }
-.bo-landing > footer { padding-block: 30px 52px; display: flex; align-items: center; justify-content: space-between; gap: 22px; flex-wrap: wrap; border-top: 1px solid var(--line); }
-.bo-landing > footer .brand { color: var(--muted); }
-.bo-landing > footer .brand-mark { color: white; background: #97a094; }
-.bo-landing > footer span { max-width: 580px; color: #838b81; font-size: 11.5px; line-height: 1.6; }
-
-@media (max-width: 980px) {
-  .bo-landing-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bo-landing-steps > div, .bo-landing-difference > div, .bo-landing-examples > div { grid-template-columns: 1fr; }
-  .bo-landing-shot__window { grid-template-columns: 1fr; }
-  .bo-landing-shot__window aside { display: none; }
-  .bo-landing nav > div { display: none; }
-}
-@media (max-width: 620px) {
-  .bo-landing-shot__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (prefers-reduced-motion: reduce) {
+  .bo-landing-cta { transition: none; }
+  .bo-landing-cta:hover { transform: none; }
 }
