@@ -37,6 +37,8 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `RESEND_API_KEY` + `BO_MAIL_FROM` | Envío de correo. Sin ambas, los enlaces de recuperación se escriben en el log del servidor en vez de enviarse |
 | `BO_PUBLIC_URL` | La dirección pública de BO, para construir los enlaces del correo. Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
 | `BO_RESET_RATE_LIMIT` | Intentos de recuperación por IP y minuto (por defecto 5) |
+| `SENTRY_DSN` | Monitorización de errores. Sin ella, los fallos solo quedan en el log |
+| `BO_ENVIRONMENT` / `BO_RELEASE` | Etiquetas del despliegue en los informes de error |
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
@@ -52,6 +54,14 @@ Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`.
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
 
 Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
+
+## Saber cuándo se rompe
+
+Cada respuesta lleva una cabecera `x-bo-request-id`, y cada petición deja una línea JSON en stdout con su ruta, su estado y cuánto tardó. Cuando algo falla con un 500, la respuesta incluye ese mismo id como `reference`: es lo que el cliente puede citar y lo que encuentra la petición exacta en el log.
+
+Con `SENTRY_DSN` configurada, los 500 se envían además a Sentry con su traza y su contexto. Los 4xx no se envían: son BO diciéndole a quien llama que se equivocó, y enviarlos entierra los fallos que sí son de BO.
+
+Lo que nunca sale de aquí: cuerpos de petición, cabeceras y query strings. Un cuerpo lleva contraseñas y claves de API, una cabecera `Authorization` lleva una sesión viva, y un enlace de recuperación vive en un query string. El informe se envía después de responder y con timeout, así que un monitor caído ni retrasa ni tumba a BO.
 
 ## Contraseñas olvidadas
 
@@ -147,7 +157,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen y cada push pasa por CI. Lo que falta para poder venderlo: facturación, y saber cuándo se rompe en producción (hoy los errores solo van a stdout).
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen, cada push pasa por CI, y los fallos en producción se reportan con contexto suficiente para diagnosticarlos. Lo que falta para poder venderlo: facturación.
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

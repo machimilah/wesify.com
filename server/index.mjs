@@ -14,6 +14,7 @@ import { databaseAvailable, migrate } from './db.mjs'
 import { readWorkspaceData, writeWorkspaceData } from './records.mjs'
 import { authenticate, beginPasswordReset, claimWorkspace, completePasswordReset, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
 import { mailAvailable, sendPasswordReset } from './mail.mjs'
+import { captureError, logRequest, monitoringAvailable, newRequestId, watchProcess } from './observability.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
@@ -369,7 +370,10 @@ async function api(request, response, url) {
         const link = `${originOf(request)}/reset?token=${encodeURIComponent(issued.token)}`
         // A provider that is down must not become a way to learn that the address exists, so the
         // failure is logged for the operator and answered generically like everything else here.
-        try { await sendPasswordReset(issued.user.email, link) } catch (error) { console.error('BO could not send a password reset email:', error?.message ?? error) }
+        // Reported, not just logged: a mail provider that is refusing messages means nobody can get
+        // back into their account, and it is invisible from the outside — every caller still gets the
+        // same cheerful "a reset link is on its way".
+        try { await sendPasswordReset(issued.user.email, link) } catch (error) { void captureError(error, { requestId: String(response.getHeader('x-bo-request-id') ?? ''), path: '/api/auth/forgot', failed: 'password-reset-email' }) }
       }
       return send(response, 200, { sent: true, message: 'If that email has an account, a reset link is on its way.' })
     }
@@ -776,15 +780,48 @@ async function staticFile(response, url) {
 }
 
 export const server = createServer(async (request, response) => {
+  const requestId = newRequestId()
+  const startedAt = Date.now()
+  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+  // Sent back on every response so a customer reporting a problem can quote something that finds the
+  // exact request in the log, rather than describing what they were doing at the time.
+  response.setHeader('x-bo-request-id', requestId)
+
   try {
-    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
-    if (await api(request, response, url) !== false) return
-    await staticFile(response, url)
+    if (await api(request, response, url) === false) await staticFile(response, url)
   } catch (error) {
     const status = Number(error?.status) || 500
-    send(response, status, { error: status === 500 ? 'BO could not complete the operation.' : error.message, detail: process.env.NODE_ENV === 'development' ? error.message : undefined })
+    // A 4xx is BO telling the caller they got it wrong, which is the endpoint working. Reporting those
+    // would bury the failures that are BO's fault under the ones that are not.
+    // Not awaited. The caller is owed an answer about their request, not a wait on a third party that
+    // has nothing to do with it — and the monitor being slow or unreachable is precisely the case.
+    // captureError never rejects, so nothing here needs catching.
+    if (status >= 500) {
+      void captureError(error, { requestId, method: request.method, path: url.pathname, status, workspaceId: String(request.headers['x-bo-workspace-id'] ?? '') || undefined })
+    }
+    send(response, status, {
+      error: status === 500 ? 'BO could not complete the operation.' : error.message,
+      // The reference is not the error: it says nothing about what broke, and is only useful to
+      // someone holding the log. That is exactly what makes it safe to show.
+      reference: status >= 500 ? requestId : undefined,
+      detail: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    })
+  } finally {
+    if (!isNoisyPath(url.pathname)) {
+      logRequest({ requestId, method: request.method, path: url.pathname, status: response.statusCode, ms: Date.now() - startedAt, workspaceId: String(request.headers['x-bo-workspace-id'] ?? '') || undefined })
+    }
   }
 })
+
+/**
+ * Static assets are not worth a line each.
+ *
+ * A single page load fetches the bundle, the stylesheet and every icon; logging those buries the
+ * handful of API calls that say what the person was actually doing.
+ */
+function isNoisyPath(pathname) {
+  return pathname.startsWith('/assets/') || /\.(js|css|map|png|svg|ico|woff2?)$/.test(pathname)
+}
 
 /**
  * Only start listening when this file is what was run.
@@ -802,17 +839,24 @@ const startedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fil
  * there is nothing to migrate and BO starts as it always did.
  */
 if (startedDirectly) {
+  // Only when BO is the process. Imported by a test, it must not install handlers that call
+  // process.exit on the test runner.
+  watchProcess()
   if (databaseAvailable()) {
     try {
       const ran = await migrate()
       if (ran.length) console.log(`BO applied ${ran.length} migration${ran.length === 1 ? '' : 's'}: ${ran.join(', ')}`)
     } catch (error) {
+      // Reported before exiting: a deployment that dies on boot restarts in a loop, and the log of the
+      // container that failed is the first thing a platform throws away.
+      await captureError(error, { fatal: true, failed: 'migration' })
       console.error('BO could not prepare its database:', error?.message ?? error)
       process.exit(1)
     }
   }
   // Said at start rather than left to be discovered from a customer who never got their reset link.
   if (databaseAvailable() && !mailAvailable()) console.warn('BO has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
+  if (!monitoringAvailable()) console.warn('BO has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when BO breaks.')
   server.listen(port, host, () => console.log(`BO project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
 }
 
