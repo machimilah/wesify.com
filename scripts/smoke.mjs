@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-core'
+import { launchBrowser } from './browser.mjs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 
@@ -19,7 +19,7 @@ for (let attempt = 0; attempt < 50; attempt += 1) {
   if (attempt === 49) throw new Error('Could not start the smoke-test server.')
 }
 
-const browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true })
+const browser = await launchBrowser()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 const errors = []
 page.on('console', message => message.type() === 'error' && errors.push(message.text()))

@@ -30,6 +30,10 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |
 | `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
 | `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
+| `BO_HOST` | Interfaz donde escucha el servidor (por defecto `127.0.0.1`; el contenedor usa `0.0.0.0`) |
+| `PORT` / `BO_API_PORT` | Puerto (por defecto 8787). `PORT` es el que inyectan las plataformas de despliegue |
+| `BO_GENERATED_ROOT` | Dónde guarda BO lo que sigue en disco (por defecto `generated-projects/`; el contenedor usa `/data`) |
+| `BO_BROWSER` | Ejecutable del navegador para las pruebas end-to-end. Sin ella se busca Chrome o Edge en las rutas habituales |
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
@@ -40,11 +44,34 @@ Para activar las cuentas hacen falta dos cosas:
 1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer los hashes de contraseña y de sesión. Es idempotente: volver a ejecutarlo no rompe nada.
 2. Poner la cadena de conexión (**Connect → Session pooler**, puerto `5432`) en `.env.local` como `DATABASE_URL`.
 
-Al arrancar, el servidor debe decir `listening on 8787 with accounts`. El fichero deja registradas las migraciones `001_accounts.sql` y `002_records.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/003_*.sql`) se aplican solas al arrancar.
+Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. El fichero deja registradas las migraciones `001_accounts.sql` y `002_records.sql`, así que el servidor no repite el trabajo ya hecho a mano; las migraciones siguientes (`server/migrations/003_*.sql`) se aplican solas al arrancar.
 
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
 
 Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
+
+## Desplegar
+
+BO se empaqueta como una sola imagen. El [`Dockerfile`](Dockerfile) tiene dos etapas: la primera compila el frontend con todo el toolchain, la segunda arranca el servidor sin nada de él.
+
+```bash
+docker build -t bo .
+docker run -p 8787:8787 \
+  -e DATABASE_URL='postgresql://...' \
+  -e ANTHROPIC_API_KEY='sk-ant-...' \
+  -e BO_CONNECTION_SECRET='...' \
+  -v bo-data:/data \
+  bo
+```
+
+Detalles que importan:
+
+- **El volumen no es opcional.** Con `DATABASE_URL` los registros están a salvo en Postgres, pero el Command Center generado, las credenciales de las apps conectadas y el conocimiento de sector siguen bajo `/data`. Sin volumen, un redespliegue los borra.
+- **Los secretos van en el entorno, nunca en la imagen.** `.dockerignore` excluye `.env.local` justamente por eso: una imagen se sube a un registro y sus capas son legibles por cualquiera que la tenga.
+- **La imagen corre como usuario `node`, no como root**, y expone `/api/health`, que es lo que usan tanto el `HEALTHCHECK` como cualquier plataforma para saber si el contenedor sirve.
+- El servidor cierra ordenadamente con `SIGTERM`, así que las peticiones en vuelo terminan antes de que muera el proceso.
+
+Cada push ejecuta [`.github/workflows/verify.yml`](.github/workflows/verify.yml): el `npm run verify` completo por un lado y, por otro, la construcción de la imagen más un arranque real esperando a que se declare sana. Ninguno de los dos necesita secretos.
 
 ## Índice de páginas
 
@@ -109,7 +136,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Lo que falta para poder venderlo: recuperación de contraseña, facturación y despliegue.
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen y cada push pasa por CI. Lo que falta para poder venderlo: recuperación de contraseña, facturación, y saber cuándo se rompe en producción (hoy los errores solo van a stdout).
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

@@ -17,9 +17,14 @@ import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe 
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
 const requestedPort = Number(process.argv[process.argv.indexOf('--port') + 1])
-const port = Number.isFinite(requestedPort) ? requestedPort : Number(process.env.BO_API_PORT || 8787)
+// `PORT` is what every container host injects, and it is not BO's to choose there; `BO_API_PORT` stays
+// ahead of it so a local `.env.local` still wins over whatever a shell happens to export.
+const port = Number.isFinite(requestedPort) ? requestedPort : Number(process.env.BO_API_PORT || process.env.PORT || 8787)
+// Loopback by default, so running BO on a laptop does not quietly publish it to the local network.
+// A container has to bind every interface or nothing outside it can reach the port at all.
+const host = process.env.BO_HOST || '127.0.0.1'
 const distRoot = path.resolve(process.cwd(), 'dist')
-const discoveryRoot = path.resolve(process.cwd(), 'generated-projects', '.discovery-sessions')
+const discoveryRoot = path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.discovery-sessions')
 const accessRoot = path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.workspace-access')
 const initialBuilds = new Map()
 
@@ -755,7 +760,7 @@ if (startedDirectly) {
       process.exit(1)
     }
   }
-  server.listen(port, '127.0.0.1', () => console.log(`BO project service listening on ${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
+  server.listen(port, host, () => console.log(`BO project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
 }
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))

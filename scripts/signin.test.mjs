@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-core'
+import { launchBrowser } from './browser.mjs'
 import { newDb } from 'pg-mem'
 import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -36,7 +36,7 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
   if (attempt === 59) throw new Error('Could not start the frontend server.')
 }
 
-const browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true })
+const browser = await launchBrowser()
 const errors = []
 
 async function open() {

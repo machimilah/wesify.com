@@ -1,0 +1,27 @@
+# What must never enter the image.
+#
+# .env.local holds the database URL, the Anthropic key and the connection secret. An image is not a
+# private thing — it is pushed to a registry, pulled, and its layers are readable by anyone holding
+# it. Secrets belong in the environment at run time, never baked into a layer.
+.env
+.env.local
+.env.*.local
+
+# Rebuilt inside the image, and copying a host build in would defeat the point of building one.
+node_modules
+dist
+
+# Data and history, not source.
+generated-projects
+.git
+.attic
+*.log
+*.tsbuildinfo
+
+# Not build inputs. Note what is *not* listed: src/, index.html, vite.config.* and tsconfig*.json all
+# have to reach the build stage or `npm run build` has nothing to compile. They stop there — the
+# runtime stage copies only server/ and the finished dist/, so none of them ends up in the image.
+docs
+.github
+Dockerfile
+.dockerignore

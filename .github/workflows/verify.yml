@@ -1,0 +1,79 @@
+# Every push and every pull request runs the same command a person runs before committing.
+#
+# BO has 118 unit tests and 14 end-to-end suites that drive a real browser against the real server.
+# They were all green, all the time — as long as someone remembered to run them. This turns that from
+# a habit into a gate, which is the only version of it that survives a busy week.
+#
+# No secrets are needed. The suites that would otherwise call Anthropic or Stripe stub those services
+# rather than reaching them, which is what lets this run on a fork's pull request too.
+
+name: verify
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # playwright-core ships no browser of its own. The runner already has Chrome installed, so this
+      # points the browser suites at it instead of downloading ~150MB on every run.
+      - name: Locate the browser
+        run: echo "BO_BROWSER=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+
+      - run: npm run verify
+
+  image:
+    # Proving the image builds is separate from proving the code works: a broken Dockerfile is a
+    # deployment failure, not a test failure, and seeing which of the two went red saves the guessing.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: bo:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # An image that builds is not the same as an image that serves. This starts it with no database
+      # configured — the mode that needs no secrets — and waits for it to report itself healthy.
+      - name: Start it and wait for health
+        run: |
+          docker run -d --name bo -p 8787:8787 bo:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/api/health > /dev/null; then
+              echo "healthy after ${i}s"
+              curl -fsS http://127.0.0.1:8787/api/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the container never became healthy; its logs:"
+          docker logs bo
+          exit 1
+
+      - name: Stop it
+        if: always()
+        run: docker rm -f bo || true

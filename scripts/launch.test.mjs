@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-core'
+import { launchBrowser } from './browser.mjs'
 import { spawn } from 'node:child_process'
 
 /**
@@ -17,7 +17,7 @@ for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://127.0.0.1:${apiPor
 const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], { cwd: process.cwd(), env: { ...process.env, BO_API_PORT: String(apiPort) }, stdio: 'pipe' })
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://127.0.0.1:${vitePort}/`)).ok) break } catch {} ; await new Promise(r => setTimeout(r, 100)) }
 
-const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true })
+const browser = await launchBrowser()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
