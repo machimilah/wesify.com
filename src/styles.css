@@ -276,6 +276,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-signin input { min-height: 42px; padding: 0 13px; border: 1px solid var(--border-strong); border-radius: 11px; outline: 0; color: var(--text); background: var(--surface); font-size: 13px; }
 .bo-signin input:focus { border-color: var(--text-2); }
 .bo-signin-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--danger); background: var(--surface); font-size: 12px; line-height: 1.5; }
+/* Answering a reset request is not an error and must not look like one — it is the only outcome that
+   screen has, including for an address that has no account. */
+.bo-signin-notice { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--text-2); background: var(--surface); font-size: 12px; line-height: 1.5; }
+.bo-signin-hint { margin: -2px 0 2px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
 .bo-signin button { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px; color: white; background: var(--solid-fill); font-size: 12px; font-weight: 700; }
 .bo-signin button:disabled { color: var(--text-3); background: var(--border-strong); }
 .bo-signin-switch { min-height: 32px !important; color: var(--text-2) !important; background: transparent !important; font-weight: 500 !important; }

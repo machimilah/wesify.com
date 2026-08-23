@@ -34,6 +34,9 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `PORT` / `BO_API_PORT` | Puerto (por defecto 8787). `PORT` es el que inyectan las plataformas de despliegue |
 | `BO_GENERATED_ROOT` | Dónde guarda BO lo que sigue en disco (por defecto `generated-projects/`; el contenedor usa `/data`) |
 | `BO_BROWSER` | Ejecutable del navegador para las pruebas end-to-end. Sin ella se busca Chrome o Edge en las rutas habituales |
+| `RESEND_API_KEY` + `BO_MAIL_FROM` | Envío de correo. Sin ambas, los enlaces de recuperación se escriben en el log del servidor en vez de enviarse |
+| `BO_PUBLIC_URL` | La dirección pública de BO, para construir los enlaces del correo. Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
+| `BO_RESET_RATE_LIMIT` | Intentos de recuperación por IP y minuto (por defecto 5) |
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
@@ -49,6 +52,14 @@ Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`.
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
 
 Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
+
+## Contraseñas olvidadas
+
+Desde la pantalla de acceso, **I forgot my password** pide la dirección y BO envía un enlace. El enlace vale una hora, funciona una sola vez, y al usarlo cierra todas las sesiones abiertas de esa cuenta —porque el motivo para recuperarla puede ser precisamente que otra persona la tenga abierta.
+
+BO responde lo mismo exista o no la cuenta: un endpoint que distinga las dos cosas es la forma de averiguar quién es cliente. El enlace nunca vuelve en la respuesta HTTP, solo por correo.
+
+Sin `RESEND_API_KEY` y `BO_MAIL_FROM`, el enlace se escribe en el log del servidor en vez de enviarse, y el servidor lo avisa al arrancar. Sirve para desarrollo; en producción es que nadie recibe nada.
 
 ## Desplegar
 
@@ -136,7 +147,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen y cada push pasa por CI. Lo que falta para poder venderlo: recuperación de contraseña, facturación, y saber cuándo se rompe en producción (hoy los errores solo van a stdout).
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen y cada push pasa por CI. Lo que falta para poder venderlo: facturación, y saber cuándo se rompe en producción (hoy los errores solo van a stdout).
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

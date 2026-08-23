@@ -12,7 +12,8 @@ import { credentialFor, listConnections, recordSync, removeConnection, saveConne
 import { callerOf, rateLimit, spendModelCall } from './limits.mjs'
 import { databaseAvailable, migrate } from './db.mjs'
 import { readWorkspaceData, writeWorkspaceData } from './records.mjs'
-import { authenticate, claimWorkspace, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
+import { authenticate, beginPasswordReset, claimWorkspace, completePasswordReset, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
+import { mailAvailable, sendPasswordReset } from './mail.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
@@ -49,6 +50,21 @@ async function body(request) {
 function bearer(request) {
   const header = String(request.headers.authorization ?? '')
   return header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+}
+
+/**
+ * The address a link mailed to someone should point back at.
+ *
+ * `BO_PUBLIC_URL` first, because behind a proxy the request's own host header is the proxy's idea of
+ * the world and not the one in the customer's address bar. The header is the fallback so this works
+ * on a laptop with nothing configured; it is only ever used to build a link, never to decide anything.
+ */
+function originOf(request) {
+  if (process.env.BO_PUBLIC_URL) return String(process.env.BO_PUBLIC_URL).replace(/\/+$/, '')
+  const forwardedHost = String(request.headers['x-forwarded-host'] ?? '').split(',')[0].trim()
+  const host = forwardedHost || String(request.headers.host ?? `127.0.0.1:${port}`)
+  const protocol = String(request.headers['x-forwarded-proto'] ?? '').split(',')[0].trim() || (host.startsWith('127.0.0.1') || host.startsWith('localhost') ? 'http' : 'https')
+  return `${protocol}://${host}`
 }
 
 /**
@@ -330,6 +346,41 @@ async function api(request, response, url) {
       const user = segments[2] === 'register'
         ? await registerUser(input.email, input.password)
         : await authenticate(input.email, input.password)
+      const session = await createSession(user.id)
+      return send(response, 200, { user, token: session.token, expiresAt: session.expiresAt })
+    }
+
+    /**
+     * Forgotten passwords: /api/auth/forgot, then /api/auth/reset.
+     *
+     * `forgot` answers the same thing whether or not the address has an account, and takes no shortcut
+     * when it does not: an endpoint that responds differently for a known address is how a list of
+     * BO's customers gets built. The link is mailed and never returned here, so asking is not a way to
+     * be handed someone else's account.
+     */
+    if (request.method === 'POST' && segments[2] === 'forgot') {
+      // Tighter than sign-in: this one sends mail, so an unthrottled caller can also use BO to spray
+      // messages at addresses that never asked for them.
+      const window = rateLimit(`forgot:${callerOf(request)}`, { max: Number(process.env.BO_RESET_RATE_LIMIT || 5), windowMs: 60_000 })
+      if (!window.ok) return send(response, 429, { error: `Too many attempts. Try again in ${window.retryAfterSeconds} seconds.` })
+      const input = await body(request)
+      const issued = await beginPasswordReset(input.email)
+      if (issued) {
+        const link = `${originOf(request)}/reset?token=${encodeURIComponent(issued.token)}`
+        // A provider that is down must not become a way to learn that the address exists, so the
+        // failure is logged for the operator and answered generically like everything else here.
+        try { await sendPasswordReset(issued.user.email, link) } catch (error) { console.error('BO could not send a password reset email:', error?.message ?? error) }
+      }
+      return send(response, 200, { sent: true, message: 'If that email has an account, a reset link is on its way.' })
+    }
+
+    if (request.method === 'POST' && segments[2] === 'reset') {
+      const window = rateLimit(`reset:${callerOf(request)}`, { max: Number(process.env.BO_RESET_RATE_LIMIT || 5), windowMs: 60_000 })
+      if (!window.ok) return send(response, 429, { error: `Too many attempts. Try again in ${window.retryAfterSeconds} seconds.` })
+      const input = await body(request)
+      const user = await completePasswordReset(input.token, input.password)
+      // Signed in on the spot. The reset already proved they hold the address, and the alternative is
+      // a sign-in form asking for the password they typed ten seconds ago.
       const session = await createSession(user.id)
       return send(response, 200, { user, token: session.token, expiresAt: session.expiresAt })
     }
@@ -760,6 +811,8 @@ if (startedDirectly) {
       process.exit(1)
     }
   }
+  // Said at start rather than left to be discovered from a customer who never got their reset link.
+  if (databaseAvailable() && !mailAvailable()) console.warn('BO has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
   server.listen(port, host, () => console.log(`BO project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
 }
 

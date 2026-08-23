@@ -13,6 +13,7 @@
 --   workspace_members  who may open a workspace, and as what role
 --   records            every record a workspace holds — clients, invoices, work orders,
 --                      anything an operator creates — as one row per record
+--   password_resets    one row per live reset link, storing only a hash of the token
 --   schema_migrations  BO's own migration ledger, so the server does not re-run this
 --
 -- What this deliberately does NOT create
@@ -23,7 +24,7 @@
 --
 -- After running this
 --   Put the Session pooler connection string in .env.local as DATABASE_URL, then start
---   the server. It should log "listening on 8787 with accounts".
+--   the server. It should log "listening on 127.0.0.1:8787 with accounts".
 -- =====================================================================================
 
 
@@ -85,9 +86,21 @@ create table if not exists records (
   primary key (workspace_id, entity_id, id)
 );
 
+-- Password reset links. Only the hash of the token is stored, exactly as for sessions:
+-- a stolen database must not hand anyone a working link into every account. `used_at`
+-- makes a link single-use, and `expires_at` makes an old one worthless even if it is
+-- never used — a reset link sits in an inbox forever, so it has to stop working on its own.
+create table if not exists password_resets (
+  token_hash text        primary key,
+  user_id    text        not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);
+
 -- BO's migration ledger. The server creates this itself on first start, but creating it
--- here lets the last section record 001 and 002 as already applied, so the server does
--- not try to redo work you have just done by hand.
+-- here lets the last section record 001, 002 and 003 as already applied, so the server
+-- does not try to redo work you have just done by hand.
 create table if not exists schema_migrations (
   name       text primary key,
   applied_at timestamptz not null default now()
@@ -116,6 +129,10 @@ create index if not exists workspace_members_user_id_idx on workspace_members (u
 -- this workspace" or "every record in this workspace", and the primary key above already
 -- leads with (workspace_id, entity_id) — exactly what both access patterns filter on.
 
+-- Issuing a reset link invalidates the account's older ones, which is a lookup by user
+-- rather than by token, and the primary key on password_resets cannot answer it.
+create index if not exists password_resets_user_id_idx on password_resets (user_id);
+
 
 -- -------------------------------------------------------------------------------------
 -- 3. Keep these tables off the public API
@@ -127,10 +144,10 @@ create index if not exists workspace_members_user_id_idx on workspace_members (u
 -- design and ships in the browser bundle.
 --
 -- So without this section, a stranger could read every row of `users` (password hashes),
--- `sessions` (live session token hashes), and `records` (every client and invoice every
--- workspace holds) over HTTP. BO never uses PostgREST: it connects straight to Postgres
--- as the table owner, and RLS does not apply to the owner, so locking these down costs
--- the application nothing.
+-- `sessions` (live session token hashes), `password_resets` (live reset links) and
+-- `records` (every client and invoice every workspace holds) over HTTP. BO never uses
+-- PostgREST: it connects straight to Postgres as the table owner, and RLS does not apply
+-- to the owner, so locking these down costs the application nothing.
 --
 -- Two independent locks, because either one alone can be undone by accident later:
 --   RLS with no policies  → the API can see the table but never any rows
@@ -142,6 +159,7 @@ alter table sessions          enable row level security;
 alter table workspaces        enable row level security;
 alter table workspace_members enable row level security;
 alter table records           enable row level security;
+alter table password_resets   enable row level security;
 alter table schema_migrations enable row level security;
 
 -- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
@@ -164,6 +182,7 @@ begin
   execute 'revoke all on table workspaces        from anon, authenticated';
   execute 'revoke all on table workspace_members from anon, authenticated';
   execute 'revoke all on table records           from anon, authenticated';
+  execute 'revoke all on table password_resets   from anon, authenticated';
   execute 'revoke all on table schema_migrations from anon, authenticated';
 
   -- The same protection for tables a future BO migration creates, so 003 and beyond are
@@ -179,22 +198,23 @@ $$;
 
 
 -- -------------------------------------------------------------------------------------
--- 4. Record migrations 001 and 002 as applied
+-- 4. Record migrations 001, 002 and 003 as applied
 --
 -- BO runs pending migrations from server/migrations/ on start, tracked by filename. This
--- file does the same work as 001_accounts.sql and 002_records.sql, so recording both
--- prevents a duplicate run. ON CONFLICT keeps this file safe to run twice.
+-- file does the same work as 001_accounts.sql, 002_records.sql and
+-- 003_password_resets.sql, so recording all three prevents a duplicate run. ON CONFLICT
+-- keeps this file safe to run twice.
 -- -------------------------------------------------------------------------------------
 
 insert into schema_migrations (name)
-values ('001_accounts.sql'), ('002_records.sql')
+values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
 -- 5. Verify
 --
--- Expect exactly six rows, and on every one of them:
+-- Expect exactly seven rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
@@ -217,5 +237,5 @@ from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relkind = 'r'
-  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records', 'schema_migrations')
+  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records', 'password_resets', 'schema_migrations')
 order by c.relname;

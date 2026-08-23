@@ -62,6 +62,22 @@ export async function signIn(email: string, password: string): Promise<Account> 
 }
 
 /**
+ * Asks for a reset link. The answer is deliberately the same whether or not the address has an
+ * account, so this returns the server's message rather than a yes or a no.
+ */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const result = await post('forgot', { email })
+  return result.message as string
+}
+
+/** Spends a reset link. The server signs them in on success, so the new token is stored here. */
+export async function resetPassword(token: string, password: string): Promise<Account> {
+  const result = await post('reset', { token, password })
+  localStorage.setItem(TOKEN_KEY, result.token)
+  return result.user
+}
+
+/**
  * Ends the session on the server, then locally whatever happened.
  *
  * A sign-out that fails because the network is down must still sign the person out of this browser —

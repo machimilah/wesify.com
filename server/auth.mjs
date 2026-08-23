@@ -126,6 +126,54 @@ export async function destroyAllSessions(userId) {
   await query('delete from sessions where user_id = $1', [userId])
 }
 
+/**
+ * A reset link is a session token that has not been earned yet, so it is treated like one.
+ *
+ * Stored as a hash, single use, and short-lived: a reset link lands in an inbox and stays there, so
+ * the hour is what keeps a mailbox read two years from now from being a way into the account.
+ */
+const RESET_MINUTES = 60
+
+/**
+ * Issues a reset link for `email`, or nothing if no such account exists.
+ *
+ * Returning null rather than throwing is the point: the endpoint above answers the same way either
+ * way, because an endpoint that says "no account with that address" is a way to find out who has one.
+ */
+export async function beginPasswordReset(email) {
+  const address = normalizeEmail(email)
+  const user = await queryOne('select id, email from users where email = $1', [address])
+  if (!user) return null
+  // The newest link is the only one that works. Someone who asks twice because the first mail was
+  // slow should not be left with two live keys to their account.
+  await query('delete from password_resets where user_id = $1 and used_at is null', [user.id])
+  const token = randomBytes(TOKEN_BYTES).toString('base64url')
+  const expiresAt = new Date(Date.now() + RESET_MINUTES * 60 * 1000)
+  await query('insert into password_resets (token_hash, user_id, expires_at) values ($1, $2, $3)', [tokenHash(token), user.id, expiresAt])
+  return { token, expiresAt, user: { id: user.id, email: user.email } }
+}
+
+/**
+ * Spends a reset link: sets the new password, burns the link, and signs the account out everywhere.
+ *
+ * The sign-out is not politeness. Someone resetting a password may be doing it because another person
+ * has their account, and leaving that person's session alive would make the reset pointless.
+ */
+export async function completePasswordReset(token, password) {
+  const expired = Object.assign(new Error('That reset link has expired or has already been used. Ask for a new one.'), { status: 400 })
+  if (!token) throw expired
+  const row = await queryOne(
+    'select r.token_hash, r.expires_at, r.used_at, u.id, u.email from password_resets r join users u on u.id = r.user_id where r.token_hash = $1',
+    [tokenHash(token)],
+  )
+  if (!row || row.used_at || new Date(row.expires_at).getTime() <= Date.now()) throw expired
+  checkPassword(password, row.email)
+  await query('update users set password_hash = $1 where id = $2', [await hashPassword(password), row.id])
+  await query('update password_resets set used_at = now() where token_hash = $1', [row.token_hash])
+  await destroyAllSessions(row.id)
+  return { id: row.id, email: row.email }
+}
+
 export async function claimWorkspace(workspaceId, userId, name = '') {
   const existing = await queryOne('select id, owner_id from workspaces where id = $1', [workspaceId])
   if (existing) {

@@ -8,6 +8,7 @@ import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account } from './engine/authClient'
 import { SignIn } from './components/SignIn'
+import { ResetPassword } from './components/ResetPassword'
 import { Landing } from './components/Landing'
 
 function activeWorkspaceId() {
@@ -76,6 +77,15 @@ export default function App() {
   if (path === '/') return <Landing onStart={start} signedIn={Boolean(account)}/>
 
   if (accounts === undefined) return <main className="bo-home"/>
+
+  // Before the gate, deliberately: whoever opens a reset link cannot get past a sign-in screen, which
+  // is the entire reason they are here.
+  if (path === '/reset') return <ResetPassword
+    token={new URLSearchParams(window.location.search).get('token') ?? ''}
+    onSignedIn={account => { setAccount(account); navigate('/start') }}
+    onGiveUp={() => navigate('/signin')}
+  />
+
   if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); navigate('/start') }}/>
   if (path === '/signin') { navigate('/start'); return <main className="bo-home"/> }
 
