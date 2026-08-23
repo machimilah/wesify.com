@@ -7,10 +7,11 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { Answers } from '../types'
 import type { AIBlueprint, ModuleId } from '../engine/blueprint'
-import { generateWorkspaceConfiguration, isWorkspaceConfiguration } from '../engine/workspaceSchema'
+import { generateWorkspaceConfiguration, isWorkspaceConfiguration, type WorkspaceConfiguration } from '../engine/workspaceSchema'
 import { Brand } from './Brand'
 import { SchemaDashboard } from './SchemaDashboard'
 import { readStorage } from '../engine/shared'
+import { loadGeneratedManifest } from '../engine/projectClient'
 
 type PlatformView = 'documents' | 'governance' | 'links'
 type ViewId = 'overview' | ModuleId | PlatformView
@@ -219,13 +220,51 @@ function RecordsTable({ label, records }: { label: string; records: string[] }) 
   return <section className="bo-records"><header><span>{label}</span><span>Status</span><span>Updated</span></header>{records.map(record => <div key={record}><strong>{record}</strong><span>Active</span><span>Now</span></div>)}{records.length === 0 && <div className="bo-records-empty">No records yet</div>}</section>
 }
 
+/**
+ * The generated shape of one workspace — its pages, its entities, what a record looks like — used to
+ * be cached only in the browser that built it. That was invisible as long as an operator only ever
+ * opened their own workspace from their own browser. It breaks the moment someone signs in somewhere
+ * else, or opens a link on a second device: there was no local cache to fall back to, and this
+ * screen showed "Building operation..." forever, with nothing behind it that would ever resolve.
+ *
+ * The local cache is now the fast path, not the only path. It renders instantly when this browser
+ * already has it — no round trip for the common case of an operator returning to their own machine —
+ * and a server fetch fills the gap for anything else, because the server has held the real answer,
+ * in `manifest.specification`, since the moment this workspace was built.
+ */
 export function Dashboard({ workspaceId, answers, blueprint }: { workspaceId: string; answers: Answers; blueprint: AIBlueprint | null }) {
-  const saved = readStorage<unknown>(`bo-workspace-config:${workspaceId}`, readStorage<unknown>('bo-workspace-config', null))
-  if (!blueprint && !isWorkspaceConfiguration(saved)) return <main className="bo-dashboard-page"><div className="bo-preview-empty">Building operation...</div></main>
-  const config = isWorkspaceConfiguration(saved) && saved.id === workspaceId ? saved : generateWorkspaceConfiguration(answers, blueprint!)
+  const cached = readStorage<unknown>(`bo-workspace-config:${workspaceId}`, readStorage<unknown>('bo-workspace-config', null))
+  const cachedConfig = isWorkspaceConfiguration(cached) && cached.id === workspaceId ? cached : null
+  const [fetched, setFetched] = useState<WorkspaceConfiguration | null>(null)
+  const [checkedServer, setCheckedServer] = useState(false)
+
+  useEffect(() => {
+    // The fast path already has an answer; asking the server as well would only race it and repaint
+    // what is already correct. Only a browser with nothing cached needs to wait on this.
+    if (cachedConfig) return
+    let cancelled = false
+    setCheckedServer(false)
+    void loadGeneratedManifest(workspaceId).then(manifest => {
+      if (cancelled) return
+      setFetched(manifest?.specification ?? null)
+      setCheckedServer(true)
+    })
+    return () => { cancelled = true }
+  }, [workspaceId, cachedConfig])
+
+  const config = cachedConfig ?? fetched ?? (blueprint ? generateWorkspaceConfiguration(answers, blueprint) : null)
+
+  // Nothing cached, nothing back from the server yet, and nothing to generate locally either: this
+  // is either a workspace mid-build in this same browser, or one this browser has never seen and is
+  // still waiting to hear about. Both look the same from here, so both wait rather than one of them
+  // lying about being empty.
+  if (!config) return <main className="bo-dashboard-page"><div className="bo-preview-empty">{checkedServer ? 'This workspace has not been built yet.' : 'Opening workspace...'}</div></main>
+
   config.id = workspaceId
   localStorage.setItem('bo-workspace-config', JSON.stringify(config))
   localStorage.setItem(`bo-workspace-config:${workspaceId}`, JSON.stringify(config))
   localStorage.setItem('bo-active-workspace-id', workspaceId)
-  return <main className="bo-dashboard-page"><SchemaDashboard initialConfig={config}/></main>
+  // Every section link SchemaDashboard draws is built from this, which is what keeps a click on
+  // "Clients" landing on /workspace/:id/clients instead of a bare, workspace-oblivious /clients.
+  return <main className="bo-dashboard-page"><SchemaDashboard initialConfig={config} basePath={`/workspace/${workspaceId}`}/></main>
 }

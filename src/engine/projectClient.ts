@@ -68,6 +68,23 @@ export async function ensureGeneratedProject(config: WorkspaceConfiguration) {
   return request<GeneratedProjectManifest>(config.id, '/api/builds', { method: 'POST', body: JSON.stringify({ workspaceId: config.id, specification: config, changeDescription: 'Initial Command Center' }) })
 }
 
+/**
+ * What a workspace already is, fetched rather than assumed.
+ *
+ * The generated shape of a Command Center — its pages, its entities, what a record looks like — was
+ * only ever cached in the browser that built it. That was invisible as long as one operator only
+ * ever opened their workspace from one browser; it breaks the moment they sign in somewhere else, or
+ * a link is opened on a second device, because there was nothing to fall back to but a local cache
+ * that browser never had. This is that fallback: the server already keeps the full specification in
+ * the manifest it returns from every build, so a browser with nothing cached can ask for it instead
+ * of showing "Building operation..." forever. `null` means the workspace has genuinely not been
+ * built yet, not that this browser has not seen it before.
+ */
+export async function loadGeneratedManifest(workspaceId: string): Promise<GeneratedProjectManifest | null> {
+  try { return await request<GeneratedProjectManifest>(workspaceId, `/api/projects/${workspaceId}`) }
+  catch { return null }
+}
+
 export function buildGeneratedChange(config: WorkspaceConfiguration, action: WorkspaceAction, description: string) {
   return request<GeneratedProjectManifest>(config.id, `/api/projects/${config.id}/changes`, { method: 'POST', body: JSON.stringify({ specification: config, changeDescription: description, changeType: action.type }) })
 }

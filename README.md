@@ -125,9 +125,11 @@ Cada push ejecuta [`.github/workflows/verify.yml`](.github/workflows/verify.yml)
 | --- | --- |
 | `/` | La única página de entrada: la caja para describir tu empresa. Pública — no pide cuenta hasta que hay algo que construir |
 | `/build/:id` | Conversación y construcción en vivo |
-| `/home`, `/today`, `/clients`, `/invoices`, `/links`, … | Secciones del Command Center, cada una con su URL indexada |
+| `/workspace/:workspaceId`, `/workspace/:workspaceId/home`, `/workspace/:workspaceId/clients`, … | El Command Center de un workspace concreto. Ruta canónica: sirve para compartir un enlace, abrir una segunda pestaña o entrar desde otro dispositivo, porque qué workspace se muestra lo decide la URL, no el navegador |
 
-Las secciones disponibles las decide el Command Center generado. `/workspace/:id/...` y `/dashboard/...` siguen funcionando y redirigen a la URL indexada.
+Las secciones disponibles las decide el Command Center generado. Un workspace ya construido se sirve desde caché local cuando existe y, si no —una pestaña nueva, otro dispositivo—, se pide al servidor, que guarda la especificación completa desde el momento en que se construyó.
+
+Al iniciar sesión, una cuenta con un workspace ya construido entra directamente en él en vez de volver a la caja para describir la empresa; `/home`, `/dashboard/...` y demás enlaces antiguos siguen funcionando y redirigen al workspace activo en este navegador.
 
 ## Verificar
 
