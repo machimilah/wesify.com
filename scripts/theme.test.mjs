@@ -95,24 +95,24 @@ try {
   await page.getByTestId('theme-toggle').waitFor()
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) throw new Error('BO opened in dark mode with no stored preference.')
 
-  const landingOffendersLight = await invisibleElements()
-  if (landingOffendersLight.length) throw new Error(`Invisible text in light mode on the landing page: ${landingOffendersLight.join(', ')}`)
+  const firstVisitOffenders = await invisibleElements()
+  if (firstVisitOffenders.length) throw new Error(`Invisible text in light mode on the home page: ${firstVisitOffenders.join(', ')}`)
 
   // 2. The toggle actually flips the document.
   await page.getByTestId('theme-toggle').click()
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Clicking the toggle did not set data-theme.')
 
-  const landingOffendersDark = await invisibleElements()
-  if (landingOffendersDark.length) throw new Error(`Invisible text in dark mode on the landing page: ${landingOffendersDark.join(', ')}`)
+  const firstVisitOffendersDark = await invisibleElements()
+  if (firstVisitOffendersDark.length) throw new Error(`Invisible text in dark mode on the home page: ${firstVisitOffendersDark.join(', ')}`)
 
   // 3. It persists across a reload — a theme that resets on refresh is not a preference.
   await page.reload({ waitUntil: 'networkidle' })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('The theme did not survive a reload.')
 
-  // 4. It follows the operator into the product, not just the marketing page.
-  await page.getByTestId('landing-nav-start').click()
+  // 4. It survives navigation, not just a reload of one page.
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving from the landing page into the product.')
+  if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving between pages.')
 
   const homeOffendersDark = await invisibleElements()
   if (homeOffendersDark.length) throw new Error(`Invisible text in dark mode on the home page: ${homeOffendersDark.join(', ')}`)
@@ -214,7 +214,7 @@ try {
     .map(node => `${node.tagName.toLowerCase()}.${String(node.className || '').split(' ')[0]}`))
   if (unnamed.length) throw new Error(`These controls have no accessible name: ${[...new Set(unnamed)].join(', ')}`)
 
-  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, no element on the landing page, the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme, every control BO can reach by keyboard shows where the focus is, none of them is left without an accessible name, and nothing pushes the page sideways on a phone or a tablet.')
+  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, no element on the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme, every control BO can reach by keyboard shows where the focus is, none of them is left without an accessible name, and nothing pushes the page sideways on a phone or a tablet.')
 } finally {
   await browser.close()
   vite.kill()

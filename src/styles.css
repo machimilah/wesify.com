@@ -318,6 +318,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-theme-toggle { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); background: transparent; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
 .bo-home__theme-toggle { margin-left: auto; }
+/* Offered only to somebody who is not signed in, so it sits beside the toggle rather than replacing
+   anything: the home page is the same page either way, and only this one control differs. */
+.bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 18px; border: 1px solid var(--border-strong); border-radius: 99px; color: var(--text); background: var(--surface); font-size: 13px; font-weight: 600; }
+.bo-home__signin:hover { border-color: var(--text-2); }
 .bo-signin__theme-toggle { position: absolute; top: 22px; right: 22px; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bo-dashboard__sidebar-head .bo-theme-toggle { border-color: var(--border); color: var(--text-2); }

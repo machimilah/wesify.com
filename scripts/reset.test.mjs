@@ -93,7 +93,7 @@ async function openPage() {
     if (message.type() !== 'error') return
     errors.push(message.text())
   })
-  await page.goto(`http://127.0.0.1:${vitePort}/start`, { waitUntil: 'networkidle' })
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   return page
 }
 
@@ -179,6 +179,9 @@ try {
   await post('/api/auth/register', { email: uiEmail, password: 'the-forgotten-one' })
   const page = await openPage()
 
+  // The home page is public now, so the sign-in screen is asked for rather than landed on.
+  await page.getByTestId('open-signin').click()
+  await page.getByTestId('signin-form').waitFor({ timeout: 10_000 })
   await page.getByTestId('signin-switch').click()          // "I already have an account"
   await page.getByTestId('signin-forgot').click()          // "I forgot my password"
   await page.getByTestId('signin-email').fill(uiEmail)

@@ -10,7 +10,6 @@ import { accountsEnabled, currentAccount, type Account } from './engine/authClie
 import { SignIn } from './components/SignIn'
 import { ResetPassword } from './components/ResetPassword'
 import { Billing } from './components/Billing'
-import { Landing } from './components/Landing'
 
 function activeWorkspaceId() {
   return localStorage.getItem('bo-active-workspace-id') || localStorage.getItem('bo-workspace-id') || readStorage<{ id?: string }>('bo-workspace-config', {}).id || ''
@@ -64,20 +63,8 @@ export default function App() {
   }, [path])
   useEffect(() => {
     const companyName = String(answers.companyName ?? 'Dashboard')
-    document.title = path === '/' ? 'BO — Describe your company, get the software to run it' : path === '/start' ? 'BO — Build your company workspace' : path.startsWith('/build') ? 'Build your workspace — BO' : `${companyName} — BO`
+    document.title = path === '/' ? 'BO — Describe your company, get the software to run it' : path.startsWith('/build') ? 'Build your workspace — BO' : `${companyName} — BO`
   }, [path, answers.companyName])
-
-  /**
-   * The landing page is public; everything else is not.
-   *
-   * A landing page behind a sign-in screen cannot do its job — nobody signs up for something they
-   * have not seen. So `/` is always reachable, and the gate sits in front of the product instead.
-   *
-   * `accounts === undefined` means BO has not asked the server whether it has accounts yet. Rendering
-   * either the product or a sign-in screen during that moment would show the wrong one and swap it,
-   * so it waits. With no database configured there are no accounts and none of this appears.
-   */
-  const start = () => navigate(accounts && !account ? '/signin' : '/start')
 
   /** Starts a fresh company from one sentence. Everything a previous workspace left behind goes. */
   function build(brief: string) {
@@ -88,21 +75,40 @@ export default function App() {
   }
 
   /**
-   * Typing on the public page asks who you are, then builds what you typed.
+   * Describing a company is public; the workspace it produces is not.
    *
-   * The sentence is not thrown away at the sign-in screen and asked for again afterwards. Someone
-   * who has just described their company has done the only work this product needs from them, and
-   * making them do it twice to prove they have an account is a way to lose them between the two.
+   * There is one home page, and it is the prompt. A separate landing page arguing for BO could only
+   * describe what BO does, while this does it — and nobody signs up for something they have not seen
+   * work. So `/` is always reachable, and the gate sits in front of the product instead.
+   *
+   * The sentence survives the sign-in screen rather than being asked for twice: somebody who has
+   * just described their business has done the only work BO needs from them, and making them repeat
+   * it to prove they have an account is a way to lose them between the two screens.
+   *
+   * `accounts === undefined` means BO has not asked the server whether it has accounts yet. Waiting
+   * is deliberate — rendering either half of that answer would show the wrong page and swap it.
    */
-  if (path === '/') return <Landing
-    onStart={start}
+  const startBuild = (brief: string) => {
+    if (!accounts || account) return build(brief)
+    setPendingBrief(brief)
+    navigate('/signin')
+  }
+
+  if (path === '/') return <Home
+    initialValue={String(answers.companyDescription ?? '')}
+    onSubmit={startBuild}
     signedIn={Boolean(account)}
-    onSubmit={brief => {
-      if (!accounts || account) return build(brief)
-      setPendingBrief(brief)
-      navigate('/signin')
-    }}
+    accounts={accounts === true}
+    onSignIn={() => navigate('/signin')}
   />
+
+  // `/start` was BO's second home page until there was only one. It is gone rather than duplicated,
+  // and anybody holding an old link or an open tab lands on the page it became.
+  if (path === '/start') {
+    window.history.replaceState({}, '', '/')
+    setTimeout(() => setPath('/'), 0)
+    return <main className="bo-home"/>
+  }
 
   if (accounts === undefined) return <main className="bo-home"/>
 
@@ -110,16 +116,16 @@ export default function App() {
   // is the entire reason they are here.
   if (path === '/reset') return <ResetPassword
     token={new URLSearchParams(window.location.search).get('token') ?? ''}
-    onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/start') }}
+    onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/') }}
     onGiveUp={() => navigate('/signin')}
   />
 
-  if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/start') }}/>
+  if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); pendingBrief ? build(pendingBrief) : navigate('/') }}/>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.
   if (path === '/billing') return <Billing onBack={() => navigate('/home')}/>
-  if (path === '/signin') { navigate('/start'); return <main className="bo-home"/> }
+  if (path === '/signin') { navigate('/'); return <main className="bo-home"/> }
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
   if (buildMatch) return <Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate('/home') }}/>
@@ -147,6 +153,6 @@ export default function App() {
     return <Dashboard workspaceId={workspaceId} answers={answers} blueprint={blueprint}/>
   }
 
-  // Anything else is the prompt: the page a signed-in operator starts a new company from.
-  return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={build}/>
+  // Anything else is the home page, which by this point is reached signed in.
+  return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={build} signedIn={Boolean(account)} accounts={accounts === true}/>
 }

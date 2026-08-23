@@ -57,8 +57,8 @@ await page.addInitScript(() => {
 })
 
 try {
-  // `/` is the public landing page now; the prompt this suite is about lives at /start.
-  await page.goto(`http://127.0.0.1:${vitePort}/start`, { waitUntil: 'networkidle' })
+  // `/` is the prompt: one home page, public, and the only place a company is described.
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 

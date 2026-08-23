@@ -100,10 +100,10 @@ async function openSection(page, id) {
 }
 
 try {
-  // A person meets the landing page first, so the end-to-end journey starts there.
+  // A person meets the home page first, and it is the prompt, so the journey starts by typing.
   await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' })
-  await page.getByTestId('landing-brief').waitFor({ timeout: 20_000 })
-  await page.getByTestId('landing-nav-start').click()
+  // One page: `/` is the prompt, so there is nowhere to click through to any more.
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
   await page.waitForFunction(() => (document.querySelector('.bo-prompt__example span')?.textContent?.length ?? 0) > 12)

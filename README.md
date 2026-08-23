@@ -123,8 +123,7 @@ Cada push ejecuta [`.github/workflows/verify.yml`](.github/workflows/verify.yml)
 
 | Ruta | Vista |
 | --- | --- |
-| `/` | Landing pública: una frase y la caja para describir tu empresa. No pide cuenta hasta que hay algo que construir |
-| `/start` | El prompt inicial. Con cuentas activadas, exige haber entrado |
+| `/` | La única página de entrada: la caja para describir tu empresa. Pública — no pide cuenta hasta que hay algo que construir |
 | `/build/:id` | Conversación y construcción en vivo |
 | `/home`, `/today`, `/clients`, `/invoices`, `/links`, … | Secciones del Command Center, cada una con su URL indexada |
 

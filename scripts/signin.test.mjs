@@ -57,19 +57,26 @@ async function open() {
 try {
   const page = await open()
 
-  // 1. The landing page is public, and so is the box you describe your company in — that box is the
-  //    page. What stays gated is the product: `landing-brief` is the public prompt, `company-brief`
-  //    is the one inside, and the two are told apart here on purpose.
-  await page.getByTestId('landing-brief').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('signin-form').count()) throw new Error('The landing page was hidden behind a sign-in screen.')
-  if (await page.getByTestId('company-brief').count()) throw new Error('BO showed the product before anyone signed in.')
+  /**
+   * 1. The home page is public, and so is the box on it.
+   *
+   * There is one page now — `/`, and nothing else — and describing a company on it needs no
+   * account. What stays gated is the workspace that describing one produces — so the check is not
+   * "can a stranger see a prompt" but "can a stranger reach a Command Center".
+   */
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
+  await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
+  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('app-grid').count()) throw new Error('BO showed a workspace before anyone signed in.')
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
 
-  // 2. Describing a company on the public page asks who you are before building anything — and keeps
-  //    what was typed, so it is not asked for twice.
-  await page.getByTestId('landing-brief').fill('We run a plumbing business and technicians visit customer homes.')
+  // 2. Describing a company asks who you are before building anything — and keeps what was typed,
+  //    so it is not asked for twice.
+  await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
   await page.getByTestId('start-building').click()
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('company-brief').count()) throw new Error('BO let someone in without an account.')
+  if (await page.getByTestId('build-thread').count()) throw new Error('BO started building for someone with no account.')
 
   // 3. A password BO will not accept is refused, and says why.
   await page.getByTestId('signin-email').fill('owner@example.com')
@@ -89,7 +96,7 @@ try {
   if (!/plumbing/i.test(carried)) throw new Error(`The sentence typed before signing in was lost: ${carried}`)
 
   // 5. The session survives a reload. A sign-in that has to be repeated on refresh is not a session.
-  await page.goto(`http://127.0.0.1:${vitePort}/start`, { waitUntil: 'networkidle' })
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
@@ -98,7 +105,7 @@ try {
   // 6. The same account reaches BO from a different browser. This is what accounts are for: before
   //    them, a workspace lived in one browser and a second device saw an empty BO.
   const second = await open()
-  await second.getByTestId('landing-nav-start').click()
+  await second.getByTestId('open-signin').click()
   await second.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   await second.getByTestId('signin-switch').click()
   await second.getByTestId('signin-email').fill('owner@example.com')
@@ -108,7 +115,7 @@ try {
 
   // 7. The wrong password does not get in, and does not say which half was wrong.
   const third = await open()
-  await third.getByTestId('landing-nav-start').click()
+  await third.getByTestId('open-signin').click()
   await third.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   await third.getByTestId('signin-switch').click()
   await third.getByTestId('signin-email').fill('owner@example.com')
@@ -119,17 +126,28 @@ try {
   if (/no account|not found|unknown/i.test(refusal)) throw new Error(`The sign-in form says whether an account exists: ${refusal}`)
   if (await third.getByTestId('company-brief').count()) throw new Error('A wrong password got in.')
 
-  // 8. Signing out locally puts the form back.
+  /**
+   * 8. Signing out closes the workspace and offers the way back in.
+   *
+   * Not "puts the sign-in form back on this page" any more: the home page is public, so signing out
+   * lands on it rather than on a form. What must change is what a signed-out person can reach — the
+   * workspace — and that the offer to sign in reappears.
+   */
   await page.evaluate(() => localStorage.removeItem('bo-session-token'))
   await page.reload({ waitUntil: 'networkidle' })
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  await page.getByTestId('open-signin').waitFor({ timeout: 20_000 })
 
-  // 9. The landing page still works signed out, and still offers the way back in.
+  await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
+  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
+
+  // 9. And the home page still works signed out, which is where a stranger starts.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await page.getByTestId('landing-brief').waitFor({ timeout: 20_000 })
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: a public landing page whose prompt anyone can type in, the product still gated behind an account, the sentence typed before signing in carried through instead of asked for twice, weak passwords explained, the session surviving a reload, the same account reached from another browser, a wrong password refused without revealing whether the address exists, and signing out putting the form back.')
+  console.log('Sign-in test passed: one public home page whose prompt anyone can type in, the workspace still gated behind an account, the sentence typed before signing in carried through instead of asked for twice, weak passwords explained, the session surviving a reload, the same account reached from another browser, a wrong password refused without revealing whether the address exists, and signing out closing the workspace while leaving the home page open.')
 } finally {
   await browser.close()
   vite.kill()

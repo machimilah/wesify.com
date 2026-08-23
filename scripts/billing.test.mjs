@@ -74,7 +74,7 @@ async function openPage() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
-  await page.goto(`http://127.0.0.1:${vitePort}/start`, { waitUntil: 'networkidle' })
+  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   return page
 }
 
