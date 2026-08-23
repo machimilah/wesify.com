@@ -114,19 +114,22 @@ try {
   await page.getByTestId('company-brief').fill('We run a marketing agency for technology companies.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
-  await page.getByText('Building operation...', { exact: true }).waitFor()
   await page.getByTestId('build-stages').waitFor()
   await page.getByText('How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?', { exact: true }).waitFor()
-  await page.getByTestId('building-command-center').waitFor()
   // BO's working is collapsed, the way a chat shows reasoning. It opens in one click and it is real.
   await page.getByRole('button', { name: /Thinking|Thought this through|Understanding|Designing|Researching/ }).first().click()
   const thinkingEntries = await page.locator('[data-testid="agent-thinking"] article').count()
   if (thinkingEntries < 2) throw new Error('BO did not retain a growing build narrative.')
   await page.getByText('Updating the operating model', { exact: true }).waitFor()
-  await page.getByText('Campaigns', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Monthly retainers', exact: true }).click()
+  // Answers are typed, not picked. BO used to offer two to four buttons under each question, which
+  // quietly taught people it wanted a choice rather than a sentence — and a sentence in the
+  // operator's own words is what the architecture is actually built from.
+  if (await page.locator('.bo-quick-answers').count()) throw new Error('The interview is offering clickable answers again.')
+  await page.getByTestId('discovery-answer').fill('Monthly retainers')
+  await page.getByTestId('answer-question').click()
   await page.getByText('Who handles the work day to day?', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'A small internal team', exact: true }).click()
+  await page.getByTestId('discovery-answer').fill('A small internal team')
+  await page.getByTestId('answer-question').click()
   await page.getByTestId('architecture-proposal').waitFor()
   await page.getByTestId('architecture-proposal').getByText('Campaigns', { exact: true }).waitFor()
   if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-build-review.png'), fullPage: true })

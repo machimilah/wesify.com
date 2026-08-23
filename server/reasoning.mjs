@@ -78,10 +78,20 @@ export async function researchCompany({ description, conversation = [], catalog 
       max_tokens: 16000,
       system: researchSystem,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high' },
+      /**
+       * Tuned for the person waiting, not for the best possible answer.
+       *
+       * This is the slowest thing BO does — every search and fetch is a round trip to the open web,
+       * and an operator sits watching a progress stage while it happens. Eight searches produced
+       * marginally better sourcing than five and took noticeably longer to get there.
+       *
+       * The cost of trimming it is carried once: the first company in an industry pays for the
+       * research and every later one inherits it from the shared knowledge store.
+       */
+      output_config: { effort: 'medium' },
       tools: [
-        { type: 'web_search_20260209', name: 'web_search', max_uses: 8 },
-        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 },
+        { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
+        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3 },
       ],
     },
     [{ role: 'user', content: `The operator described their company as:\n"""${description}"""\n\nWhat they have told BO so far:\n${conversationText(conversation) || '(nothing yet)'}\n\nResearch this company and produce the brief.` }],

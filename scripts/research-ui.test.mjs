@@ -129,14 +129,6 @@ try {
   if ((await sourceLink.getAttribute('href')) !== 'https://example.org/dispatch') throw new Error('The approval screen did not link the researched source.')
 
   // Researched capability decisions must reach the compiled workspace, not just the journal.
-  // The live preview must be readable at a glance, exactly like the finished Command Center. It once
-  // drew every page with the same generic document icon, so a twenty-page sidebar was twenty
-  // identical glyphs telling the operator nothing about what BO was building.
-  const previewIcons = await page.$$eval('[data-testid="building-command-center"] nav button svg', nodes => nodes.map(node => node.innerHTML))
-  if (previewIcons.length < 4) throw new Error(`The build preview showed only ${previewIcons.length} pages.`)
-  const distinctIcons = new Set(previewIcons).size
-  if (distinctIcons < Math.ceil(previewIcons.length * 0.6)) throw new Error(`The build preview drew ${previewIcons.length} pages with only ${distinctIcons} distinct icons.`)
-
   await page.getByTestId('open-dashboard').click()
   await page.waitForURL('**/home')
   const capabilities = await page.evaluate(() => JSON.parse(localStorage.getItem('bo-workspace-config') ?? '{}').capabilities ?? [])

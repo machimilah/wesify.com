@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
  *
  * BO's first minute used to be a one-gigabyte model download, a WebGPU requirement, and then a
  * questionnaire asking a plumber what their company sells. This covers the replacement: the turn goes
- * to the server, the question and its suggested answers reach the screen, the answer goes back with
+ * to the server, the question reaches the screen in plain words, the answer goes back with
  * the conversation attached, and the architecture that follows is the one the server produced.
  *
  * It also holds the fallback. With no key configured the server must decline and BO must keep going
@@ -121,8 +121,10 @@ try {
 
   // The consultant asks about this company, not about what a company is.
   await page.getByText('Do your technicians carry stock in their vans?', { exact: true }).waitFor({ timeout: 30_000 })
-  const shortcut = page.getByRole('button', { name: 'Yes, each van holds parts' })
-  await shortcut.waitFor()
+  // Answered by typing. The interview used to put two to four buttons under every question, which
+  // taught people BO wanted a pick rather than a sentence — and the sentence is what the
+  // architecture is built from, so the buttons are gone and this checks they stay gone.
+  if (await page.locator('.bo-quick-answers').count()) throw new Error('The interview is offering clickable answers again.')
 
   /**
    * The interview has to be worth sitting through.
@@ -169,7 +171,8 @@ try {
   if (!first.asked.includes('plumbing service business')) throw new Error('The server was not told what the operator wrote.')
 
   // Answering carries the conversation back, so the next turn is not asked in a vacuum.
-  await shortcut.click()
+  await page.getByTestId('discovery-answer').fill('Yes, each van holds parts')
+  await page.getByTestId('answer-question').click()
   await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
   const withAnswer = turns.find(turn => /Operator:.*van/i.test(turn.asked))
   if (!withAnswer) throw new Error('The answer was not sent back with the next turn.')

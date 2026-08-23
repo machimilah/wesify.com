@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ChevronDown, LayoutDashboard, RotateCcw, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, RotateCcw, Send, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
@@ -12,13 +12,11 @@ import {
   type DiscoverySession,
 } from '../engine/businessDiscovery'
 import { businessDiscoveryModel, researchSession, resilientArchitecture } from '../engine/discoveryModel'
-import { capabilityById } from '../engine/capabilityCatalog'
 import { resolveIndustry } from '../engine/industryResolver'
 import { applyFrontierArchitecture, frontierResearchStatus, mergeFrontierResearch, requestFrontierResearch, type FrontierResearch } from '../engine/researchClient'
 import { applyIndustryVerdict, loadIndustryVerdict, recordIndustryObservations, type IndustryVerdict } from '../engine/industryClient'
 import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoverySessionClient'
-import { generateWorkspaceConfigurationFromDiscovery, type WorkspaceConfiguration } from '../engine/workspaceSchema'
-import { faceForNavigation } from './faces'
+import { generateWorkspaceConfigurationFromDiscovery } from '../engine/workspaceSchema'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 import { DashboardSurface } from './Dashboard'
@@ -82,50 +80,8 @@ function architectureNarrative(session: DiscoverySession, architecture: ReturnTy
   return `This company needs ${selected || 'a focused operating base'}. Therefore I’m connecting ${architecture.entities.slice(0, 7).map(entity => entity.name).join(', ')} into one workspace, with a focused set of operational pages instead of exposing the entire BO platform.${excluded}`
 }
 
-function ProgressiveCommandCenter({ config, activity, loading, asking }: { config: WorkspaceConfiguration; activity: string; loading: boolean; asking: boolean }) {
-  const businessNavigation = config.navigation.filter(item => item.kind === 'entity').slice(0, 16)
-
-  /**
-   * Pages that appeared since the last answer.
-   *
-   * The interview only feels worth doing if answering visibly changes the thing being built. Without
-   * this the preview quietly rearranges and the operator has no reason to believe their answer
-   * mattered. Marks fade, because a workspace permanently covered in "new" badges says nothing.
-   */
-  const known = useRef<Set<string> | null>(null)
-  const [fresh, setFresh] = useState<string[]>([])
-  useEffect(() => {
-    const ids = businessNavigation.map(item => item.id)
-    if (known.current === null) { known.current = new Set(ids); return }
-    const added = ids.filter(id => !known.current!.has(id))
-    known.current = new Set(ids)
-    if (!added.length) return
-    setFresh(added)
-    const timer = setTimeout(() => setFresh([]), 2600)
-    return () => clearTimeout(timer)
-  }, [businessNavigation.map(item => item.id).join('|')])
-
-  return <div className="bo-progressive-command-center" data-testid="building-command-center">
-    <aside><Brand inverse/><nav><button className="active"><LayoutDashboard size={15}/><span>Home</span></button>{businessNavigation.map(item => {
-      // Same faces as the finished Command Center. A column of identical document icons says nothing
-      // about what is being built, and the preview's whole job is to show that.
-      const Face = faceForNavigation(config, item).icon
-      return <button key={item.id} className={fresh.includes(item.id) ? 'fresh' : ''}><Face size={14}/><span>{item.label}</span>{fresh.includes(item.id) && <em>new</em>}</button>
-    })}</nav></aside>
-    <section>
-      <div className="bo-progressive-content">
-        <div className="bo-progressive-heading"><small>COMMAND CENTER · BUILDING LIVE</small><h1>{config.profile.companyName}</h1><p>{config.profile.description}</p></div>
-        <div className="bo-progressive-kpis">{config.metrics.slice(0, 4).map(metric => <article key={metric.id}><small>{metric.label}</small><strong>—</strong><span>Waiting for operating data</span></article>)}</div>
-        <div className="bo-progressive-panels"><article><small>ACTION QUEUE</small><h2>What needs attention</h2><div><i/><span>Connecting approvals, deadlines, and alerts</span></div><div><i/><span>Preparing role-based actions</span></div></article><article><small>BUSINESS SYSTEMS</small><h2>Being connected</h2>{config.capabilities?.slice(0, 6).map(capability => <span key={capability}><Check size={11}/>{capabilityById.get(capability)?.label ?? capability.replace(/[.-]/g, ' ')}</span>)}</article></div>
-      </div>
-    </section>
-    <div className="bo-progressive-status"><Sparkles size={14}/><span><strong>{activity || (loading ? 'Shaping your Command Center' : asking ? 'Waiting on your answer' : 'Command Center structure ready')}</strong><small>{config.entities.length} record types · {businessNavigation.length} pages · {config.workflows.length} automation rules</small></span>{loading && <i/>}</div>
-  </div>
-}
-
 export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBlueprintChange, onExit, onComplete }: BuilderProps) {
   const root = useRef<HTMLElement>(null)
-  const preview = useRef<HTMLDivElement>(null)
   const chat = useRef<HTMLDivElement>(null)
   const launchRect = useRef<DOMRect | null>(null)
   const booted = useRef(false)
@@ -299,13 +255,13 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     onBlueprintChange(blueprint)
     const now = new Date().toISOString()
     commit({ ...session, phase: 'BUILDING', projectId: workspaceId, metrics: { ...session.metrics, architectureApproved: true, approvedAt: now }, updatedAt: now })
-    launchRect.current = preview.current?.getBoundingClientRect() ?? null
+    launchRect.current = root.current?.getBoundingClientRect() ?? null
     setLaunchBlueprint(blueprint); setLaunchPhase(0); setLaunching(true)
   }
 
   useEffect(() => {
     if (!launching) return
-    const timer = window.setInterval(() => setLaunchPhase(current => Math.min(current + 1, buildLabels.length - 1)), 300)
+    const timer = window.setInterval(() => setLaunchPhase(current => Math.min(current + 1, buildLabels.length - 1)), 160)
     return () => window.clearInterval(timer)
   }, [launching])
 
@@ -319,8 +275,8 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     const rect = launchRect.current
     const media = gsap.matchMedia()
     media.add('(prefers-reduced-motion: no-preference)', () => {
-      gsap.fromTo('.bo-launch-overlay', { x: rect.left, y: rect.top, scaleX: rect.width / window.innerWidth, scaleY: rect.height / window.innerHeight, transformOrigin: 'top left', borderRadius: 24 }, { x: 0, y: 0, scaleX: 1, scaleY: 1, borderRadius: 0, duration: 0.9, ease: 'power3.inOut', onComplete: () => window.setTimeout(finish, 900) })
-      gsap.to('.bo-builder__conversation', { xPercent: -18, autoAlpha: 0, duration: 0.45, ease: 'power2.in' })
+      gsap.fromTo('.bo-launch-overlay', { x: rect.left, y: rect.top, scaleX: rect.width / window.innerWidth, scaleY: rect.height / window.innerHeight, transformOrigin: 'top left', borderRadius: 24 }, { x: 0, y: 0, scaleX: 1, scaleY: 1, borderRadius: 0, duration: 0.45, ease: 'power3.inOut', onComplete: () => window.setTimeout(finish, 250) })
+      gsap.to('.bo-builder__conversation', { autoAlpha: 0, duration: 0.25, ease: 'power2.in' })
     })
     media.add('(prefers-reduced-motion: reduce)', finish)
     return () => media.revert()
@@ -351,16 +307,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   // How much of the operating model is settled. The same number the planner uses to decide whether
   // another question is worth asking, so the bar cannot claim progress the interview has not made.
   const coverage = useMemo(() => session ? mergeFrontierResearch(researchSession(session), frontier).coverage : 0, [session, frontier])
-  const previewConfig = useMemo(() => {
-    if (!session || !(session.businessState.industry || session.businessState.companySummary || session.businessState.facts.length)) return null
-    // Industry evidence first, then what BO learned about this company — the specific outranks the typical.
-    const previewArchitecture = applyFrontierArchitecture(applyIndustryVerdict(resilientArchitecture(session.businessState, session.architecture), industry), frontier)
-    const previewBlueprint = architectureToBlueprint(previewArchitecture)
-    const config = generateWorkspaceConfigurationFromDiscovery(initialAnswers, previewBlueprint, session.businessState, previewArchitecture)
-    config.id = workspaceId
-    return config
-  }, [initialAnswers, session, workspaceId, frontier, industry])
-
   return <main className="bo-builder" ref={root}>
     <section className="bo-builder__conversation">
       <header>
@@ -417,7 +363,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           <div>
             {currentAcknowledgment && <p className="bo-turn-ack">{currentAcknowledgment}</p>}
             <p className="bo-turn-ask">{session.currentQuestion.text}</p>
-            {session.currentQuestion.suggestedAnswers.length > 0 && <div className="bo-quick-answers">{session.currentQuestion.suggestedAnswers.map(option => <button key={option} onClick={() => void submit(option)}>{option}</button>)}</div>}
           </div>
         </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div className="bo-typing" aria-label="BO is working"><i/><i/><i/></div></div> : null}
       </div>
@@ -445,7 +390,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       </footer>
     </section>
 
-    <section className="bo-builder__preview" ref={preview}>{previewConfig ? <ProgressiveCommandCenter config={previewConfig} activity={activity} loading={loading} asking={Boolean(session?.currentQuestion)}/> : <div className="bo-preview-empty">Building operation...</div>}</section>
     {launching && launchBlueprint && <div className="bo-launch-overlay"><DashboardSurface answers={initialAnswers} blueprint={launchBlueprint}/><div className="bo-generation-status"><Sparkles size={17}/><strong>{buildLabels[launchPhase]}</strong><span/></div></div>}
   </main>
 }
