@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate } from '../server/db.mjs'
 import { safeWebhookUrl } from '../server/automations.mjs'
+import './noSpend.mjs'
 
 /**
  * The defences that are invisible until the day they are not there.
@@ -111,13 +112,24 @@ try {
     assert.equal(detail.includes(leak), false, `an error response leaked internals: ${leak}`)
   }
 
-  // 5. The workspace routes refuse a request with no identity at all, before doing any work.
+  /**
+   * 5. This suite cannot spend money, and proves it rather than assuming it.
+   *
+   * `noSpend.mjs` blanks the API key so the frontier path reports itself unavailable. The static
+   * check in structure.test.mjs proves every suite imports it; this proves importing it actually
+   * works — including through `server/env.mjs`, which re-reads `.env.local` in every process and
+   * would otherwise hand the key straight back.
+   */
+  const research = await (await fetch(`${base}/api/research/status`)).json()
+  assert.equal(research.available, false, 'the test suite is configured to call the real API, which costs real money')
+
+  // 6. The workspace routes refuse a request with no identity at all, before doing any work.
   for (const [method, pathname] of [['GET', '/api/projects/ws-any'], ['POST', '/api/builds'], ['GET', '/api/connections/ws-any']]) {
     const response = await fetch(`${base}${pathname}`, { method, headers: { 'content-type': 'application/json' }, body: method === 'POST' ? '{}' : undefined })
     assert.ok([401, 403].includes(response.status), `${method} ${pathname} answered ${response.status} to a request with no session`)
   }
 
-  console.log('Security test passed: every response carries its headers on success, refusal and not-found alike, the content policy allows no inline script or eval while still permitting the in-browser model, webhook targets on private networks and the cloud metadata endpoint are refused, an oversized body is not accepted, a failure leaks no stack or SQL, and workspace routes refuse a request carrying no identity.')
+  console.log('Security test passed: every response carries its headers on success, refusal and not-found alike, the content policy allows no inline script or eval while still permitting the in-browser model, webhook targets on private networks and the cloud metadata endpoint are refused, an oversized body is not accepted, a failure leaks no stack or SQL, workspace routes refuse a request carrying no identity, and the suite itself cannot reach a paid API.')
 } finally {
   await new Promise(resolve => server.close(resolve))
   await rm(generatedRoot, { recursive: true, force: true })

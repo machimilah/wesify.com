@@ -1,6 +1,7 @@
 import { launchBrowser } from './browser.mjs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import './noSpend.mjs'
 
 const captureScreenshots = process.env.BO_SMOKE_SCREENSHOTS === '1'
 const screenshotDirectory = process.env.TEMP || process.cwd()

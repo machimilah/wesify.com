@@ -1,6 +1,6 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
+import { writeJsonAtomic } from './atomicWrite.mjs'
 import { databaseAvailable, query, queryOne } from './db.mjs'
 
 /**
@@ -66,11 +66,7 @@ export async function writeProfile(profile) {
     )
     return profile
   }
-  const file = fileFor(profile.subsector)
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.${randomUUID()}.next`
-  await writeFile(candidate, `${JSON.stringify(profile, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
+  await writeJsonAtomic(fileFor(profile.subsector), profile)
   return profile
 }
 

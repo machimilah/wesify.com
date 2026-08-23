@@ -68,4 +68,22 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
   assert.ok(registered.includes(path.basename(item.file)), `${item.file} is not imported by server/index.mjs`)
 }
 
-console.log(`Structure test passed: ${files.length} source files, none over 800 lines, no route module over 400, every route module wired into the server, no unfinished-work markers, and no credential-shaped literal committed.`)
+/**
+ * No test may spend the operator's money.
+ *
+ * The suites run the real server, and the server reaches for a frontier model whenever a key is
+ * configured. The day a real ANTHROPIC_API_KEY appeared in .env.local, every browser suite that
+ * reached the build screen started making real research calls — Opus, thinking, web search — and
+ * nothing failed, nothing looked different, and the only signal was the bill.
+ *
+ * So each suite must either drop the key (scripts/noSpend.mjs) or point the client at its own stub
+ * (ANTHROPIC_BASE_URL). One of the two, never neither.
+ */
+const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !item.file.endsWith('/browser.mjs') && !item.file.endsWith('/noSpend.mjs'))
+const spenders = suites
+  .filter(item => /server\/index\.mjs|\.\.\/server\//.test(item.text))
+  .filter(item => !item.text.includes('noSpend.mjs') && !item.text.includes('ANTHROPIC_BASE_URL'))
+  .map(item => item.file)
+assert.deepEqual(spenders, [], 'these suites would call the real API if a key is configured')
+
+console.log(`Structure test passed: ${files.length} source files, none over 800 lines, no route module over 400, every route module wired into the server, no unfinished-work markers, no credential-shaped literal committed, and no suite that would spend real money on a live API key.`)

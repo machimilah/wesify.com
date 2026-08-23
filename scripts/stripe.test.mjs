@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import './noSpend.mjs'
 
 /**
  * BO's first real connector.

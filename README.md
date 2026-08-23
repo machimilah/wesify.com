@@ -26,7 +26,7 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Entrevista e investigación en el servidor |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
-| `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-opus-5`) |
+| `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
 | `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |
 | `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
 | `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
@@ -164,7 +164,7 @@ smoke end-to-end en navegador. Cada bloque se puede lanzar por separado:
 Descripción + respuestas confirmadas
                  │
                  ▼
-   Consultor en el servidor (claude-opus-5)
+   Consultor en el servidor (claude-haiku-4-5-20251001 por defecto)
    · o Qwen 2.5 + WebLLM en el navegador si no hay key
                  │
                  ▼

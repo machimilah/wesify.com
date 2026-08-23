@@ -6,6 +6,7 @@ import {
   hashPassword, membership, registerUser, sessionUser, verifyPassword, workspacesFor,
   MIN_PASSWORD_LENGTH,
 } from '../server/auth.mjs'
+import './noSpend.mjs'
 
 /**
  * BO's own user management.

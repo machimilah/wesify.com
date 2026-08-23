@@ -1,4 +1,4 @@
-import { MODEL, conversationText, citedSources, refusal, reasoningAvailable, textOf, withFallbacks } from './anthropic.mjs'
+import { MODEL, conversationText, citedSources, refusal, reasoningAvailable, textOf, wireSchema, withFallbacks } from './anthropic.mjs'
 
 /**
  * BO's frontier researcher.
@@ -106,7 +106,7 @@ export async function researchCompany({ description, conversation = [], catalog 
       model: MODEL,
       max_tokens: 8000,
       system: compileSystem,
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: compileSchema(capabilityIds) } },
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: wireSchema(compileSchema(capabilityIds)) } },
     },
     [{ role: 'user', content: `Research brief:\n"""${briefText}"""\n\nBO capability catalog (id=label):\n${catalog}\n\nCompile the brief into JSON.` }],
   )

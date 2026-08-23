@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { launchBrowser } from './browser.mjs'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import './noSpend.mjs'
 
 /**
  * Forgetting a password, and getting back in.

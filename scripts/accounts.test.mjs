@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate } from '../server/db.mjs'
+import './noSpend.mjs'
 
 /**
  * With accounts configured, a workspace belongs to somebody.

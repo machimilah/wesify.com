@@ -1,5 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { writeJsonAtomic } from './atomicWrite.mjs'
 import { databaseAvailable, query, withTransaction } from './db.mjs'
 import { projectPaths } from './project-builder.mjs'
 
@@ -22,11 +22,7 @@ async function readDataFile(workspaceId) {
 }
 
 async function writeDataFile(workspaceId, value) {
-  const file = projectPaths(workspaceId).data
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.next`
-  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
+  await writeJsonAtomic(projectPaths(workspaceId).data, value)
 }
 
 export async function readWorkspaceData(workspaceId) {

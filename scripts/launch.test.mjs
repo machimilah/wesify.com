@@ -1,5 +1,6 @@
 import { launchBrowser } from './browser.mjs'
 import { spawn } from 'node:child_process'
+import './noSpend.mjs'
 
 /**
  * Opening a finished Command Center must feel like opening a finished app.

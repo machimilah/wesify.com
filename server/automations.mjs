@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { projectPaths } from './project-builder.mjs'
+import { writeJsonAtomic } from './atomicWrite.mjs'
 
 /**
  * Managed automations: when a record changes, tell another system.
@@ -23,11 +24,7 @@ export async function readAutomationWorkspace(workspaceId) {
 }
 
 export async function writeAutomationWorkspace(workspaceId, value) {
-  const file = automationFile(workspaceId)
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.${randomUUID()}.next`
-  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
+  await writeJsonAtomic(automationFile(workspaceId), value)
 }
 
 /**

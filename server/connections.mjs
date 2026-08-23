@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile, unlink } from 'node:fs/promises'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'
+import { writeFileAtomic } from './atomicWrite.mjs'
 
 /**
  * Credentials for the outside systems a workspace has connected.
@@ -52,11 +53,9 @@ async function readAll(workspaceId) {
 }
 
 async function writeAll(workspaceId, value) {
-  const file = fileFor(workspaceId)
-  await mkdir(path.dirname(file), { recursive: true })
-  const candidate = `${file}.${randomBytes(8).toString('hex')}.next`
-  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
-  await rename(candidate, file)
+  // Kept as its own call for the 0600 mode: these files hold encrypted third-party credentials and
+  // must not be readable by other accounts on the host.
+  await writeFileAtomic(fileFor(workspaceId), `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
 }
 
 export async function saveConnection(workspaceId, providerId, { credential, mode = 'read', account = '' }) {

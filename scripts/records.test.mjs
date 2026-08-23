@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import './noSpend.mjs'
 
 /**
  * With a database configured, a workspace's records live in Postgres, not on local disk.

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import './noSpend.mjs'
 
 const generatedRoot = await mkdtemp(path.join(tmpdir(), 'bo-generated-projects-'))
 const port = 8799

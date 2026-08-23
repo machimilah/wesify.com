@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { launchBrowser } from './browser.mjs'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import './noSpend.mjs'
 
 /**
  * Taking money, and what happens when it stops arriving.
@@ -72,8 +73,17 @@ const errors = []
 
 async function openPage() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-  page.on('pageerror', error => errors.push(error.message))
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  /**
+   * Only BO's own pages count.
+   *
+   * Choosing a plan hands off to Stripe's hosted checkout, and this test's stand-in returns the real
+   * checkout.stripe.com URL — so the browser genuinely goes there. Scripts on somebody else's page
+   * throwing somebody else's errors is not a fault in BO, and letting them into this list makes the
+   * suite fail depending on what Stripe shipped that morning.
+   */
+  const mine = () => page.url().includes('127.0.0.1')
+  page.on('pageerror', error => { if (mine()) errors.push(error.message) })
+  page.on('console', message => { if (message.type() === 'error' && mine()) errors.push(message.text()) })
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
   return page
 }

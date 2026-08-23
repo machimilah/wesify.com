@@ -1,5 +1,6 @@
 import { launchBrowser } from './browser.mjs'
 import { spawn } from 'node:child_process'
+import './noSpend.mjs'
 
 /**
  * Night mode, end to end.

@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import './noSpend.mjs'
 
 /**
  * Finding out that BO broke, without being told by the person it broke for.

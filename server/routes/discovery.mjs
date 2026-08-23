@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { writeJsonAtomic } from '../atomicWrite.mjs'
 import { audit, modelToll, tenant } from '../access.mjs'
 import { runDiscoveryTurn } from '../discoveryAgent.mjs'
 import { body, send } from '../http.mjs'
 import { saveResearch } from '../industryKnowledge.mjs'
+import { MODEL } from '../anthropic.mjs'
 import { reasoningAvailable, researchCompany } from '../reasoning.mjs'
 
 /**
@@ -33,11 +34,7 @@ async function writeDiscoverySession(workspaceId, value) {
   if (!value || value.workspaceId !== workspaceId || !Array.isArray(value.messages) || typeof value.phase !== 'string') {
     throw Object.assign(new Error('Invalid discovery session.'), { status: 400 })
   }
-  await mkdir(discoveryRoot(), { recursive: true })
-  const file = discoveryFile(workspaceId)
-  const candidate = `${file}.${randomUUID()}.next`
-  await writeFile(candidate, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  await rename(candidate, file)
+  await writeJsonAtomic(discoveryFile(workspaceId), value)
 }
 
 /** Anything the caller sends that reaches a model is clipped and filtered first, never trusted raw. */
@@ -54,7 +51,8 @@ export async function researchRoutes(request, response, segments) {
   if (segments[1] !== 'research') return false
 
   if (request.method === 'GET' && segments[2] === 'status') {
-    return send(response, 200, { available: reasoningAvailable(), model: process.env.BO_REASONING_MODEL || 'claude-opus-5' })
+    // Named from one place, so the screen can never claim a model the server is not using.
+    return send(response, 200, { available: reasoningAvailable(), model: MODEL })
   }
 
   if (request.method === 'POST' && segments.length === 2) {

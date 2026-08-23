@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import './noSpend.mjs'
 
 /**
  * BO must not be free to run up its owner's model bill.
