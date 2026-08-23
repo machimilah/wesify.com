@@ -15,6 +15,7 @@ import { readWorkspaceData, writeWorkspaceData } from './records.mjs'
 import { authenticate, beginPasswordReset, claimWorkspace, completePasswordReset, createSession, destroyAllSessions, destroySession, membership, registerUser, sessionUser, workspacesFor } from './auth.mjs'
 import { mailAvailable, sendPasswordReset } from './mail.mjs'
 import { captureError, logRequest, monitoringAvailable, newRequestId, watchProcess } from './observability.mjs'
+import { applyWebhook, billingAvailable, billingPortal, billingStateFor, rebuildsThisMonth, recordRebuild, requireConnectedApps, requireRebuildRoom, requireRecordRoom, requireWorkspaceRoom, startCheckout, verifyWebhook } from './billing.mjs'
 import { checkKey as checkStripeKey, pull as pullStripe, verify as verifyStripe } from './connectors/stripe.mjs'
 import { industryVerdict, listIndustries, readIndustryProfile, recordObservations, saveResearch } from './industryKnowledge.mjs'
 
@@ -35,7 +36,7 @@ function send(response, status, value, type = 'application/json; charset=utf-8')
   response.end(type.startsWith('application/json') ? JSON.stringify(value) : value)
 }
 
-async function body(request) {
+async function rawBody(request) {
   const chunks = []
   let size = 0
   for await (const chunk of request) {
@@ -43,7 +44,12 @@ async function body(request) {
     if (size > 2_000_000) throw new Error('Request is too large.')
     chunks.push(chunk)
   }
-  try { return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {} }
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+async function body(request) {
+  const text = await rawBody(request)
+  try { return text ? JSON.parse(text) : {} }
   catch { throw Object.assign(new Error('Invalid JSON request.'), { status: 400 }) }
 }
 
@@ -89,6 +95,9 @@ async function tenant(request, workspaceId) {
     if (!user) throw Object.assign(new Error('Sign in to use this workspace.'), { status: 401 })
     const existing = await membership(workspaceId, user.id)
     if (existing) return { user, role: existing.role }
+    // The plan's workspace limit is checked here, at the only moment a new workspace comes into
+    // being. Existing ones are never revisited: a plan that lapses does not take a workspace away.
+    await requireWorkspaceRoom(user.id, (await workspacesFor(user.id)).length)
     // Claiming refuses a workspace that already has a different owner, so this cannot take one over.
     await claimWorkspace(workspaceId, user.id)
     return { user, role: 'owner' }
@@ -440,6 +449,46 @@ async function api(request, response, url) {
     return send(response, 405, { error: 'Method not allowed.' })
   }
 
+  /**
+   * Billing: /api/billing/...
+   *
+   * Checkout happens on Stripe's own hosted page. A card number that never reaches BO is one BO can
+   * never leak, and it keeps PCI scope off a product with no business carrying it.
+   */
+  if (segments[1] === 'billing') {
+    // The webhook comes from Stripe, not from a browser: it carries a signature instead of a session,
+    // and it must be read as raw text because a re-serialised body would no longer match that
+    // signature. It is handled before anything asks for an account, because it has none.
+    if (request.method === 'POST' && segments[2] === 'webhook') {
+      const raw = await rawBody(request)
+      const event = verifyWebhook(raw, request.headers['stripe-signature'])
+      const outcome = await applyWebhook(event)
+      // 200 even for an event BO ignores or has already seen. Anything else asks Stripe to retry
+      // something that will never succeed, and eventually to disable the endpoint.
+      return send(response, 200, { received: true, ...outcome })
+    }
+
+    if (!databaseAvailable()) return send(response, 200, await billingStateFor(null))
+    const user = await sessionUser(bearer(request))
+    if (!user) return send(response, 401, { error: 'Not signed in.' })
+
+    if (request.method === 'GET' && (!segments[2] || segments[2] === 'state')) {
+      const state = await billingStateFor(user.id)
+      return send(response, 200, { ...state, rebuildsUsedThisMonth: await rebuildsThisMonth(user.id), workspaces: (await workspacesFor(user.id)).length })
+    }
+
+    if (request.method === 'POST' && segments[2] === 'checkout') {
+      const input = await body(request)
+      return send(response, 200, await startCheckout(user, String(input.plan ?? ''), originOf(request)))
+    }
+
+    if (request.method === 'POST' && segments[2] === 'portal') {
+      return send(response, 200, await billingPortal(user.id, originOf(request)))
+    }
+
+    return send(response, 405, { error: 'Method not allowed.' })
+  }
+
   if (request.method === 'GET' && segments[1] === 'research' && segments[2] === 'status') {
     return send(response, 200, { available: reasoningAvailable(), model: process.env.BO_REASONING_MODEL || 'claude-opus-5' })
   }
@@ -500,8 +549,11 @@ async function api(request, response, url) {
    */
   if (segments[1] === 'connections' && segments[2]) {
     const workspaceId = segments[2]
-    await tenant(request, workspaceId)
+    const connecting = await tenant(request, workspaceId)
     const providerId = segments[3]
+    // Reading which apps are connected stays open on every plan: an account that has lapsed must be
+    // able to see what it had, and taking the list away would only make it harder to disconnect.
+    if (request.method === 'POST' && databaseAvailable() && connecting?.user) await requireConnectedApps(connecting.user.id)
 
     if (request.method === 'GET' && !providerId) return send(response, 200, await listConnections(workspaceId))
 
@@ -573,7 +625,9 @@ async function api(request, response, url) {
 
   if (segments[1] !== 'projects' || !segments[2]) return send(response, 404, { error: 'Not found.' })
   const workspaceId = segments[2]
-  await tenant(request, workspaceId)
+  // Kept, not discarded: the plan limits below are about the account, and this is where BO learns
+  // which account is asking.
+  const caller = await tenant(request, workspaceId)
 
   if (request.method === 'GET' && segments.length === 3) {
     const manifest = await currentManifest(workspaceId)
@@ -585,7 +639,11 @@ async function api(request, response, url) {
     const current = await currentManifest(workspaceId)
     if (!current) return send(response, 404, { error: 'Project not built.' })
     authorize(current, request, 'admin')
+    // The metered action. Building the first Command Center is free for everyone — it is the only
+    // way anybody finds out what BO does — and changing it afterwards is what the plans sell.
+    if (databaseAvailable() && caller?.user) await requireRebuildRoom(caller.user.id)
     const project = await buildProject({ workspaceId, specification: input.specification, changeDescription: input.changeDescription ?? 'Updated Command Center', changeType: input.changeType ?? 'workspace-change', promote: false })
+    if (databaseAvailable() && caller?.user) await recordRebuild(caller.user.id, workspaceId)
     await audit(workspaceId, 'project.change_prepared', request, { version: project.version, changeType: input.changeType ?? 'workspace-change' })
     return send(response, 201, project)
   }
@@ -707,6 +765,13 @@ async function api(request, response, url) {
     }
     if (request.method === 'POST' && segments.length === 5) {
       authorize(manifest, request, 'create')
+      // Counted across the whole workspace, not per entity: what a plan sells is room for a business,
+      // and a business does not care which table its thousandth row landed in. Notifications are BO's
+      // own bookkeeping and are not charged for.
+      if (databaseAvailable() && caller?.user) {
+        const held = Object.entries(data).filter(([id]) => id !== '_notifications').reduce((total, [, rows]) => total + (Array.isArray(rows) ? rows.length : 0), 0)
+        await requireRecordRoom(caller.user.id, held)
+      }
       const values = validateRecord(entity, await body(request))
       validateRelations(entity, values, data)
       const now = new Date().toISOString()
@@ -857,6 +922,7 @@ if (startedDirectly) {
   // Said at start rather than left to be discovered from a customer who never got their reset link.
   if (databaseAvailable() && !mailAvailable()) console.warn('BO has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
   if (!monitoringAvailable()) console.warn('BO has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when BO breaks.')
+  if (databaseAvailable() && !billingAvailable()) console.warn('BO has no billing configured (STRIPE_SECRET_KEY and BO_STRIPE_PRICE_PRO), so every account stays on the free plan and nobody can pay.')
   server.listen(port, host, () => console.log(`BO project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
 }
 

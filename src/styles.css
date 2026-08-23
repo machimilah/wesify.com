@@ -286,6 +286,34 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-signin-switch:hover { color: var(--border) !important; }
 
 
+/* The plan screen. Every number on it comes from the server; this only decides how it is arranged. */
+.bo-billing { min-height: 100vh; padding: 24px clamp(16px, 6vw, 64px) 64px; display: grid; align-content: start; gap: 20px; color: var(--text); background: var(--bg); }
+.bo-billing header { display: flex; align-items: center; gap: 12px; }
+.bo-billing header .brand { margin-right: auto; color: var(--text); }
+.bo-billing header .brand-mark { color: var(--text); background: var(--bg-alt); }
+.bo-billing__back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 9px; color: var(--text-2); background: transparent; font-size: 12px; }
+.bo-billing__loading, .bo-billing__footnote { margin: 0; color: var(--text-3); font-size: 12px; line-height: 1.6; max-width: 70ch; }
+.bo-billing__notice { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--text-2); background: var(--surface); font-size: 12px; line-height: 1.5; }
+.bo-billing__warning { margin: 6px 0 0; color: var(--danger); font-size: 12px; }
+.bo-billing__current { display: grid; gap: 4px; padding: 18px 20px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); }
+.bo-billing__current small { color: var(--text-3); font-size: 11px; }
+.bo-billing__current h1 { margin: 0; font: 600 24px 'Ubuntu', sans-serif; letter-spacing: -.03em; color: var(--text); }
+.bo-billing__current p { margin: 0; color: var(--text-2); font-size: 12px; }
+.bo-billing__current button { justify-self: start; margin-top: 10px; min-height: 34px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text); background: transparent; font-size: 12px; font-weight: 600; }
+.bo-billing__plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.bo-billing__plans article { display: grid; align-content: start; gap: 8px; padding: 18px 20px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); }
+.bo-billing__plans article.is-current { border-color: var(--text-2); }
+.bo-billing__plans h2 { margin: 0; font: 600 15px 'Ubuntu', sans-serif; color: var(--text); }
+.bo-billing__plans strong { font: 600 26px 'Ubuntu', sans-serif; letter-spacing: -.03em; color: var(--text); }
+.bo-billing__plans strong em { font: 500 12px 'Ubuntu', sans-serif; font-style: normal; color: var(--text-3); }
+.bo-billing__plans p { margin: 0; color: var(--text-2); font-size: 12px; line-height: 1.5; }
+.bo-billing__plans ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.bo-billing__plans li { display: flex; align-items: center; gap: 7px; color: var(--text-2); font-size: 12px; }
+.bo-billing__plans button { min-height: 38px; margin-top: 8px; border: 0; border-radius: 10px; color: white; background: var(--solid-fill); font-size: 12px; font-weight: 700; }
+.bo-billing__plans button:disabled { color: var(--text-3); background: var(--border-strong); }
+.bo-billing__on { margin-top: 8px; display: block; color: var(--text-3); font-size: 12px; font-weight: 600; }
+
+
 /* The one control for BO's whole light/dark theme, styled once and placed on every screen header. */
 .bo-theme-toggle { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); background: transparent; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }

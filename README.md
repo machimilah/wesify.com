@@ -39,6 +39,9 @@ Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: ar
 | `BO_RESET_RATE_LIMIT` | Intentos de recuperación por IP y minuto (por defecto 5) |
 | `SENTRY_DSN` | Monitorización de errores. Sin ella, los fallos solo quedan en el log |
 | `BO_ENVIRONMENT` / `BO_RELEASE` | Etiquetas del despliegue en los informes de error |
+| `STRIPE_SECRET_KEY` | Cobros. Sin ella, todas las cuentas se quedan en el plan gratuito |
+| `STRIPE_WEBHOOK_SECRET` | Firma de los webhooks de Stripe. Sin ella BO los rechaza todos |
+| `BO_STRIPE_PRICE_PRO` / `BO_STRIPE_PRICE_BUSINESS` | Los price IDs creados en Stripe para cada plan |
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
@@ -54,6 +57,26 @@ Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`.
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
 
 Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
+
+## Planes y cobro
+
+Construir el Command Center es gratis, para todo el mundo y siempre. Es también el único argumento de venta que BO tiene: nadie compra un espacio de trabajo que no ha visto construido a partir de su propia descripción. Lo que cuesta dinero es lo que viene después.
+
+| | Free | Pro — $10/mes | Business — $50/mes |
+| --- | --- | --- | --- |
+| Workspaces | 1 | 1 | 5 |
+| Registros | 200 | sin límite | sin límite |
+| Rebuilds al mes | 0 | 5 | 20 |
+| Apps conectadas | — | ✓ | ✓ |
+| Equipo | — | — | ✓ |
+
+Esto sale de lo que BO cuesta de verdad: construir es caro —un turno de entrevista por intercambio, más una pasada de investigación en un modelo frontera con búsqueda web— y usar lo construido es casi gratis, filas en Postgres. Por eso lo que se mide son los rebuilds, no el uso diario.
+
+**Nada se borra nunca por impago.** Si un plan caduca, la cuenta vuelve a los límites del gratuito con todo lo que tenía intacto y legible; simplemente deja de poder añadir hasta volver a un plan que lo cubra. Un pago fallido tampoco es una cancelación: Stripe reintenta durante días, y quitar el producto al primer fallo castiga una tarjeta caducada como si fuera una decisión.
+
+El pago ocurre en la página de Stripe, no en BO. Un número de tarjeta que nunca llega al servidor es un número que no se puede filtrar desde él. Los webhooks se verifican con firma HMAC y ventana temporal, y se aplican una sola vez aunque Stripe los reenvíe.
+
+Para activarlo: crear los dos productos en Stripe, poner sus price IDs en `BO_STRIPE_PRICE_PRO` y `BO_STRIPE_PRICE_BUSINESS`, la clave secreta en `STRIPE_SECRET_KEY`, y apuntar el webhook de Stripe a `POST /api/billing/webhook` con su secreto en `STRIPE_WEBHOOK_SECRET`. Sin esas variables BO arranca igual, avisa por el log, y todas las cuentas se quedan en el plan gratuito.
 
 ## Saber cuándo se rompe
 
@@ -157,7 +180,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen, cada push pasa por CI, y los fallos en producción se reportan con contexto suficiente para diagnosticarlos. Lo que falta para poder venderlo: facturación.
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen, cada push pasa por CI, los fallos en producción se reportan con contexto suficiente para diagnosticarlos, y hay planes de pago con Stripe. Lo que falta ya no es infraestructura sino producto: más conectores —hoy solo Stripe, en modo lectura— y clientes de verdad usándolo.
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

@@ -9,6 +9,7 @@ import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account } from './engine/authClient'
 import { SignIn } from './components/SignIn'
 import { ResetPassword } from './components/ResetPassword'
+import { Billing } from './components/Billing'
 import { Landing } from './components/Landing'
 
 function activeWorkspaceId() {
@@ -87,6 +88,10 @@ export default function App() {
   />
 
   if (accounts && !account) return <SignIn onSignedIn={account => { setAccount(account); navigate('/start') }}/>
+
+  // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
+  // who has not signed in.
+  if (path === '/billing') return <Billing onBack={() => navigate('/home')}/>
   if (path === '/signin') { navigate('/start'); return <main className="bo-home"/> }
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)

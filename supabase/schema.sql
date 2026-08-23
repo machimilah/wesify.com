@@ -14,6 +14,9 @@
 --   records            every record a workspace holds — clients, invoices, work orders,
 --                      anything an operator creates — as one row per record
 --   password_resets    one row per live reset link, storing only a hash of the token
+--   subscriptions      what plan an account is on, and what Stripe last said about it
+--   stripe_events      every webhook already handled, so a retry does not do the work twice
+--   rebuilds           one row per rebuild, because rebuilds are what the plans meter
 --   schema_migrations  BO's own migration ledger, so the server does not re-run this
 --
 -- What this deliberately does NOT create
@@ -98,9 +101,43 @@ create table if not exists password_resets (
   used_at    timestamptz
 );
 
+-- Billing. One row per account, not per workspace: a plan is something a person buys,
+-- and pinning it to a workspace means an operator with two has two half-answers to
+-- "what am I paying for". No prices or entitlements here — those live in server/billing.mjs,
+-- because they change with product decisions rather than with data.
+create table if not exists subscriptions (
+  user_id                text primary key references users(id) on delete cascade,
+  plan                   text        not null default 'free',
+  status                 text        not null default 'active',
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  current_period_end     timestamptz,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+-- Every webhook Stripe has delivered, by its own id. Stripe promises at-least-once
+-- delivery, not exactly-once: a retry after a timeout is normal, and the same event
+-- arriving twice must not do the work twice.
+create table if not exists stripe_events (
+  id          text primary key,
+  type        text        not null,
+  received_at timestamptz not null default now()
+);
+
+-- One row per rebuild, because rebuilds are the metered thing. The build history on local
+-- disk would have answered this, but a redeploy is free to lose it, and a quota that resets
+-- when the container restarts is not a quota.
+create table if not exists rebuilds (
+  id           text        primary key,
+  user_id      text        not null references users(id) on delete cascade,
+  workspace_id text        not null,
+  created_at   timestamptz not null default now()
+);
+
 -- BO's migration ledger. The server creates this itself on first start, but creating it
--- here lets the last section record 001, 002 and 003 as already applied, so the server
--- does not try to redo work you have just done by hand.
+-- here lets the last section record every migration as already applied, so the server does
+-- not try to redo work you have just done by hand.
 create table if not exists schema_migrations (
   name       text primary key,
   applied_at timestamptz not null default now()
@@ -133,6 +170,12 @@ create index if not exists workspace_members_user_id_idx on workspace_members (u
 -- rather than by token, and the primary key on password_resets cannot answer it.
 create index if not exists password_resets_user_id_idx on password_resets (user_id);
 
+-- Finding the account a Stripe webhook is about: its events name the customer, not BO's id.
+create index if not exists subscriptions_stripe_customer_id_idx on subscriptions (stripe_customer_id);
+
+-- The only question ever asked of rebuilds: how many has this account used this month.
+create index if not exists rebuilds_user_id_created_at_idx on rebuilds (user_id, created_at);
+
 
 -- -------------------------------------------------------------------------------------
 -- 3. Keep these tables off the public API
@@ -160,6 +203,9 @@ alter table workspaces        enable row level security;
 alter table workspace_members enable row level security;
 alter table records           enable row level security;
 alter table password_resets   enable row level security;
+alter table subscriptions     enable row level security;
+alter table stripe_events     enable row level security;
+alter table rebuilds          enable row level security;
 alter table schema_migrations enable row level security;
 
 -- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
@@ -183,6 +229,9 @@ begin
   execute 'revoke all on table workspace_members from anon, authenticated';
   execute 'revoke all on table records           from anon, authenticated';
   execute 'revoke all on table password_resets   from anon, authenticated';
+  execute 'revoke all on table subscriptions     from anon, authenticated';
+  execute 'revoke all on table stripe_events     from anon, authenticated';
+  execute 'revoke all on table rebuilds          from anon, authenticated';
   execute 'revoke all on table schema_migrations from anon, authenticated';
 
   -- The same protection for tables a future BO migration creates, so 003 and beyond are
@@ -198,23 +247,22 @@ $$;
 
 
 -- -------------------------------------------------------------------------------------
--- 4. Record migrations 001, 002 and 003 as applied
+-- 4. Record every migration as applied
 --
 -- BO runs pending migrations from server/migrations/ on start, tracked by filename. This
--- file does the same work as 001_accounts.sql, 002_records.sql and
--- 003_password_resets.sql, so recording all three prevents a duplicate run. ON CONFLICT
--- keeps this file safe to run twice.
+-- file does the same work as every file in server/migrations/, so recording them all
+-- prevents a duplicate run. ON CONFLICT keeps this file safe to run twice.
 -- -------------------------------------------------------------------------------------
 
 insert into schema_migrations (name)
-values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql')
+values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'), ('004_billing.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
 -- 5. Verify
 --
--- Expect exactly seven rows, and on every one of them:
+-- Expect exactly ten rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
@@ -237,5 +285,7 @@ from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relkind = 'r'
-  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records', 'password_resets', 'schema_migrations')
+  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records',
+                    'password_resets', 'subscriptions', 'stripe_events', 'rebuilds',
+                    'schema_migrations')
 order by c.relname;
