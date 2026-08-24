@@ -127,7 +127,7 @@ try {
    * Everything after this uses a real Command Center on purpose. A workspace still mid-build proves
    * nothing about whether a second device can actually open one; a finished one does.
    */
-  await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
+  await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
   await page.getByTestId('open-dashboard').click()
   await page.waitForURL(/\/workspace\/[a-zA-Z0-9-]+\/home/, { timeout: 30_000 })
   await page.getByTestId('app-grid').waitFor({ timeout: 30_000 })

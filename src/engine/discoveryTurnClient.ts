@@ -31,8 +31,27 @@ function conversationOf(session: DiscoverySession) {
     .map(message => ({ role: message.role, content: message.content }))
 }
 
-export async function requestDiscoveryTurn(request: DiscoveryModelRequest, industry = ''): Promise<DiscoveryAgentResponse | null> {
-  if (!await serverInterviewAvailable()) return null
+/**
+ * Why the last server turn was not used.
+ *
+ * Falling back is silent by design — the interview must never stop — but silent was indistinguishable
+ * from broken: a spent free-tier quota, a server started before the key was set, and a model refusal
+ * all looked identical from the screen, which simply started asking its built-in questions again. The
+ * reason is recorded here and shown in BO's working, so "why is it asking me this?" has an answer.
+ */
+let lastIssue = ''
+export function lastInterviewIssue() { return lastIssue }
+
+/** The model that produced the last accepted turn, so the screen can say who is asking. */
+let lastModel = ''
+export function lastInterviewModel() { return lastModel }
+
+export async function requestDiscoveryTurn(request: DiscoveryModelRequest, industry = '', repair = ''): Promise<DiscoveryAgentResponse | null> {
+  lastIssue = ''
+  if (!await serverInterviewAvailable()) {
+    lastIssue = 'No interview model is configured on the server, so BO used its built-in questions. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY and restart it.'
+    return null
+  }
   try {
     const response = await fetch('/api/discovery/turn', {
       method: 'POST',
@@ -47,11 +66,20 @@ export async function requestDiscoveryTurn(request: DiscoveryModelRequest, indus
         catalog: request.mode === 'DISCOVER' ? '' : capabilityCatalogPrompt(),
         forceArchitecture: request.forceArchitecture === true,
         industry,
+        repair,
       }),
     })
-    if (!response.ok) return null
-    return parseDiscoveryResponse(await response.json())
-  } catch {
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({})) as { error?: string }
+      lastIssue = `The interview model answered ${response.status}. ${detail.error ?? ''}`.trim()
+      return null
+    }
+    const payload = await response.json() as { model?: string }
+    const turn = parseDiscoveryResponse(payload)
+    lastModel = typeof payload.model === 'string' ? payload.model : ''
+    return turn
+  } catch (reason) {
+    lastIssue = reason instanceof Error ? reason.message : 'BO could not reach the interview model.'
     return null
   }
 }

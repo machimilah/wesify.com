@@ -50,7 +50,8 @@ await new Promise(resolve => anthropic.listen(anthropicPort, '127.0.0.1', resolv
 
 const api = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], {
   cwd: process.cwd(),
-  env: { ...process.env, ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicPort}`, ANTHROPIC_API_KEY: 'sk-ant-mock' },
+  // Pinned so a developer's own Gemini key cannot make the server walk past this stub. See interview.test.mjs.
+  env: { ...process.env, ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicPort}`, ANTHROPIC_API_KEY: 'sk-ant-mock', BO_INTERVIEW_PROVIDER: 'anthropic', GEMINI_API_KEY: '', GOOGLE_API_KEY: '' },
   stdio: 'pipe',
 })
 for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -119,14 +120,41 @@ try {
   const journal = page.locator('[data-testid="agent-thinking"]')
   await journal.getByText('Researching this kind of business', { exact: true }).waitFor({ timeout: 30_000 })
   await journal.getByText('Technicians are dispatched to customer sites', { exact: true }).waitFor({ timeout: 30_000 })
+  /**
+   * The conclusions are shown; where BO read them is not.
+   *
+   * BO used to print the URLs it opened, in the journal and again under the proposal. What earns an
+   * operator's trust is that BO understood their trade — a citation only invites them to go and audit
+   * one, and tells anyone looking over their shoulder exactly how the workspace was arrived at.
+   */
   const journalText = await journal.innerText()
-  if (!journalText.includes('https://example.org/dispatch')) throw new Error('The journal did not cite the source of a researched conclusion.')
-  if (!journalText.includes('Sources BO read')) throw new Error('The journal did not list the sources BO opened.')
+  if (/https?:\/\//.test(journalText)) throw new Error(`BO is still showing where it read things: ${journalText.match(/https?:\/\/\S+/)?.[0]}`)
+  if (journalText.includes('Sources BO read')) throw new Error('The journal still lists the sources BO opened.')
 
-  await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
-  await page.getByTestId('research-sources').waitFor()
-  const sourceLink = page.getByTestId('research-sources').getByRole('link', { name: 'Dispatch operations guide' })
-  if ((await sourceLink.getAttribute('href')) !== 'https://example.org/dispatch') throw new Error('The approval screen did not link the researched source.')
+  /**
+   * The interview ends on a decision, and the plan waits to be asked for.
+   *
+   * Two buttons: build it, or read what BO is proposing first. The wall of reasoning that used to
+   * greet everyone made the last step of an interview feel like the start of a document, and buried
+   * the button somebody had spent twelve questions earning.
+   */
+  await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
+  if (await page.getByTestId('architecture-proposal').count()) throw new Error('The proposal is on screen before anyone asked to see it.')
+
+  await page.getByTestId('check-proposal').click()
+  const proposal = page.getByTestId('architecture-proposal')
+  await proposal.waitFor({ timeout: 30_000 })
+  const proposalText = await proposal.innerText()
+  if (!/Work orders|Clients|Invoices|Dashboard/i.test(proposalText)) throw new Error(`The proposal did not describe the workspace: ${proposalText.slice(0, 200)}`)
+  if (await page.getByTestId('research-sources').count()) throw new Error('The proposal still credits its sources.')
+  if (/https?:\/\//.test(proposalText)) throw new Error('The proposal still carries a link to where BO researched.')
+  if (await page.evaluate(() => localStorage.getItem('bo-workspace-config') !== null)) throw new Error('Reading the proposal built a workspace nobody approved.')
+
+  // It closes again, because an operator who has read it wants their two buttons back.
+  await page.getByTestId('check-proposal').click()
+  if (await page.getByTestId('architecture-proposal').count()) throw new Error('The proposal would not close again.')
+  await page.getByTestId('check-proposal').click()
+  await proposal.waitFor()
 
   // Researched capability decisions must reach the compiled workspace, not just the journal.
   await page.getByTestId('open-dashboard').click()
@@ -138,7 +166,7 @@ try {
   if (capabilities.includes('manufacturing.production')) throw new Error('A researched exclusion still reached the workspace.')
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Research UI test passed: live research journal with cited evidence, linked sources on the approval screen, and researched capability decisions compiled into the workspace.')
+  console.log('Research UI test passed: live research journal with its conclusions, no sources credited anywhere, a proposal that stays out of the way until asked for and commits nothing when read, and researched capability decisions compiled into the workspace.')
 } finally {
   await browser.close()
   vite.kill()

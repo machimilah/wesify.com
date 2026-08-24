@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ChevronDown, RotateCcw, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Eye, RotateCcw, Send, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
@@ -99,6 +99,17 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const [industry, setIndustry] = useState<IndustryVerdict | null>(null)
   const [frontierModel, setFrontierModel] = useState('')
   const [researching, setResearching] = useState(false)
+  // Closed by default: the proposal is there to be read on request, not to stand between the
+  // operator and the workspace they have just spent an interview describing.
+  const [proposalOpen, setProposalOpen] = useState(false)
+  /**
+   * Which model asked the question on screen.
+   *
+   * BO falls back through three paths, and they ask visibly different questions — so an operator who
+   * met a blunt built-in question had no way to tell whether BO was thinking or whether the key had
+   * never been picked up. Naming the source is one line of screen and answers it outright.
+   */
+  const [askedBy, setAskedBy] = useState('')
 
   // BO shows its working by default — that is the product's whole claim — but it collapses in one click.
   const [thinkingOpen, setThinkingOpen] = useState(false)
@@ -128,7 +139,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     if (frontierStarted.current) return
     frontierStarted.current = true
     const status = await frontierResearchStatus()
-    if (!status.available) return
+    // `available` covers the interview, which a free Gemini key alone turns on. Web research is the
+    // Anthropic path only, and announcing a search BO cannot run is worse than not mentioning it.
+    if (!(status.research ?? status.available)) return
     setFrontierModel(status.model)
     setResearching(true)
     appendThought('Researching this kind of business', `BO is searching external sources with ${status.model} to learn how companies like this actually operate before deciding which systems it needs.`)
@@ -139,7 +152,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       frontierRef.current = result
       setFrontier(result)
       appendThoughts(researchNarrative(base, researched.current, result))
-      if (result.sources.length) appendThought('Sources BO read', result.sources.slice(0, 5).map(source => source.title || source.url).join(' · '))
     } catch (reason) {
       appendThought('External research unavailable', `${reason instanceof Error ? reason.message : 'The researcher could not be reached.'} BO continued with its built-in business researcher, so nothing was lost.`)
     } finally {
@@ -153,7 +165,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     try {
       const response = await businessDiscoveryModel.generate(
         { mode: 'DISCOVER', session: base, forceArchitecture: asksToSkip(latestUser) },
-        { onText: setStreamedText, onActivity: setActivity },
+        { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
       )
       const responseSession = { ...base, businessState: response.businessState }
       appendThought('Updating the operating model', stateNarrative(responseSession, response.decision === 'ASK_QUESTION' ? response.nextQuestion.reason : ''))
@@ -163,7 +175,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
         appendThought('Choosing the business systems', 'The main actors, work flow, and revenue path are now clear enough to create the first version. I’m selecting the smallest complete set of BO capabilities and their required dependencies, while keeping unrelated ERP areas out of view.')
         const architectureResponse = await businessDiscoveryModel.generate(
           { mode: 'ARCHITECT', session: { ...base, phase: 'ARCHITECTING', businessState: response.businessState } },
-          { onText: setStreamedText, onActivity: setActivity },
+          { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
         )
         appendThought('Knitting the Command Center together', architectureNarrative(responseSession, architectureResponse.architectureContext))
         const proposed = applyAgentResponse({ ...base, phase: 'ARCHITECTING' }, architectureResponse)
@@ -172,7 +184,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           appendThought('Checking the architecture', 'I’m checking that every page has a real operational purpose, every workflow has the records it depends on, and no adjacent feature has appeared without evidence from the company description or answers.')
           const reviewed = await businessDiscoveryModel.generate(
             { mode: 'REVIEW_ARCHITECTURE', session: { ...proposed, phase: 'ARCHITECTING' } },
-            { onText: setStreamedText, onActivity: setActivity },
+            { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
           )
           if (reviewed.decision === 'READY_TO_ARCHITECT') {
             finalResponse = reviewed
@@ -221,10 +233,28 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     })()
   }, [workspaceId])
 
+  /**
+   * Stays on the newest message, unless the operator has scrolled up to re-read something.
+   *
+   * A dependency list cannot do this job: the thread grows from a dozen places — a question arriving,
+   * the thinking panel opening, streamed text getting longer, the proposal rendering — and any list
+   * that tries to name them all lands a frame early and stops short of the bottom. Watching the DOM
+   * catches every one of them, and the near-bottom check is what keeps BO from yanking the view back
+   * down while somebody is reading their own third answer.
+   */
   useEffect(() => {
-    if (!chat.current) return
-    chat.current.scrollTop = chat.current.scrollHeight
-  }, [session?.messages.length, loading, streamedText])
+    const node = chat.current
+    if (!node) return
+    const nearBottom = () => node.scrollHeight - node.scrollTop - node.clientHeight < 120
+    let stick = true
+    const onScroll = () => { stick = nearBottom() }
+    const pin = () => { if (stick) node.scrollTop = node.scrollHeight }
+    node.addEventListener('scroll', onScroll, { passive: true })
+    const observer = new MutationObserver(pin)
+    observer.observe(node, { childList: true, subtree: true, characterData: true })
+    pin()
+    return () => { node.removeEventListener('scroll', onScroll); observer.disconnect() }
+  }, [session?.workspaceId])
 
   const submit = async (value = draft) => {
     const answer = value.trim()
@@ -307,6 +337,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   // How much of the operating model is settled. The same number the planner uses to decide whether
   // another question is worth asking, so the bar cannot claim progress the interview has not made.
   const coverage = useMemo(() => session ? mergeFrontierResearch(researchSession(session), frontier).coverage : 0, [session, frontier])
+
   return <main className="bo-builder" ref={root}>
     <section className="bo-builder__conversation">
       <header>
@@ -339,7 +370,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             </button>
             {thinkingOpen && <div className="bo-thinking" data-testid="agent-thinking">
               {thoughts.map(thought => <article key={thought.id}><strong>{thought.title}</strong><span>{thought.body}</span></article>)}
-              {loading && <article className="active"><strong>{activity || 'Understanding your business'}</strong><span>{streamedText || 'Working through the confirmed business facts and updating the Command Center on the right.'}</span></article>}
+              {loading && <article className="active"><strong>{activity || 'Understanding your business'}</strong><span>{streamedText || 'Working through the confirmed business facts and building your Command Center.'}</span></article>}
             </div>}
           </div>
         </div>}
@@ -349,14 +380,27 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           <div className="bo-turn-error"><p>BO couldn’t finish that thought. {error}</p><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
         </div> : architecture && session?.phase === 'AWAITING_APPROVAL' ? <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
-          <div className="bo-proposal" data-testid="architecture-proposal">
-            <small>PROPOSED COMMAND CENTER</small>
-            <strong>{architecture.title || 'Your Command Center'}</strong>
-            <p>{architecture.explanation || architecture.summary}</p>
-            {proposalReasoning.length > 0 && <ul className="bo-proposal-reasoning" data-testid="proposal-reasoning">{proposalReasoning.map(finding => <li key={finding.id}><b>{finding.conclusion}</b><span>{finding.implication}</span><em>“{finding.because}”</em></li>)}</ul>}
-            <div className="bo-workspace-plan">{architecture.pages.map(page => <span key={page}><Check size={11}/>{page}</span>)}</div>
-            {frontier?.sources.length ? <div className="bo-research-sources" data-testid="research-sources"><small>RESEARCHED FROM</small>{frontier.sources.slice(0, 6).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer noopener">{source.title || source.url}</a>)}</div> : null}
-            <div className="bo-proposal-actions"><button onClick={approve} data-testid="open-dashboard">Build my Command Center <ArrowRight size={16}/></button><span>or tell BO what to change below</span></div>
+          <div>
+            {/**
+             * The end of the interview is a decision, not a document.
+             *
+             * BO used to answer twelve questions with a wall of its own reasoning and put the button
+             * at the bottom of it. Somebody who already trusts what they have been told should reach
+             * their workspace in one click; the plan is there for anyone who wants to read it first,
+             * and that is one click too.
+             */}
+            {proposalOpen && <div className="bo-proposal" data-testid="architecture-proposal">
+              <small>PROPOSED COMMAND CENTER</small>
+              <strong>{architecture.title || 'Your Command Center'}</strong>
+              <p>{architecture.explanation || architecture.summary}</p>
+              {proposalReasoning.length > 0 && <ul className="bo-proposal-reasoning" data-testid="proposal-reasoning">{proposalReasoning.map(finding => <li key={finding.id}><b>{finding.conclusion}</b><span>{finding.implication}</span><em>“{finding.because}”</em></li>)}</ul>}
+              <div className="bo-workspace-plan">{architecture.pages.map(page => <span key={page}><Check size={11}/>{page}</span>)}</div>
+            </div>}
+            <div className="bo-proposal-actions">
+              <button onClick={approve} data-testid="open-dashboard">Build my Command Center <ArrowRight size={16}/></button>
+              <button type="button" className="bo-proposal-secondary" onClick={() => setProposalOpen(open => !open)} aria-expanded={proposalOpen} data-testid="check-proposal"><Eye size={15}/> {proposalOpen ? 'Hide proposal' : 'Check proposal'}</button>
+              <span>or tell BO what to change below</span>
+            </div>
           </div>
         </div> : session?.currentQuestion ? <div className="bo-turn bo-turn--bo bo-turn--asking" data-testid="discovery-question">
           <span><Sparkles size={15}/></span>
@@ -375,6 +419,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           <b>Question {session.metrics.questionsAsked + 1}</b>
           <i><u style={{ width: `${Math.round(coverage * 100)}%` }}/></i>
           <span>{Math.round(coverage * 100)}% understood</span>
+          {askedBy && <em>asked by {askedBy}</em>}
         </div>}
         <div className="bo-composer__field">
           <textarea

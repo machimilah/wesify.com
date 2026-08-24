@@ -36,18 +36,21 @@ export interface FrontierResearch {
   sources: FrontierSource[]
 }
 
-let statusPromise: Promise<{ available: boolean; model: string }> | null = null
+let statusPromise: Promise<{ available: boolean; model: string; research?: boolean }> | null = null
 
 export function frontierResearchStatus() {
   statusPromise ??= fetch('/api/research/status')
-    .then(response => response.ok ? response.json() as Promise<{ available: boolean; model: string }> : { available: false, model: '' })
+    .then(response => response.ok ? response.json() as Promise<{ available: boolean; model: string; research?: boolean }> : { available: false, model: '' })
     .catch(() => ({ available: false, model: '' }))
   return statusPromise
 }
 
 export async function requestFrontierResearch(workspaceId: string, description: string, conversation: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<FrontierResearch | null> {
   const status = await frontierResearchStatus()
-  if (!status.available) return null
+  // The web-search researcher is the Anthropic path only. `available` now covers the interview too,
+  // which a free Gemini key alone turns on, so asking for research on that key would be a 503 the
+  // operator sees as BO failing rather than as a tier it does not have.
+  if (!(status.research ?? status.available)) return null
   const response = await fetch('/api/research', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
@@ -69,7 +72,9 @@ export function mergeFrontierResearch(local: BusinessResearch, frontier: Frontie
   const researched: ResearchFinding[] = frontier.findings.map(item => ({
     id: `frontier:${item.conclusion.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
     conclusion: item.conclusion,
-    because: item.sourceUrl ? `${item.because} (${item.sourceUrl})` : item.because,
+    // The conclusion and the reason travel; the address BO read them at does not. What convinces an
+    // operator is that BO understood their trade, and a link only invites them to audit a citation.
+    because: item.because,
     implication: item.implication,
     basis: item.basis,
     confidence: item.confidence,

@@ -44,6 +44,16 @@ export async function readWorkspaceData(workspaceId) {
 export async function writeWorkspaceData(workspaceId, value) {
   if (!databaseAvailable()) return writeDataFile(workspaceId, value)
   await withTransaction(async tx => {
+    /**
+     * The workspace row is made here rather than demanded from elsewhere.
+     *
+     * `records` references `workspaces`, and BO's whole promise is that you describe a company and
+     * get a workspace before signing up for anything — so with a database configured, the first
+     * record written to an unclaimed workspace failed on a foreign key nobody was in a position to
+     * satisfy. Migration 006 made the owner optional; this fills the row in, and signing in later
+     * claims it by name.
+     */
+    await tx('insert into workspaces (id) values ($1) on conflict (id) do nothing', [workspaceId])
     await tx('delete from records where workspace_id = $1', [workspaceId])
     for (const [entityId, records] of Object.entries(value)) {
       for (const record of records ?? []) {

@@ -89,9 +89,19 @@ export async function researchCompany({ description, conversation = [], catalog 
        * research and every later one inherits it from the shared knowledge store.
        */
       output_config: { effort: 'medium' },
+      /**
+       * `allowed_callers` is not optional on these tool versions.
+       *
+       * Left off, they default to allowing a code-execution caller, and the API then refuses the
+       * whole request on any model without programmatic tool calling: "'claude-haiku-4-5' does not
+       * support programmatic tool calling". BO's default model is exactly that one, so every
+       * research call 400ed the moment these tool versions landed — and the build screen reported it
+       * as "external research unavailable", which reads like a network problem rather than a request
+       * BO was never going to get an answer to.
+       */
       tools: [
-        { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
-        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3 },
+        { type: 'web_search_20260209', name: 'web_search', max_uses: 5, allowed_callers: ['direct'] },
+        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, allowed_callers: ['direct'] },
       ],
     },
     [{ role: 'user', content: `The operator described their company as:\n"""${description}"""\n\nWhat they have told BO so far:\n${conversationText(conversation) || '(nothing yet)'}\n\nResearch this company and produce the brief.` }],

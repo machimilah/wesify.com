@@ -62,15 +62,16 @@ describe('AI business discovery contract', () => {
     expect(isDuplicateQuestion('How do clients normally pay you each month?', withFact)).toBe(true)
   })
 
-  it('continues with the highest-information research question when local AI is unavailable', async () => {
+  /**
+   * No model, no question.
+   *
+   * BO used to answer an unreachable model with the next entry from a hand-written list, which is how
+   * a company that had just described itself got asked what it sells. Every question the operator
+   * sees is now written by a model that read the whole conversation, and when none can be reached BO
+   * says so and offers a retry instead of impersonating itself.
+   */
+  it('refuses to invent a question when no model can be reached', async () => {
     const session = createDiscoverySession('workspace-1234', 'I run a marketing agency.')
-    const response = await new LocalBusinessDiscoveryModel().generate({ session, mode: 'DISCOVER' })
-    expect(response.decision).toBe('ASK_QUESTION')
-    // The question is chosen by unresolved capability decisions, not by a fixed script, so it must
-    // be one of the dimensions BO still cannot infer for an agency, with contextual answers offered.
-    expect(response.nextQuestion.text).toMatch(/handles the work|customers normally pay|buys from or is served|buy materials/i)
-    expect(response.nextQuestion.reason).toMatch(/decides \d+ capability choices/)
-    expect(response.nextQuestion.suggestedAnswers.length).toBeGreaterThan(1)
-    expect(response.acknowledgment).toContain('without the local AI model')
+    await expect(new LocalBusinessDiscoveryModel().generate({ session, mode: 'DISCOVER' })).rejects.toThrow()
   })
 })

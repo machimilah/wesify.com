@@ -76,14 +76,29 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
  * reached the build screen started making real research calls — Opus, thinking, web search — and
  * nothing failed, nothing looked different, and the only signal was the bill.
  *
- * So each suite must either drop the key (scripts/noSpend.mjs) or point the client at its own stub
- * (ANTHROPIC_BASE_URL). One of the two, never neither.
+ * So each suite must either drop the keys (scripts/noSpend.mjs) or point a provider at its own stub
+ * (ANTHROPIC_BASE_URL, GEMINI_BASE_URL). One of the two, never neither. A suite that stubs one
+ * provider and holds its key configures the provider BO prefers, so the other is never reached.
  */
 const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !item.file.endsWith('/browser.mjs') && !item.file.endsWith('/noSpend.mjs'))
 const spenders = suites
   .filter(item => /server\/index\.mjs|\.\.\/server\//.test(item.text))
-  .filter(item => !item.text.includes('noSpend.mjs') && !item.text.includes('ANTHROPIC_BASE_URL'))
+  .filter(item => !item.text.includes('noSpend.mjs') && !item.text.includes('ANTHROPIC_BASE_URL') && !item.text.includes('GEMINI_BASE_URL'))
   .map(item => item.file)
 assert.deepEqual(spenders, [], 'these suites would call the real API if a key is configured')
+
+/**
+ * A suite that stubs one provider must pin that provider.
+ *
+ * BO now has two, and it picks between them from the environment — including `.env.local`, which is
+ * loaded in every child process. So a developer holding a Gemini key had `interview.test.mjs` quietly
+ * ignore its Anthropic stub, spend real free-tier quota, and fail on a question it never asked for.
+ * Stubbing a base URL is only half the instruction; the other half is saying which provider to use.
+ */
+const unpinned = suites
+  .filter(item => item.text.includes('ANTHROPIC_BASE_URL') && item.text.includes('server/index.mjs'))
+  .filter(item => !item.text.includes('BO_INTERVIEW_PROVIDER'))
+  .map(item => item.file)
+assert.deepEqual(unpinned, [], 'these suites stub one provider but let the environment choose another')
 
 console.log(`Structure test passed: ${files.length} source files, none over 800 lines, no route module over 400, every route module wired into the server, no unfinished-work markers, no credential-shaped literal committed, and no suite that would spend real money on a live API key.`)

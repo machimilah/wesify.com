@@ -59,7 +59,10 @@ create table if not exists sessions (
 
 create table if not exists workspaces (
   id         text primary key,
-  owner_id   text not null references users(id) on delete cascade,
+  -- Nullable: BO's promise is that you describe a company and get a workspace before signing
+  -- up for anything, so a workspace has to be able to exist before it belongs to anybody.
+  -- Signing in claims it and fills this in.
+  owner_id   text references users(id) on delete cascade,
   name       text not null default '',
   created_at timestamptz not null default now()
 );
@@ -149,6 +152,31 @@ create table if not exists industry_knowledge (
   updated_at timestamptz not null default now()
 );
 
+
+-- The interview that produced the workspace. It is what BO re-reads to explain a decision,
+-- what a returning operator continues from mid-question, and what the opening records in a
+-- new workspace are written from. No foreign key to workspaces on purpose: the interview is
+-- what produces a workspace, and it starts before anyone has signed in.
+create table if not exists discovery_sessions (
+  workspace_id text        primary key,
+  session      jsonb       not null,
+  updated_at   timestamptz not null default now()
+);
+
+-- What a Command Center is: its entities, their fields, its pages. This lived only in
+-- project.json on local disk, with a copy cached in the browser — which is why nobody
+-- noticed that a redeploy could leave every record intact in Postgres while the description
+-- of what those records meant was gone.
+create table if not exists workspace_builds (
+  workspace_id text        not null,
+  version      integer     not null,
+  manifest     jsonb       not null,
+  created_at   timestamptz not null default now(),
+  primary key (workspace_id, version)
+);
+
+create index if not exists workspace_builds_workspace_idx on workspace_builds (workspace_id, version desc);
+
 -- BO's migration ledger. The server creates this itself on first start, but creating it
 -- here lets the last section record every migration as already applied, so the server does
 -- not try to redo work you have just done by hand.
@@ -221,6 +249,8 @@ alter table subscriptions     enable row level security;
 alter table stripe_events     enable row level security;
 alter table rebuilds          enable row level security;
 alter table industry_knowledge enable row level security;
+alter table discovery_sessions enable row level security;
+alter table workspace_builds  enable row level security;
 alter table schema_migrations enable row level security;
 
 -- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
@@ -248,6 +278,8 @@ begin
   execute 'revoke all on table stripe_events     from anon, authenticated';
   execute 'revoke all on table rebuilds          from anon, authenticated';
   execute 'revoke all on table industry_knowledge from anon, authenticated';
+  execute 'revoke all on table discovery_sessions from anon, authenticated';
+  execute 'revoke all on table workspace_builds  from anon, authenticated';
   execute 'revoke all on table schema_migrations from anon, authenticated';
 
   -- The same protection for tables a future BO migration creates, so 003 and beyond are
@@ -272,7 +304,7 @@ $$;
 
 insert into schema_migrations (name)
 values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'),
-       ('004_billing.sql'), ('005_industry_knowledge.sql')
+       ('004_billing.sql'), ('005_industry_knowledge.sql'), ('006_interview_and_builds.sql')
 on conflict (name) do nothing;
 
 
@@ -304,5 +336,6 @@ where n.nspname = 'public'
   and c.relkind = 'r'
   and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records',
                     'password_resets', 'subscriptions', 'stripe_events', 'rebuilds',
-                    'industry_knowledge', 'schema_migrations')
+                    'industry_knowledge', 'discovery_sessions', 'workspace_builds',
+                    'schema_migrations')
 order by c.relname;

@@ -38,17 +38,6 @@ export interface ResearchFinding {
   capabilityIds: string[]
 }
 
-export interface ResearchQuestion {
-  dimensionId: string
-  text: string
-  reason: string
-  suggestedAnswers: string[]
-  informationGain: number
-  decides: string[]
-  /** Essential dimensions block the architecture; the rest only refine it. */
-  essential: boolean
-}
-
 export interface ResearchDecision {
   capabilityId: string
   reason: string
@@ -58,7 +47,6 @@ export interface BusinessResearch {
   archetype: { id: string; label: string; confidence: number; evidence: string } | null
   readings: DimensionReading[]
   findings: ResearchFinding[]
-  questions: ResearchQuestion[]
   include: ResearchDecision[]
   exclude: ResearchDecision[]
   coverage: number
@@ -85,8 +73,6 @@ interface OptionSpec {
 interface DimensionSpec {
   id: string
   label: string
-  question: string
-  askedPattern: RegExp
   weight: number
   /**
    * BO refuses to architect while an essential dimension is unknown, because a wrong guess there
@@ -116,8 +102,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'offering',
     label: 'What the company sells',
-    question: 'What does your company sell or deliver?',
-    askedPattern: /sell|offer|provide|deliver/i,
     weight: 5,
     essential: true,
     options: [
@@ -130,8 +114,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'revenue',
     label: 'How money enters',
-    question: 'How and when do customers normally pay?',
-    askedPattern: /charge|pay|billing|invoice|subscription|revenue|retainer/i,
     weight: 4.5,
     essential: true,
     options: [
@@ -145,8 +127,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'delivery',
     label: 'How work reaches the customer',
-    question: 'How does the work actually reach the customer?',
-    askedPattern: /reach the customer|deliver the work|on site|appointment|shipped|main steps|process/i,
     weight: 4,
     essential: true,
     options: [
@@ -160,8 +140,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'customer',
     label: 'Who is served',
-    question: 'Who normally buys from or is served by the company?',
-    askedPattern: /customer|client|buyer|patient|guest|tenant|who normally buys/i,
     weight: 3.5,
     essential: false,
     options: [
@@ -173,8 +151,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'workforce',
     label: 'Who does the work',
-    question: 'Who handles the work day to day?',
-    askedPattern: /team|employee|staff|who does|handles.*work|crew/i,
     weight: 3,
     essential: true,
     options: [
@@ -187,8 +163,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'supply',
     label: 'What the company buys to deliver',
-    question: 'Does the company buy materials, stock, or subcontracted work to deliver?',
-    askedPattern: /supplier|materials|stock|purchase|buy|procure/i,
     weight: 2.5,
     essential: false,
     options: [
@@ -200,8 +174,6 @@ export const researchDimensions: DimensionSpec[] = [
   {
     id: 'control',
     label: 'What gates the work',
-    question: 'Do approvals, contracts, or regulations gate any part of the work?',
-    askedPattern: /approval|sign ?off|contract|regulat|complian|gate/i,
     weight: 2,
     essential: false,
     options: [
@@ -288,7 +260,7 @@ function readDimension(dimension: DimensionSpec, text: string, statements: strin
 
 const optionOf = (dimension: DimensionSpec, optionId: string) => dimension.options.find(candidate => candidate.id === optionId)
 
-export function researchBusiness({ text, asked = [] }: ResearchInput): BusinessResearch {
+export function researchBusiness({ text }: ResearchInput): BusinessResearch {
   const normalized = text.toLowerCase()
   const statements = sentences(text)
   const detected = detectArchetype(normalized)
@@ -322,25 +294,6 @@ export function researchBusiness({ text, asked = [] }: ResearchInput): BusinessR
     }
   })
 
-  const decided = new Set([...include.keys(), ...exclude.keys()])
-  const questions: ResearchQuestion[] = []
-  for (const dimension of researchDimensions) {
-    const reading = readings.find(item => item.dimensionId === dimension.id)
-    if (reading && reading.basis !== 'domain-default') continue
-    if (asked.some(question => dimension.askedPattern.test(question))) continue
-    const pending = [...new Set(dimension.options.flatMap(candidate => [...(candidate.implies ?? []), ...(candidate.excludes ?? [])]))].filter(capabilityId => !decided.has(capabilityId))
-    questions.push({
-      dimensionId: dimension.id,
-      text: dimension.question,
-      reason: `${dimension.label} is unresolved and decides ${pending.length} capability choices.`,
-      suggestedAnswers: dimension.options.filter(candidate => candidate.answer).map(candidate => candidate.answer).slice(0, 5),
-      informationGain: Number((dimension.weight * (1 + pending.length)).toFixed(2)),
-      decides: pending,
-      essential: dimension.essential,
-    })
-  }
-  questions.sort((left, right) => right.informationGain - left.informationGain)
-
   const totalWeight = researchDimensions.reduce((total, dimension) => total + dimension.weight, 0)
   const resolvedWeight = resolved.reduce((total, reading) => total + (researchDimensions.find(item => item.id === reading.dimensionId)?.weight ?? 0), 0)
 
@@ -352,14 +305,10 @@ export function researchBusiness({ text, asked = [] }: ResearchInput): BusinessR
         : null,
     readings,
     findings,
-    questions,
     include: [...include.entries()].map(([capabilityId, reason]) => ({ capabilityId, reason })),
     exclude: [...exclude.entries()].map(([capabilityId, reason]) => ({ capabilityId, reason })),
     coverage: Number((resolvedWeight / totalWeight).toFixed(2)),
   }
 }
 
-/** The single highest-value thing BO still does not know, phrased for an operator. */
-export function nextResearchQuestion(input: ResearchInput) {
-  return researchBusiness(input).questions[0] ?? null
-}
+

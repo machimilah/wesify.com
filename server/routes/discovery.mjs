@@ -1,11 +1,8 @@
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-import { writeJsonAtomic } from '../atomicWrite.mjs'
+import { readDiscoverySession, writeDiscoverySession } from '../discoverySessions.mjs'
 import { audit, modelToll, tenant } from '../access.mjs'
-import { runDiscoveryTurn } from '../discoveryAgent.mjs'
+import { interviewAvailable, interviewModel, runDiscoveryTurn } from '../discoveryAgent.mjs'
 import { body, send } from '../http.mjs'
 import { saveResearch } from '../industryKnowledge.mjs'
-import { MODEL } from '../anthropic.mjs'
 import { reasoningAvailable, researchCompany } from '../reasoning.mjs'
 
 /**
@@ -15,27 +12,6 @@ import { reasoningAvailable, researchCompany } from '../reasoning.mjs'
  * interview is the one call BO cannot ask for a workspace token on: it is the call that produces the
  * workspace in the first place.
  */
-
-const discoveryRoot = () => path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.discovery-sessions')
-
-function discoveryFile(workspaceId) {
-  if (!/^[a-zA-Z0-9-]{8,80}$/.test(workspaceId)) throw Object.assign(new Error('Invalid workspace id.'), { status: 400 })
-  return path.join(discoveryRoot(), `${workspaceId}.json`)
-}
-
-async function readDiscoverySession(workspaceId) {
-  try { return JSON.parse(await readFile(discoveryFile(workspaceId), 'utf8')) } catch (error) {
-    if (error?.code === 'ENOENT') return null
-    throw error
-  }
-}
-
-async function writeDiscoverySession(workspaceId, value) {
-  if (!value || value.workspaceId !== workspaceId || !Array.isArray(value.messages) || typeof value.phase !== 'string') {
-    throw Object.assign(new Error('Invalid discovery session.'), { status: 400 })
-  }
-  await writeJsonAtomic(discoveryFile(workspaceId), value)
-}
 
 /** Anything the caller sends that reaches a model is clipped and filtered first, never trusted raw. */
 const conversationFrom = (value, turns) => (Array.isArray(value) ? value : [])
@@ -51,8 +27,15 @@ export async function researchRoutes(request, response, segments) {
   if (segments[1] !== 'research') return false
 
   if (request.method === 'GET' && segments[2] === 'status') {
-    // Named from one place, so the screen can never claim a model the server is not using.
-    return send(response, 200, { available: reasoningAvailable(), model: MODEL })
+    /**
+     * Two answers, because the two things a key buys are no longer the same key.
+     *
+     * `available` is the interview — Anthropic or Gemini, whichever is configured — and it is what
+     * the build screen reads to decide against downloading a gigabyte of browser model. `research`
+     * is the web-search pass, which only the Anthropic path can run. A deployment holding just a free
+     * Gemini key gets the intelligent interview and BO's own local research, rather than neither.
+     */
+    return send(response, 200, { available: interviewAvailable(), model: interviewModel(), research: reasoningAvailable() })
   }
 
   if (request.method === 'POST' && segments.length === 2) {
@@ -102,6 +85,9 @@ export async function discoveryRoutes(request, response, segments) {
       catalog: String(input.catalog ?? '').slice(0, 20000),
       forceArchitecture: input.forceArchitecture === true,
       industry: String(input.industry ?? '').slice(0, 120),
+      // Set only when BO has just rejected this turn's question as one already asked, so the retry
+      // knows why rather than rolling the dice on the same prompt.
+      repair: String(input.repair ?? '').slice(0, 400),
     })
     return send(response, 200, turn)
   }

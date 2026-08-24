@@ -58,9 +58,25 @@ await page.addInitScript(() => {
       workflows: ['Lead to signed client', 'Client to campaign', 'Monthly invoice to payment'], metrics: ['Pipeline value', 'Active campaigns', 'Outstanding invoices', 'Campaign profitability'],
       processStages: ['Brief', 'Plan', 'Create', 'Client review', 'Complete'], pipelineStages: ['Lead', 'Discovery', 'Proposal', 'Won'], billingCadence: 'Monthly retainers',
     }
-    if (request.mode === 'REVIEW_ARCHITECTURE' || userTurns > 1) {
+    if (request.mode === 'REVIEW_ARCHITECTURE' || userTurns > 2) {
       stream?.onText?.('Run sales, campaigns and billing together.')
       return { businessState, decision: 'READY_TO_ARCHITECT', acknowledgment: 'I have a good picture of how the agency works.', nextQuestion: { text: '', reason: '', suggestedAnswers: [] }, architectureContext }
+    }
+    /**
+     * The second question is the model's, because there is no other kind any more.
+     *
+     * This mock used to answer the first reply with READY, and a real second question appeared on
+     * screen regardless — BO overrode the decision with the next entry from a written list. That list
+     * is gone, so a mock that wants a two-question interview has to ask the second question itself.
+     */
+    if (userTurns > 1) {
+      const followUp = 'Who handles the work day to day?'
+      stream?.onText?.(followUp)
+      return {
+        businessState, decision: 'ASK_QUESTION', acknowledgment: 'Monthly retainers, understood.',
+        nextQuestion: { text: followUp, reason: 'Who does the work decides workload and team pages.', suggestedAnswers: [] },
+        architectureContext: { title: '', summary: '', explanation: '', modules: [], startView: 'overview', capabilities: [], capabilityIds: [], excludedCapabilityIds: [], pages: [], entities: [], workflows: [], metrics: [], processStages: [], pipelineStages: [], billingCadence: '' },
+      }
     }
     const question = 'How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?'
     stream?.onText?.(question)
@@ -131,6 +147,8 @@ try {
   await page.getByText('Who handles the work day to day?', { exact: true }).waitFor()
   await page.getByTestId('discovery-answer').fill('A small internal team')
   await page.getByTestId('answer-question').click()
+  await page.getByTestId('open-dashboard').waitFor()
+  await page.getByTestId('check-proposal').click()
   await page.getByTestId('architecture-proposal').waitFor()
   await page.getByTestId('architecture-proposal').getByText('Campaigns', { exact: true }).waitFor()
   if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-build-review.png'), fullPage: true })

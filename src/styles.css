@@ -12,12 +12,16 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .brand--inverse { color: white; }.brand--inverse .brand-mark { color: var(--text); background: var(--bg-alt); }
 
 /* One-prompt home */
-.bo-home { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); }
-.bo-home > header { width: min(1180px, calc(100% - 48px)); height: 82px; margin: auto; display: flex; align-items: center; }
-.bo-home__center { width: min(760px, calc(100% - 36px)); margin: auto; padding: 30px 0 13vh; text-align: center; }
+.bo-home { min-height: 100vh; position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-rows: auto 1fr; color: #f4f6f2; background: #050605; }
+.bo-home__background, .bo-home__scrim { width: 100%; height: 100%; position: absolute; inset: 0; }
+.bo-home__background { z-index: -2; object-fit: cover; transform: scale(.92); }
+.bo-home__scrim { z-index: -1; background: linear-gradient(180deg, rgba(3,5,4,.34), rgba(3,5,4,.52)); pointer-events: none; }
+.bo-home > header { width: min(1180px, calc(100% - 48px)); height: 82px; position: relative; z-index: 1; margin: auto; display: flex; align-items: center; }
+.bo-home__center { width: min(760px, calc(100% - 36px)); position: relative; z-index: 1; margin: auto; padding: 30px 0 13vh; text-align: center; }
+.bo-home .brand { color: #f4f6f2; }.bo-home .brand-mark { color: #171a17; background: rgba(250,250,247,.92); }.bo-home .brand em { color: rgba(244,246,242,.68); }
 .bo-home__eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--text-3); font-size: 12px; font-weight: 600; }
 .bo-home h1 { margin: 25px 0 12px; font: 600 clamp(42px, 6vw, 70px)/1.02 'Ubuntu', sans-serif; letter-spacing: -.055em; }
-.bo-home p { max-width: 580px; margin: 0 auto 34px; color: var(--text-3); font-size: 16px; line-height: 1.55; }
+.bo-home p { max-width: 580px; margin: 0 auto 34px; color: rgba(244,246,242,.76); font-size: 16px; line-height: 1.55; }
 .bo-prompt { position: relative; padding: 18px 66px 18px 20px; border: 1px solid var(--border-strong); border-radius: 22px; background: var(--surface-2); box-shadow: 0 18px 50px rgba(25,29,26,.09); text-align: left; }
 .bo-prompt:focus-within { border-color: var(--text-2); box-shadow: 0 20px 60px rgba(25,29,26,.13); }
 .bo-prompt__example { position: absolute; z-index: 0; top: 18px; right: 66px; left: 20px; color: var(--text-2); font-size: 17px; line-height: 1.5; pointer-events: none; transition: opacity .08s linear; }.bo-prompt__example.hidden { opacity: 0; visibility: hidden; }.bo-prompt__example i { width: 1px; height: 1.05em; margin-left: 2px; display: inline-block; vertical-align: -.12em; background: var(--text-3); animation: bo-type-caret .8s steps(1, end) infinite; }@keyframes bo-type-caret { 50% { opacity: 0; } }
@@ -215,12 +219,25 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-question-progress i { min-width: 60px; height: 3px; flex: 1; overflow: hidden; border-radius: 99px; background: var(--border); }
 .bo-question-progress u { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .5s ease; }
 .bo-question-progress span { flex: 0 0 auto; color: var(--text-3); font-size: 10px; }
+/* Which model asked: quiet, but always there, so a blunt question is never a mystery. */
+.bo-question-progress em { flex: 0 0 auto; color: var(--text-3); font-size: 10px; font-style: normal; opacity: .65; }
 .bo-progressive-command-center nav button.fresh { color: var(--icon-ink); background: rgba(184,216,191,.14); animation: bo-fresh-page .5s ease-out; }
 .bo-progressive-command-center nav button em { margin-left: auto; padding: 2px 5px; border-radius: 4px; color: var(--surface-2); background: var(--accent); font-size: 7px; font-style: normal; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 @keyframes bo-fresh-page { from { transform: translateX(-6px); opacity: 0; } }
 
 /* The build conversation: one thread, one composer, nothing that moves between states. */
-.bo-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 26px clamp(18px, 3.5vw, 34px) 10px; display: flex; flex-direction: column; justify-content: flex-end; gap: 18px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+/**
+ * A short interview sits at the bottom of the screen; a long one scrolls. Both, from one rule.
+ *
+ * This used to say `justify-content: flex-end`, which does the first half and silently breaks the
+ * second: an overflowing flex container aligned to its end pushes the earlier items out past its own
+ * start edge, and the browser reports `scrollHeight === clientHeight` — nothing to scroll. Fourteen
+ * questions in, the whole first half of the conversation was rendered a thousand pixels above the
+ * viewport and unreachable by mouse, keyboard or scrollbar. `margin-top: auto` on the first child
+ * pins the thread to the bottom the same way while leaving the overflow scrollable.
+ */
+.bo-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 26px clamp(18px, 3.5vw, 34px) 10px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.bo-thread > *:first-child { margin-top: auto; }
 .bo-thread::-webkit-scrollbar { width: 6px; }
 .bo-thread::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--border-strong); }
 .bo-turn { display: flex; align-items: flex-start; gap: 11px; }
@@ -255,6 +272,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-proposal-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .bo-proposal-actions button { min-height: 40px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 10px; color: white; background: var(--solid-fill); font-size: 12px; font-weight: 700; }
 .bo-proposal-actions span { color: var(--text-3); font-size: 11px; }
+/* The second way forward reads as a way forward, not as the cancel button next to it. */
+.bo-proposal-actions button.bo-proposal-secondary { border: 1px solid var(--border-strong); color: var(--accent); background: transparent; }
+.bo-proposal-actions button.bo-proposal-secondary:hover { border-color: var(--text-2); color: var(--text); }
+
 .bo-composer { flex: 0 0 auto; padding: 12px clamp(18px, 3.5vw, 34px) 18px; border-top: 1px solid var(--border); background: var(--bg); }
 .bo-composer__field { display: flex; align-items: flex-end; gap: 9px; padding: 8px 8px 8px 14px; border: 1px solid var(--border-strong); border-radius: 15px; background: var(--surface); }
 .bo-composer__field:focus-within { border-color: var(--text-2); }
@@ -324,10 +345,12 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-theme-toggle { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); background: transparent; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
 .bo-home__theme-toggle { margin-left: auto; }
+.bo-home .bo-theme-toggle { border-color: rgba(255,255,255,.24); color: rgba(255,255,255,.78); background: rgba(0,0,0,.18); backdrop-filter: blur(10px); }
+.bo-home .bo-theme-toggle:hover { border-color: rgba(255,255,255,.5); color: white; background: rgba(255,255,255,.12); }
 /* Offered only to somebody who is not signed in, so it sits beside the toggle rather than replacing
    anything: the home page is the same page either way, and only this one control differs. */
-.bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 18px; border: 1px solid var(--border-strong); border-radius: 99px; color: var(--text); background: var(--surface); font-size: 13px; font-weight: 600; }
-.bo-home__signin:hover { border-color: var(--text-2); }
+.bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 18px; border: 1px solid rgba(255,255,255,.28); border-radius: 99px; color: white; background: rgba(0,0,0,.22); backdrop-filter: blur(10px); font-size: 13px; font-weight: 600; }
+.bo-home__signin:hover { border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); }
 .bo-signin__theme-toggle { position: absolute; top: 22px; right: 22px; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bo-dashboard__sidebar-head .bo-theme-toggle { border-color: var(--border); color: var(--text-2); }

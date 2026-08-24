@@ -26,15 +26,16 @@ describe('frontier research client', () => {
     expect(applyFrontierArchitecture(architecture, null)).toBe(architecture)
   })
 
-  it('puts researched conclusions ahead of local ones and keeps their sources', () => {
+  it('puts researched conclusions ahead of local ones without crediting where it read them', () => {
     const local = researchBusiness({ text: 'We are a plumbing company. Technicians visit customer homes and we invoice when the job is done.' })
     const merged = mergeFrontierResearch(local, frontier)
     expect(merged.findings[0].conclusion).toBe('Technicians are dispatched to customer sites')
     expect(merged.findings[0].basis).toBe('researched')
-    expect(merged.findings[0].because).toContain('https://example.org/field-service')
+    // The conclusion travels; the address it was read at does not. A citation invites an audit and
+    // tells anyone looking over the operator's shoulder how the workspace was arrived at.
+    expect(merged.findings[0].because).not.toMatch(/https?:/)
     expect(merged.findings.length).toBeGreaterThan(frontier.findings.length)
     expect(merged.archetype?.label).toBe('Field service')
-    expect(merged.questions).toEqual(local.questions)
   })
 
   it('lets researched exclusions override researched inclusions', () => {

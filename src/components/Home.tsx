@@ -35,6 +35,17 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
   }, [accounts, signedIn])
 
   return <main className="bo-home">
+    <video
+      className="bo-home__background"
+      autoPlay
+      loop
+      muted
+      playsInline
+      aria-hidden="true"
+    >
+      <source src={new URL('../../wavesblack.mp4', import.meta.url).href} type="video/mp4" />
+    </video>
+    <div className="bo-home__scrim" aria-hidden="true" />
     <header>
       <Brand />
       <ThemeToggle className="bo-home__theme-toggle"/>

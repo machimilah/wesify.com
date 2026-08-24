@@ -114,6 +114,14 @@ try {
   assert.equal(calls.length, 2, 'research must run exactly two passes')
   assert.equal(calls[0].hasTools, true, 'pass one must carry the research tools')
   assert.equal(calls[0].body.tools.map(tool => tool.type).join(','), 'web_search_20260209,web_fetch_20260209')
+  /**
+   * Without `allowed_callers`, these tool versions default to permitting a code-execution caller, and
+   * the API rejects the whole request on any model that cannot do programmatic tool calling — BO's
+   * default model among them. Every research call 400ed, and the screen blamed the network.
+   */
+  for (const tool of calls[0].body.tools) {
+    assert.deepEqual(tool.allowed_callers, ['direct'], `${tool.name} must be restricted to direct calls`)
+  }
   assert.equal(calls[1].hasTools, false, 'pass two must compile without tools')
   assert.ok(calls[1].body.output_config.format.schema, 'pass two must constrain output with a schema')
   assert.ok(calls[0].betas.includes('server-side-fallback-2026-07-01'), 'refusal fallbacks must be requested')
@@ -191,7 +199,7 @@ try {
   const apiPort = 8914
   const api = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], {
     cwd: process.cwd(),
-    env: { ...process.env, ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY: 'sk-ant-mock' },
+    env: { ...process.env, ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY: 'sk-ant-mock', BO_INTERVIEW_PROVIDER: 'anthropic', GEMINI_API_KEY: '', GOOGLE_API_KEY: '' },
     stdio: 'pipe',
   })
   try {

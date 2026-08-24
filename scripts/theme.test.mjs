@@ -136,6 +136,9 @@ try {
   await page.getByTestId('company-brief').fill('We run a plumbing service business.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
+  // Opened deliberately: the proposal is the densest thing BO renders, so it is where a colour
+  // that vanishes into its own background shows up first.
+  await page.getByTestId('check-proposal').click({ timeout: 20_000 })
   await page.getByTestId('architecture-proposal').waitFor({ timeout: 20_000 })
   const proposalOffendersDark = await invisibleElements()
   if (proposalOffendersDark.length) throw new Error(`Invisible content in dark mode on the build proposal: ${proposalOffendersDark.join(', ')}`)

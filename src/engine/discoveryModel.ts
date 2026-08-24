@@ -2,7 +2,6 @@ import type { ChatCompletionMessageParam, InitProgressReport, MLCEngineInterface
 import { moduleIds } from './blueprint'
 import {
   emptyArchitecture,
-  emptyBusinessState,
   hasUsableArchitecture,
   isDuplicateQuestion,
   parseDiscoveryResponse,
@@ -13,8 +12,7 @@ import {
 } from './businessDiscovery'
 import { capabilityCatalogPrompt, capabilityIds, planCapabilities } from './capabilityCatalog'
 import { researchBusiness, type BusinessResearch } from './businessResearch'
-import { selectCompanyTemplate } from './companyTemplates'
-import { requestDiscoveryTurn, serverInterviewAvailable } from './discoveryTurnClient'
+import { lastInterviewIssue, lastInterviewModel, requestDiscoveryTurn, serverInterviewAvailable } from './discoveryTurnClient'
 
 const MODEL_F16 = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
 const MODEL_F32 = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
@@ -33,6 +31,10 @@ export interface DiscoveryModelRequest {
 export interface DiscoveryStreamHandlers {
   onText?: (text: string) => void
   onActivity?: (text: string) => void
+  /** Told when BO had to fall back, and why. Falling back is silent otherwise, which reads as broken. */
+  onNotice?: (title: string, body: string) => void
+  /** Names what produced this turn: a model id, or empty for BO’s own built-in questions. */
+  onSource?: (model: string) => void
 }
 
 export interface BusinessDiscoveryModel {
@@ -285,52 +287,6 @@ export function researchSession(session: DiscoverySession, state: BusinessState 
   return researchBusiness(researchInput(session, state))
 }
 
-/**
- * The next question worth a person's time: the unresolved operating-model dimension that settles the
- * most capability decisions. Returns null once nothing left to ask would change what BO builds.
- */
-function criticalDiscoveryQuestion(state: BusinessState, session: DiscoverySession) {
-  const research = researchSession(session, state)
-  const question = research.questions.find(candidate => candidate.essential)
-  if (!question) return null
-  return { text: question.text, reason: question.reason, suggestedAnswers: question.suggestedAnswers }
-}
-
-function deterministicBusinessState(session: DiscoverySession): BusinessState {
-  const state = { ...emptyBusinessState(), ...session.businessState }
-  const userMessages = session.messages.filter(message => message.role === 'user').map(message => message.content)
-  const brief = userMessages[0] ?? ''
-  const combined = userMessages.join(' ').toLowerCase()
-  const template = selectCompanyTemplate(brief)
-  const pairs = session.messages.map((message, index) => ({ message, previous: session.messages[index - 1] })).filter(item => item.message.role === 'user' && item.previous?.role === 'assistant')
-  const answerFor = (pattern: RegExp) => pairs.slice().reverse().find(item => pattern.test(item.previous.content))?.message.content
-  const offer = answerFor(/sell|offer|provide|deliver/i)
-  const customer = answerFor(/customer|client|buyer|patient|guest|tenant/i)
-  const revenue = answerFor(/charge|pay|billing|invoice|subscription|revenue/i)
-  const operations = answerFor(/work start|process|happens after|main steps|completion/i)
-  const team = answerFor(/team|employee|staff|who does|handles.*work/i)
-  return {
-    ...state,
-    companySummary: state.companySummary || brief,
-    industry: state.industry || template.label,
-    businessModel: state.businessModel.length ? state.businessModel : [template.label],
-    productsOrServices: state.productsOrServices.length ? state.productsOrServices : offer ? [offer] : [],
-    customers: state.customers.length ? state.customers : customer ? [customer] : [],
-    revenueModel: state.revenueModel.length ? state.revenueModel : revenue ? [revenue] : /subscription|retainer|monthly/.test(combined) ? ['Recurring'] : [],
-    team: state.team.length ? state.team : team ? [team] : /solo|just me|only me/.test(combined) ? ['Solo operator'] : [],
-    operations: state.operations.length ? state.operations : operations ? operations.split(/(?:,|→| then | and then )/i).map(item => item.trim()).filter(Boolean).slice(0, 12) : [],
-    knownEntities: state.knownEntities.length ? state.knownEntities : template.coreRecords,
-    softwareImplications: state.softwareImplications.length ? state.softwareImplications : template.blueprint.modules,
-  }
-}
-
-function fallbackDiscoveryResponse(request: DiscoveryModelRequest): DiscoveryAgentResponse {
-  const businessState = deterministicBusinessState(request.session)
-  const nextQuestion = criticalDiscoveryQuestion(businessState, request.session)
-  if (!nextQuestion || request.forceArchitecture) return { businessState, decision: 'READY_TO_ARCHITECT', acknowledgment: 'I have enough confirmed operating detail to build the first version.', nextQuestion: { text: '', reason: '', suggestedAnswers: [] }, architectureContext: emptyArchitecture() }
-  return { businessState, decision: 'ASK_QUESTION', acknowledgment: 'I saved the confirmed details and can continue without the local AI model.', nextQuestion, architectureContext: emptyArchitecture() }
-}
-
 async function generateOnce(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}) {
   if (window.__BO_DISCOVERY_MODEL_MOCK__) return window.__BO_DISCOVERY_MODEL_MOCK__(request, stream)
   stream.onActivity?.(request.mode === 'REVIEW_ARCHITECTURE' ? 'Reviewing the Command Center' : request.mode === 'ARCHITECT' ? 'Designing your Command Center' : 'Understanding your business')
@@ -368,10 +324,6 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
           throw new Error('The proposed question repeats information already resolved.')
         }
         if (request.mode !== 'DISCOVER' && !hasUsableArchitecture(result.architectureContext)) throw new Error('The architecture is incomplete.')
-        if (request.mode === 'DISCOVER' && result.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture) {
-          const nextQuestion = criticalDiscoveryQuestion(result.businessState, request.session)
-          if (nextQuestion) return { ...result, decision: 'ASK_QUESTION', acknowledgment: result.acknowledgment || 'I understand the current operating model.', nextQuestion, architectureContext: emptyArchitecture() }
-        }
         console.info('[BO discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
         return result
       } catch (error) {
@@ -384,8 +336,18 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
       stream.onActivity?.('Completing the operating architecture')
       return fallbackArchitectureResponse(request)
     }
-    stream.onActivity?.('Continuing with BO’s built-in business model')
-    return fallbackDiscoveryResponse(request)
+    /**
+     * No question unless a model wrote it.
+     *
+     * BO used to answer a failed turn with the next unresolved item from a hand-written list — which
+     * is how somebody who had just written "we sell Uruguayan and Argentinian products to Spain" got
+     * asked what their company sells. A canned question is not a cheaper version of the interview; it
+     * is a different product, and a worse one, wearing the same screen. Failing here is honest, the
+     * error carries a Retry, and nothing about the conversation is lost.
+     */
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('BO could not reach a model to write the next question. Nothing was lost — retry, or set a free GEMINI_API_KEY if this keeps happening.')
   }
 }
 
@@ -397,6 +359,22 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
  * the fallback, and it is a real one — BO stays usable with no key, no network and no WebGPU, only
  * with blunter questions.
  */
+/**
+ * Says out loud that the server turn was dropped, and what BO is doing instead.
+ *
+ * The fallback chain is deliberate and must stay silent in the sense of never stopping — but the
+ * operator still deserves to know, because the two paths ask visibly different questions. Without
+ * this, a spent free-tier quota looks exactly like BO having got worse at its job.
+ */
+function notice(stream: DiscoveryStreamHandlers, turn: DiscoveryAgentResponse | null) {
+  const issue = lastInterviewIssue()
+  if (turn && !issue) return
+  stream.onNotice?.(
+    'Falling back to BO’s built-in questions',
+    `${issue || 'The interview model kept repeating a question BO had already asked.'} BO is continuing with its own reasoning, so the questions are blunter until the model is reachable again.`,
+  )
+}
+
 class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
   private readonly local = new LocalBusinessDiscoveryModel()
 
@@ -405,11 +383,47 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
     // path so the repair loop and the question BO insists on asking still apply to it.
     if (!window.__BO_DISCOVERY_MODEL_MOCK__ && await serverInterviewAvailable()) {
       stream.onActivity?.(request.mode === 'DISCOVER' ? 'Understanding your business' : 'Designing your Command Center')
-      const turn = await requestDiscoveryTurn(request, request.session.businessState.industry)
-      // A duplicate question is worse than a blunt one: it tells the operator BO was not listening.
-      if (turn && !(request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && isDuplicateQuestion(turn.nextQuestion.text, request.session))) {
-        if (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)) return turn
+      /**
+       * A repeat is asked again, not given up on.
+       *
+       * A duplicate question is worse than a blunt one: it tells the operator BO was not listening.
+       * But dropping to the local path over one is worse still — the fallback is a fixed question
+       * bank, so BO answers a repeated question by asking the same repeated question forever. The
+       * second attempt is told what went wrong, and only then does the browser model take over.
+       */
+      const repeats = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && isDuplicateQuestion(turn.nextQuestion.text, request.session))
+      const usable = (turn: DiscoveryAgentResponse | null) => Boolean(turn && !repeats(turn) && (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)))
+
+      const first = await requestDiscoveryTurn(request, request.session.businessState.industry)
+      if (usable(first)) { stream.onSource?.(lastInterviewModel()); return first as DiscoveryAgentResponse }
+      if (repeats(first)) {
+        stream.onActivity?.('Checking BO has not already asked this')
+        const second = await requestDiscoveryTurn(
+          request,
+          request.session.businessState.industry,
+          `You just proposed "${first?.nextQuestion.text}", which repeats something already asked or already answered. Ask about a different part of how this company runs, or decide READY_TO_ARCHITECT if nothing left to ask would change what gets built.`,
+        )
+        if (usable(second)) { stream.onSource?.(lastInterviewModel()); return second as DiscoveryAgentResponse }
       }
+      notice(stream, first)
+      stream.onSource?.('')
+      /**
+       * The interview stops rather than being faked.
+       *
+       * Not the browser model either: it is a gigabyte that has never been downloaded on this machine
+       * — the server path exists precisely so it is not — and starting that download under someone
+       * waiting on a question means minutes of progress bar. The architecture pass still has a
+       * structural fallback, because it is assembled from capabilities the operator's own answers
+       * selected; a question has no such honest substitute.
+       */
+      if (request.mode !== 'DISCOVER') return fallbackArchitectureResponse(request)
+      throw new Error(`${lastInterviewIssue() || 'The interview model could not be reached.'} Retry when you are ready — your answers are saved.`)
+    } else if (!window.__BO_DISCOVERY_MODEL_MOCK__) {
+      stream.onNotice?.(
+        'Running the interview in your browser',
+        'The server has no model key, so BO is loading its own small model into this browser — private and free, but a large first download and blunter questions. Set GEMINI_API_KEY — free, from aistudio.google.com/apikey — and restart the server for the fast path: the check runs once when the page loads.',
+      )
+      stream.onSource?.('BO’s in-browser model')
     }
     return this.local.generate(request, stream)
   }

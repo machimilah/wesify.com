@@ -7,6 +7,8 @@ import { databaseAvailable } from '../db.mjs'
 import { body, send } from '../http.mjs'
 import { buildProject, currentManifest, listVersions, promoteProject, rollbackProject, runtimePath } from '../project-builder.mjs'
 import { readWorkspaceData, writeWorkspaceData } from '../records.mjs'
+import { readDiscoverySession } from '../discoverySessions.mjs'
+import { compileOpeningRecords, proposeOpeningRecords } from '../openingRecords.mjs'
 
 /**
  * The workspace itself: building it, changing it, and everything inside it.
@@ -49,6 +51,44 @@ function triggerWorkflows(manifest, data, entityId, event, record) {
   return { ...data, _notifications: notifications }
 }
 
+/**
+ * The workspace opens holding what the operator already said.
+ *
+ * Run once, on the first build, from the interview the server already has — not asked of the
+ * browser, which may be closed by the time this finishes, and not left to the operator, who has just
+ * spent twelve questions telling BO these exact facts.
+ *
+ * Every failure here is swallowed on purpose. An empty table is a workspace with a head start
+ * missing; a failed build is no workspace at all, and the second must never be caused by the first.
+ */
+async function openWorkspaceWithWhatTheySaid(workspaceId, project, request) {
+  try {
+    const entities = project?.specification?.entities ?? []
+    if (!entities.length) return
+    const existing = await readWorkspaceData(workspaceId)
+    // Only ever into an empty workspace. A rebuild must not re-add rows somebody has since deleted.
+    if (Object.entries(existing).some(([entityId, rows]) => entityId !== '_notifications' && (rows ?? []).length)) return
+    const session = await readDiscoverySession(workspaceId)
+    if (!session?.messages?.length) return
+
+    const proposal = await proposeOpeningRecords({
+      conversation: session.messages.map(message => ({ role: message.role, content: String(message.content ?? '').slice(0, 2000) })).slice(-24),
+      businessState: session.businessState ?? null,
+      entities,
+    })
+    const { records, summary } = compileOpeningRecords(proposal, entities, () => randomUUID())
+    const total = Object.values(records).reduce((count, rows) => count + rows.length, 0)
+    if (!total && !summary) return
+
+    const notifications = existing._notifications ?? []
+    if (summary) notifications.push({ id: randomUUID(), message: summary, entityId: '', recordId: '', createdAt: new Date().toISOString(), read: false })
+    await writeWorkspaceData(workspaceId, { ...existing, ...records, _notifications: notifications })
+    await audit(workspaceId, 'workspace.opening_records', request, { records: total, entities: Object.keys(records) })
+  } catch (error) {
+    console.warn(`BO could not open ${workspaceId} with what the operator said: ${error?.message ?? error}`)
+  }
+}
+
 export async function buildRoutes(request, response, segments) {
   if (request.method !== 'POST' || segments[1] !== 'builds') return false
 
@@ -61,6 +101,7 @@ export async function buildRoutes(request, response, segments) {
   const build = (async () => {
     const project = await buildProject({ workspaceId: input.workspaceId, specification: input.specification, changeDescription: input.changeDescription, changeType: 'initial' })
     await audit(input.workspaceId, 'project.created', request, { version: project.version })
+    await openWorkspaceWithWhatTheySaid(input.workspaceId, project, request)
     return project
   })()
   initialBuilds.set(input.workspaceId, build)

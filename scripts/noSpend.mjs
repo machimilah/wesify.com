@@ -26,3 +26,13 @@
  */
 process.env.ANTHROPIC_API_KEY = ''
 process.env.ANTHROPIC_AUTH_TOKEN = ''
+
+/**
+ * The free tier is blanked too.
+ *
+ * Free is not the same as harmless: a Gemini key in `.env.local` would have every browser suite that
+ * reaches the build screen run real interview turns, burn the developer's daily quota, and — worse —
+ * quietly test a live model instead of the fallback the suite is there to check.
+ */
+process.env.GEMINI_API_KEY = ''
+process.env.GOOGLE_API_KEY = ''

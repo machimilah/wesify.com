@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { databaseAvailable, query } from './db.mjs'
 
 const execFileAsync = promisify(execFile)
 function workspaceRoot() { return path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects')) }
@@ -124,10 +125,49 @@ async function testCandidate(root, manifest) {
   return generatedFiles
 }
 
+/**
+ * The build, mirrored into Postgres.
+ *
+ * `project.json` describes what a Command Center *is* — its entities, their fields, its pages — and
+ * it lived only on the local disk that a redeploy wipes. The browser cached a copy, which is exactly
+ * why nobody noticed: every record survived in Postgres while the description of what those records
+ * meant could vanish, and a workspace whose shape is unknown is a workspace that cannot be opened.
+ *
+ * Written alongside the files rather than instead of them: the generated runtime is real code on
+ * disk and stays there. This is the copy that outlives the machine.
+ */
+async function rememberBuild(manifest) {
+  if (!databaseAvailable() || !manifest?.workspaceId || !manifest?.version) return
+  try {
+    await query('insert into workspaces (id) values ($1) on conflict (id) do nothing', [manifest.workspaceId])
+    await query(
+      `insert into workspace_builds (workspace_id, version, manifest) values ($1, $2, $3)
+       on conflict (workspace_id, version) do update set manifest = excluded.manifest`,
+      [manifest.workspaceId, manifest.version, JSON.stringify(manifest)],
+    )
+  } catch (error) {
+    // A build that succeeded must not be reported as failed because its copy could not be stored.
+    console.warn(`BO could not record build ${manifest.version} of ${manifest.workspaceId}: ${error?.message ?? error}`)
+  }
+}
+
+/** The newest healthy build this database holds, for a disk that no longer has one. */
+async function rememberedManifest(workspaceId) {
+  if (!databaseAvailable()) return null
+  const healthy = await query(
+    `select manifest from workspace_builds where workspace_id = $1 and manifest->>'buildStatus' = 'HEALTHY'
+     order by version desc limit 1`,
+    [workspaceId],
+  )
+  if (healthy.rows[0]) return healthy.rows[0].manifest
+  const latest = await query('select manifest from workspace_builds where workspace_id = $1 order by version desc limit 1', [workspaceId])
+  return latest.rows[0]?.manifest ?? null
+}
+
 export async function currentManifest(workspaceId) {
   const pointer = await readJson(path.join(projectRoot(workspaceId), 'current.json'))
-  if (!pointer?.version) return null
-  return readJson(path.join(versionRoot(workspaceId, pointer.version), 'project.json'))
+  if (!pointer?.version) return rememberedManifest(workspaceId)
+  return (await readJson(path.join(versionRoot(workspaceId, pointer.version), 'project.json'))) ?? rememberedManifest(workspaceId)
 }
 
 export async function listVersions(workspaceId) {
@@ -185,6 +225,7 @@ export async function buildProject({ workspaceId, specification, changeDescripti
   const history = await readJson(path.join(projectRoot(workspaceId), 'history.json'), [])
   await writeJson(path.join(projectRoot(workspaceId), 'history.json'), [...history, { version, previousVersion: manifest.previousVersion, changeDescription, changedFiles: manifest.generatedFiles, schemaChanged: changeType !== 'initial', createdAt: manifest.lastBuild, status: manifest.buildStatus }])
   if (promote) await writeJson(path.join(projectRoot(workspaceId), 'current.json'), { version, promotedAt: new Date().toISOString() })
+  await rememberBuild(manifest)
   // No seeding here: a workspace with no records yet reads back as {} on its own, whether that read
   // comes from an absent file or an empty query, so there was never anything for this to do.
   return manifest
@@ -198,6 +239,7 @@ export async function promoteProject(workspaceId, version) {
   manifest.promotedAt = new Date().toISOString()
   await writeJson(file, manifest)
   await writeJson(path.join(projectRoot(workspaceId), 'current.json'), { version: Number(version), promotedAt: manifest.promotedAt })
+  await rememberBuild(manifest)
   const history = await readJson(path.join(projectRoot(workspaceId), 'history.json'), [])
   await writeJson(path.join(projectRoot(workspaceId), 'history.json'), history.map(item => item.version === Number(version) ? { ...item, status: 'HEALTHY', promotedAt: manifest.promotedAt } : item))
   return manifest

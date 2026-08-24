@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextResearchQuestion, researchBusiness } from './businessResearch'
+import { researchBusiness } from './businessResearch'
 import { emptyArchitecture, emptyBusinessState } from './businessDiscovery'
 import { planCapabilities } from './capabilityCatalog'
 
@@ -23,22 +23,21 @@ describe('business researcher', () => {
     const supply = research.readings.find(reading => reading.dimensionId === 'supply')
     expect(supply?.basis).toBe('domain-default')
     expect(research.include.map(item => item.capabilityId)).not.toContain('procurement.purchasing')
-    expect(research.questions.map(item => item.dimensionId)).toContain('supply')
   })
 
-  it('ranks the next question by how many capability decisions it settles', () => {
-    const question = nextResearchQuestion({ text: 'I run a marketing agency.' })
-    expect(question).not.toBeNull()
-    expect(question!.informationGain).toBeGreaterThan(0)
-    expect(question!.decides.length).toBeGreaterThan(0)
-    const gains = researchBusiness({ text: 'I run a marketing agency.' }).questions.map(item => item.informationGain)
-    expect(gains).toEqual([...gains].sort((left, right) => right - left))
-  })
-
-  it('does not repeat a question BO has already asked', () => {
-    const asked = ['How and when do customers normally pay?']
-    const research = researchBusiness({ text: 'We install and repair heating systems.', asked })
-    expect(research.questions.map(item => item.dimensionId)).not.toContain('revenue')
+  /**
+   * The researcher reads; it does not ask.
+   *
+   * It used to also carry a written question per dimension, and those were what the operator met
+   * whenever a model was unreachable — "What does your company sell or deliver?", put to someone who
+   * had just said what they sell. Every question now comes from a model that read the conversation,
+   * so the strings are gone rather than merely unused: a bank that still exists is a bank something
+   * eventually asks from again.
+   */
+  it('carries no written questions of its own', () => {
+    const research = researchBusiness({ text: 'We install and repair heating systems.' }) as unknown as Record<string, unknown>
+    expect(research.questions).toBeUndefined()
+    expect(JSON.stringify(research)).not.toMatch(/\?/)
   })
 
   it('turns a stated exclusion into a hard exclusion the planner respects', () => {
@@ -63,12 +62,6 @@ describe('business researcher', () => {
     expect(agencyIds).toEqual(expect.arrayContaining(['subscriptions.billing']))
     expect(agencyIds).not.toEqual(expect.arrayContaining(['service.field-work', 'procurement.purchasing']))
     expect(field.coverage).toBeGreaterThan(agency.coverage - 1)
-  })
-
-  it('stops asking once every essential dimension is settled', () => {
-    const research = researchBusiness({ text: 'We are a marketing agency. We run campaign projects for other businesses on monthly retainers with a small internal team.' })
-    expect(research.questions.filter(question => question.essential)).toHaveLength(0)
-    expect(research.questions.every(question => !question.essential)).toBe(true)
   })
 
   it('reports how much of the operating model is actually resolved', () => {

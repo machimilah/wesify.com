@@ -67,7 +67,7 @@ try {
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
 
-  await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
+  await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
   overlaySeen = 0
 
   await page.getByTestId('open-dashboard').click()

@@ -1,4 +1,30 @@
-import { MODEL, conversationText, refusal, textOf, wireSchema, withFallbacks } from './anthropic.mjs'
+import { MODEL, conversationText, reasoningAvailable, refusal, textOf, wireSchema, withFallbacks } from './anthropic.mjs'
+import { GEMINI_MODEL, geminiAvailable, runGeminiJson } from './gemini.mjs'
+
+/**
+ * Which model runs the interview.
+ *
+ * Anthropic first when both are configured — it is the one BO's research pass also uses, so a
+ * deployment that pays for a key gets one model's judgement rather than two. Gemini is what makes the
+ * intelligent interview the default rather than a paid upgrade: its free tier costs nothing and needs
+ * no card, so the fixed question bank stops being what most people see.
+ *
+ * `BO_INTERVIEW_PROVIDER` forces one, for a deployment that holds both keys and has a preference.
+ */
+export function interviewProvider() {
+  const forced = String(process.env.BO_INTERVIEW_PROVIDER || '').toLowerCase()
+  if (forced === 'gemini') return geminiAvailable() ? 'gemini' : null
+  if (forced === 'anthropic') return reasoningAvailable() ? 'anthropic' : null
+  if (reasoningAvailable()) return 'anthropic'
+  return geminiAvailable() ? 'gemini' : null
+}
+
+export function interviewAvailable() { return interviewProvider() !== null }
+
+export function interviewModel() {
+  const provider = interviewProvider()
+  return provider === 'gemini' ? GEMINI_MODEL : provider === 'anthropic' ? MODEL : ''
+}
 
 /**
  * The interview itself, run on the server.
@@ -158,31 +184,72 @@ const emptyArchitecture = () => ({
  * No web tools and no second pass. A question the operator is sitting and waiting for has to come
  * back in seconds; researching the industry is a separate, slower call that runs alongside it.
  */
-export async function runDiscoveryTurn({ mode, conversation = [], businessState = null, capabilityIds = [], modules = [], catalog = '', forceArchitecture = false, industry = '' }) {
+export async function runDiscoveryTurn({ mode, conversation = [], businessState = null, capabilityIds = [], modules = [], catalog = '', forceArchitecture = false, industry = '', repair = '' }) {
   if (!capabilityIds.length || !modules.length) throw Object.assign(new Error('The capability catalog is required.'), { status: 400 })
   const architecting = mode !== 'DISCOVER'
 
   const known = businessState ? `What BO has recorded about this company so far:\n${JSON.stringify(businessState)}` : 'BO has recorded nothing about this company yet.'
   const said = conversationText(conversation) || '(nothing yet)'
+  /**
+   * The questions already asked, listed on their own rather than left inside the transcript.
+   *
+   * A model reading a transcript treats its own earlier turns as scenery; it will ask what it asked
+   * four turns ago in slightly different words, and to the operator that reads as BO not having
+   * listened — the worst thing an interview can do. Pulled out and named, it is an instruction
+   * rather than something to notice.
+   */
+  const asked = conversation.filter(item => item.role === 'assistant' && item.content.includes('?')).map(item => item.content.trim())
+  const askedLine = asked.length ? [
+    '',
+    '',
+    'Questions you have already asked. Never ask any of these again, in any wording, and never ask for anything the operator has already answered:',
+    ...asked.map(item => `- ${item}`),
+  ].join('\n') : ''
+  const repairLine = repair ? `\n\n${repair}` : ''
   const industryLine = industry ? `\n\nBO classified this company as: ${industry}. Treat that as a hint, not a fact.` : ''
   const instruction = architecting
     ? `${known}\n\nThe conversation:\n${said}${industryLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
-    : `${known}\n\nThe conversation so far:\n${said}${industryLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
+    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${repairLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
 
-  const { message } = await withFallbacks(
-    {
-      model: MODEL,
-      max_tokens: architecting ? 8000 : 3000,
-      system: architecting ? architectSystem : consultantSystem,
-      output_config: { effort: architecting ? 'medium' : 'low', format: { type: 'json_schema', schema: wireSchema(discoverySchema(capabilityIds, modules, { architecting })) } },
-    },
-    [{ role: 'user', content: instruction }],
-  )
-  const declined = refusal(message, 'BO continued the interview with its built-in questions.')
-  if (declined) throw declined
+  const schema = discoverySchema(capabilityIds, modules, { architecting })
+  const system = architecting ? architectSystem : consultantSystem
+  const provider = interviewProvider()
+  if (!provider) throw Object.assign(new Error('BO has no interview model configured. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.'), { status: 503 })
+
+  let raw
+  let usedModel
+  if (provider === 'gemini') {
+    // The architecture pass is worth thinking about; a question the operator is sitting and waiting
+    // for is not. The interview also runs warmer than the architect: two operators who describe the
+    // same trade differently should not be asked the same twelve questions in the same order.
+    const result = await runGeminiJson({
+      system,
+      prompt: instruction,
+      schema,
+      maxTokens: architecting ? 8000 : 3000,
+      thinkingBudget: architecting ? 2048 : 0,
+      temperature: architecting ? 0.2 : 0.6,
+    })
+    raw = result.text
+    usedModel = result.model
+  } else {
+    const { message } = await withFallbacks(
+      {
+        model: MODEL,
+        max_tokens: architecting ? 8000 : 3000,
+        system,
+        output_config: { effort: architecting ? 'medium' : 'low', format: { type: 'json_schema', schema: wireSchema(schema) } },
+      },
+      [{ role: 'user', content: instruction }],
+    )
+    const declined = refusal(message, 'BO continued the interview with its built-in questions.')
+    if (declined) throw declined
+    raw = textOf(message)
+    usedModel = message.model ?? MODEL
+  }
 
   let parsed
-  try { parsed = JSON.parse(textOf(message)) }
+  try { parsed = JSON.parse(raw) }
   catch { throw Object.assign(new Error('The consultant returned output BO could not read.'), { status: 502 }) }
 
   /**
@@ -210,5 +277,5 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
       if (Array.isArray(architecture[key])) architecture[key] = architecture[key].filter(id => allowed.has(id))
     }
   }
-  return { ...parsed, model: message.model ?? MODEL }
+  return { ...parsed, model: usedModel }
 }

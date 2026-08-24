@@ -81,7 +81,22 @@ await new Promise(resolve => anthropic.listen(anthropicPort, '127.0.0.1', resolv
 
 const api = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], {
   cwd: process.cwd(),
-  env: { ...process.env, ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicPort}`, ANTHROPIC_API_KEY: 'sk-ant-mock' },
+  /**
+   * The provider is pinned, not inherited.
+   *
+   * This suite stubs Anthropic. A developer whose `.env.local` holds a Gemini key — or
+   * `BO_INTERVIEW_PROVIDER=gemini` — would otherwise have the server pick that instead, walk straight
+   * past the stub, and run the interview against the live free tier: real calls, real quota, and a
+   * question this test is not expecting.
+   */
+  env: {
+    ...process.env,
+    ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicPort}`,
+    ANTHROPIC_API_KEY: 'sk-ant-mock',
+    BO_INTERVIEW_PROVIDER: 'anthropic',
+    GEMINI_API_KEY: '',
+    GOOGLE_API_KEY: '',
+  },
   stdio: 'pipe',
 })
 for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -173,12 +188,15 @@ try {
   // Answering carries the conversation back, so the next turn is not asked in a vacuum.
   await page.getByTestId('discovery-answer').fill('Yes, each van holds parts')
   await page.getByTestId('answer-question').click()
-  await page.getByTestId('architecture-proposal').waitFor({ timeout: 30_000 })
+  // The interview ends on a decision: two buttons, and the plan itself only if asked for.
+  await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
   const withAnswer = turns.find(turn => /Operator:.*van/i.test(turn.asked))
   if (!withAnswer) throw new Error('The answer was not sent back with the next turn.')
 
-  // The workspace BO offers is the one the server designed.
-  await page.getByText('Plumbing Command Center', { exact: true }).waitFor()
+  // The plan is out of the way until it is asked for, and then it is the one the server designed.
+  if (await page.getByTestId('architecture-proposal').count()) throw new Error('The proposal is in the way before anyone asked to see it.')
+  await page.getByTestId('check-proposal').click()
+  await page.getByTestId('architecture-proposal').getByText('Plumbing Command Center', { exact: true }).waitFor()
   if (modelRequests.length) throw new Error(`The browser model was downloaded even though the server ran the interview: ${modelRequests.slice(0, 3).join(', ')}`)
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)

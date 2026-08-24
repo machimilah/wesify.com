@@ -20,11 +20,17 @@ Abrir `http://localhost:4173`.
 
 No requiere cuenta.
 
-Con `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: arranca al instante, funciona en cualquier navegador y las preguntas son específicas de la empresa. Sin key, BO recurre a Qwen 2.5 0.5B en el navegador; la primera vez se descarga y se guarda en caché, y hace falta WebGPU (Chrome o Edge actuales). El producto funciona en ambos casos.
+Con `GEMINI_API_KEY` o `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: arranca al instante, funciona en cualquier navegador y las preguntas son específicas de la empresa en lugar de una lista fija igual para todos. Sin key, BO recurre a Qwen 2.5 0.5B en el navegador; la primera vez se descarga y se guarda en caché, y hace falta WebGPU (Chrome o Edge actuales). El producto funciona en ambos casos.
+
+La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → *Create API key*. Es la forma recomendada de tener la entrevista inteligente sin coste. La de Anthropic añade además la investigación web, que Gemini no ejecuta; con las dos configuradas manda Anthropic, salvo que `BO_INTERVIEW_PROVIDER=gemini` diga lo contrario.
 
 | Variable | Para qué |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Entrevista e investigación en el servidor |
+| `GEMINI_API_KEY` | Entrevista en el servidor con el nivel gratuito de Google |
+| `ANTHROPIC_API_KEY` | Entrevista e investigación web en el servidor |
+| `BO_INTERVIEW_PROVIDER` | Fuerza `gemini` o `anthropic` cuando hay dos keys |
+| `BO_GEMINI_MODEL` | Modelo de Gemini (por defecto `gemini-3.7-flash`) |
+| `BO_GEMINI_FALLBACK_MODELS` | Modelos a los que BO baja cuando el primero se queda sin cuota gratuita |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
 | `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |
@@ -55,6 +61,8 @@ Para activar las cuentas hacen falta dos cosas:
 Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. El fichero deja registradas todas las migraciones de `server/migrations/`, así que el servidor no repite el trabajo ya hecho a mano; las que se añadan después se aplican solas al arrancar.
 
 Con `DATABASE_URL` configurada, los registros del workspace —clientes, facturas, órdenes de trabajo— viven en Postgres, en la tabla `records`. Sin ella siguen en ficheros JSON bajo `generated-projects/`, para que el prototipo funcione sin infraestructura. Esto importa al desplegar: Render, Railway, Fly y similares borran el disco local en cada redespliegue, así que sin base de datos los registros desaparecen sin aviso.
+
+Con `DATABASE_URL` también viven en Postgres la entrevista de cada workspace (`discovery_sessions`) y la descripción de lo que ese Command Center es —sus entidades, sus campos, sus páginas— (`workspace_builds`). Sin ella estaban solo en disco: los registros sobrevivían a un redespliegue y la definición de lo que significaban, no.
 
 Con `DATABASE_URL` también vive en Postgres lo que BO ha aprendido de cada industria: qué sistemas conservaron, quitaron o añadieron las empresas reales de ese sector. Es lo único que BO tiene que no se puede copiar leyendo el producto, y estaba en el mismo disco que un redespliegue borra. Solo agregados: nunca el nombre de una empresa, nunca un registro.
 
@@ -104,6 +112,7 @@ BO se empaqueta como una sola imagen. El [`Dockerfile`](Dockerfile) tiene dos et
 docker build -t bo .
 docker run -p 8787:8787 \
   -e DATABASE_URL='postgresql://...' \
+  -e GEMINI_API_KEY='AIza...' \
   -e ANTHROPIC_API_KEY='sk-ant-...' \
   -e BO_CONNECTION_SECRET='...' \
   -v bo-data:/data \
