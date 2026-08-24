@@ -44,7 +44,7 @@ export function Billing({ onBack }: { onBack: () => void }) {
   const go = async (action: () => Promise<string>, label: string) => {
     setWorking(label); setError('')
     try { window.location.href = await action() }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'BO could not open the payment page.'); setWorking('') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Wesify could not open the payment page.'); setWorking('') }
   }
 
   return <main className="bo-billing">

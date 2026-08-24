@@ -21,7 +21,7 @@ export interface ConnectedApp {
 async function readOrThrow(response: Response) {
   if (response.ok) return response.json()
   const detail = await response.json().catch(() => ({}))
-  throw new Error(detail.error || `BO could not reach the connected app (${response.status}).`)
+  throw new Error(detail.error || `Wesify could not reach the connected app (${response.status}).`)
 }
 
 export async function loadConnectedApps(workspaceId: string): Promise<ConnectedApp[]> {

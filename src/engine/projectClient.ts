@@ -59,8 +59,8 @@ const headers = (workspaceId: string, json = false) => ({ ...workspaceAccessHead
 async function request<T>(workspaceId: string, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...init, headers: { ...headers(workspaceId, Boolean(init.body)), ...init.headers } })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'BO project service is unavailable.' }))
-    throw new Error(error.error ?? 'BO project service is unavailable.')
+    const error = await response.json().catch(() => ({ error: 'Wesify project service is unavailable.' }))
+    throw new Error(error.error ?? 'Wesify project service is unavailable.')
   }
   return response.json() as Promise<T>
 }
@@ -146,7 +146,7 @@ export function queryGeneratedProject<T>(workspaceId: string, query: string) {
 
 export async function loadGeneratedRuntime(manifest: GeneratedProjectManifest): Promise<GeneratedRuntime> {
   const response = await fetch(`/api/projects/${manifest.workspaceId}/runtime.mjs?version=${manifest.version}`, { headers: headers(manifest.workspaceId) })
-  if (!response.ok) throw new Error('BO could not mount the generated workspace runtime.')
+  if (!response.ok) throw new Error('Wesify could not mount the generated workspace runtime.')
   const source = await response.text()
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
   try { return await import(/* @vite-ignore */ url) as GeneratedRuntime } finally { URL.revokeObjectURL(url) }

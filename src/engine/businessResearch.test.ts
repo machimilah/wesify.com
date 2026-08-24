@@ -13,7 +13,7 @@ describe('business researcher', () => {
     expect(byDimension.customer.optionId).toBe('business')
     for (const finding of research.findings) {
       expect(finding.because.length).toBeGreaterThan(0)
-      expect(finding.implication).toMatch(/BO is /)
+      expect(finding.implication).toMatch(/Wesify is /)
     }
     expect(research.include.map(item => item.capabilityId)).toEqual(expect.arrayContaining(['subscriptions.billing', 'crm.contacts', 'finance.invoicing']))
   })

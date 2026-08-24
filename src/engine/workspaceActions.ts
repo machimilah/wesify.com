@@ -74,7 +74,7 @@ export function executeWorkspaceAction(config: WorkspaceConfiguration, records: 
     const utilityIndex = config.navigation.findIndex(item => ['analytics', 'links', 'automations', 'assistant', 'settings'].includes(item.kind))
     const insertionIndex = utilityIndex < 0 ? config.navigation.length : utilityIndex
     const capabilityIds = [...(action.capabilityIds ?? []), ...(action.capabilityId ? [action.capabilityId] : [])]
-    const capabilityPlan = config.capabilityPlan && capabilityIds.length ? { ...config.capabilityPlan, excluded: config.capabilityPlan.excluded.filter(id => !capabilityIds.includes(id)), reasons: { ...config.capabilityPlan.reasons, ...Object.fromEntries(capabilityIds.map(id => [id, 'Added later through BO'])) } } : config.capabilityPlan
+    const capabilityPlan = config.capabilityPlan && capabilityIds.length ? { ...config.capabilityPlan, excluded: config.capabilityPlan.excluded.filter(id => !capabilityIds.includes(id)), reasons: { ...config.capabilityPlan.reasons, ...Object.fromEntries(capabilityIds.map(id => [id, 'Added later through Wesify'])) } } : config.capabilityPlan
     const nextConfig: WorkspaceConfiguration = { ...config, capabilityPlan, modules: [...new Set([...config.modules, action.module, ...action.entities.map(entity => entity.module)])], capabilities: capabilityIds.length ? [...new Set([...(config.capabilities ?? []), ...capabilityIds])] : config.capabilities, entities: [...updatedEntities, ...action.entities.filter(entity => !updatedEntities.some(existing => existing.id === entity.id))], views: [...config.views, ...action.views.filter(view => !config.views.some(existing => existing.id === view.id))], navigation: [...config.navigation.slice(0, insertionIndex), ...action.navigation.filter(item => !config.navigation.some(existing => existing.id === item.id)), ...config.navigation.slice(insertionIndex)], metrics: [...config.metrics, ...(action.metrics ?? []).filter(metric => !config.metrics.some(existing => existing.id === metric.id))], workflows: [...config.workflows, ...(action.workflows ?? []).filter(workflow => !config.workflows.some(existing => existing.id === workflow.id))] }
     return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.capabilityLabel ?? action.capabilityId ?? action.module} added to the workspace.` }
   }
@@ -91,7 +91,7 @@ export function executeWorkspaceAction(config: WorkspaceConfiguration, records: 
     const remainingViewIds = new Set(remainingViews.map(view => view.id))
     const remainingCapabilities = (config.capabilities ?? []).filter(id => id !== action.capabilityId)
     const remainingModules = config.modules.filter(module => remainingEntities.some(entity => entity.module === module))
-    const capabilityPlan = config.capabilityPlan ? { ...config.capabilityPlan, excluded: [...new Set([...config.capabilityPlan.excluded, action.capabilityId])], reasons: { ...config.capabilityPlan.reasons, [action.capabilityId]: 'Removed later through BO' } } : config.capabilityPlan
+    const capabilityPlan = config.capabilityPlan ? { ...config.capabilityPlan, excluded: [...new Set([...config.capabilityPlan.excluded, action.capabilityId])], reasons: { ...config.capabilityPlan.reasons, [action.capabilityId]: 'Removed later through Wesify' } } : config.capabilityPlan
     const nextConfig: WorkspaceConfiguration = { ...config, capabilityPlan, capabilities: remainingCapabilities, modules: remainingModules, entities: remainingEntities, views: remainingViews, navigation: config.navigation.filter(item => !item.viewId || remainingViewIds.has(item.viewId)), metrics: config.metrics.filter(item => !action.metricIds.includes(item.id) && remainingEntityIds.has(item.entityId)), workflows: config.workflows.filter(item => !action.workflowIds.includes(item.id) && remainingEntityIds.has(item.trigger.entityId)) }
     return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.capabilityLabel ?? action.capabilityId} removed from the workspace. Existing record data is preserved for recovery.` }
   }
@@ -108,7 +108,7 @@ function entityMatch(config: WorkspaceConfiguration, words: string) {
 export function interpretWorkspaceCommand(command: string, config: WorkspaceConfiguration, records: WorkspaceRecords = {}): { action?: WorkspaceAction; message?: string; needsPreview?: boolean } {
   const clean = command.trim()
   const normalized = clean.toLowerCase()
-  if (!clean) return { message: 'Tell BO what you want to do.' }
+  if (!clean) return { message: 'Tell Wesify what you want to do.' }
 
   const entity = entityMatch(config, normalized)
   if (/^(show|open|go to|list|find)\b/.test(normalized) && entity) return { action: { type: 'query_business_data', entityId: entity.id } }
@@ -126,7 +126,7 @@ export function interpretWorkspaceCommand(command: string, config: WorkspaceConf
     const statusField = entity.fields.find(item => item.id === 'status')
     const status = statusField?.options?.find(option => normalized.includes(option.toLowerCase()))
     if (target && status) return { action: { type: 'update_record', entityId: entity.id, recordId: target.id, values: { status } } }
-    return { message: `Tell BO which ${entity.label.toLowerCase()} and status to update.` }
+    return { message: `Tell Wesify which ${entity.label.toLowerCase()} and status to update.` }
   }
 
   if (/^(delete|remove)\b/.test(normalized) && entity) {

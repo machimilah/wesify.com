@@ -56,7 +56,7 @@ const responseSchema = {
   }, required: ['decision', 'message', 'action'],
 }
 
-const system = `You are BO, the operating agent inside a custom Business Command Center. Translate the user's request into one safe structured action using only the supplied workspace schema and records.
+const system = `You are Wesify, the operating agent inside a custom Business Command Center. Translate the user's request into one safe structured action using only the supplied workspace schema and records.
 Act within the supplied actingAgent scope. Use only its accessible entities, permissions and tools. Respect every prohibited action and escalation rule. All agents read and write the same shared company state; never invent or maintain a private version of company information.
 Use create_record, update_record, delete_record, add_field, add_collection, add_capability, remove_capability, create_workflow, navigate, or query. Never invent capability IDs, entity IDs, navigation IDs, record IDs, field IDs, or business data. Use IDs exactly as supplied. Put all field values in values.
 EXECUTE non-destructive record creation/updates, navigation, and queries. PREVIEW deletion and every structural change. CLARIFY when required information is missing or a target is ambiguous. ANSWER only from supplied data and say when data is unavailable.
@@ -130,7 +130,7 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
   if (window.__BO_WORKSPACE_AGENT_MOCK__) {
     const response = await window.__BO_WORKSPACE_AGENT_MOCK__(command, config, records)
     const allowed = !authorizingAgent || response.action.kind === 'none' || agentAllows(authorizingAgent, response.action.kind)
-    const guarded = allowed ? response : { ...response, decision: 'CLARIFY' as const, message: `${actingAgent?.label ?? 'BO'} cannot perform that action within its current scope.` }
+    const guarded = allowed ? response : { ...response, decision: 'CLARIFY' as const, message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }
     const action = toWorkspaceAction(guarded, config, authorizingAgent)
     const control = action ? evaluateActionControl(config, action, { agentApprovalRequired: authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission) }) : undefined
     const controlled = control?.requiresApproval ? { ...guarded, decision: 'PREVIEW' as const } : guarded
@@ -146,10 +146,10 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
   let lastError: unknown
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      onActivity?.(attempt ? 'Checking the command' : 'BO is working')
+      onActivity?.(attempt ? 'Checking the command' : 'Wesify is working')
       const raw = await generateLocalStructuredJson<unknown>({ messages: [{ role: 'system', content: system }, { role: 'user', content: `Use this live workspace context. JSON only.\n${JSON.stringify(context)}` }], schema: responseSchema, maxTokens: 520, temperature: 0.1, onActivity })
       const response = validate(raw)
-      if (authorizingAgent && response.action.kind !== 'none' && !agentAllows(authorizingAgent, response.action.kind)) return { response: { ...response, decision: 'CLARIFY', message: `${actingAgent?.label ?? 'BO'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent }
+      if (authorizingAgent && response.action.kind !== 'none' && !agentAllows(authorizingAgent, response.action.kind)) return { response: { ...response, decision: 'CLARIFY', message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent }
       const action = toWorkspaceAction(response, config, authorizingAgent)
       const agentApprovalRequired = authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission)
       const control = action ? evaluateActionControl(config, action, { agentApprovalRequired }) : undefined
@@ -157,5 +157,5 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
       return { response: guarded, action, agent: actingAgent, control }
     } catch (error) { lastError = error }
   }
-  throw lastError instanceof Error ? lastError : new Error('BO could not understand that command.')
+  throw lastError instanceof Error ? lastError : new Error('Wesify could not understand that command.')
 }

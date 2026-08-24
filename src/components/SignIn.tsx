@@ -43,7 +43,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
         onSignedIn(await (creating ? registerAccount(email.trim(), password) : signIn(email.trim(), password)))
       }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'BO could not sign you in.'
+      const message = reason instanceof Error ? reason.message : 'Wesify could not sign you in.'
       setError(message)
       // The server says so plainly when an address is taken, so move them to the right form instead
       // of leaving them to work out that they already have an account.
@@ -57,7 +57,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
     <ThemeToggle className="bo-signin__theme-toggle"/>
     <form onSubmit={submit} data-testid="signin-form">
       <Brand/>
-      <h1>{forgot ? 'Reset your password' : creating ? 'Create your BO account' : 'Welcome back'}</h1>
+      <h1>{forgot ? 'Reset your password' : creating ? 'Create your Wesify account' : 'Welcome back'}</h1>
       {forgot && null}
       <label>
         <span>Email</span>

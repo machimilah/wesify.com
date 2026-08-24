@@ -57,8 +57,8 @@ export async function requestFrontierResearch(workspaceId: string, description: 
     body: JSON.stringify({ workspaceId, description, conversation, catalog: capabilityCatalogPrompt(), capabilityIds }),
   })
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({ error: 'BO could not reach the frontier researcher.' })) as { error?: string }
-    throw new Error(detail.error || 'BO could not complete the frontier research.')
+    const detail = await response.json().catch(() => ({ error: 'Wesify could not reach the frontier researcher.' })) as { error?: string }
+    throw new Error(detail.error || 'Wesify could not complete the frontier research.')
   }
   return await response.json() as FrontierResearch
 }

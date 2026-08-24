@@ -257,7 +257,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
       if (result.navigationId) navigate(result.navigationId)
       setProposedAction(null)
     } catch (error) {
-      say(error instanceof Error ? error.message : 'BO could not complete that change.')
+      say(error instanceof Error ? error.message : 'Wesify could not complete that change.')
     } finally { setBuildState('') }
   }
   const prepareChange = async (action: WorkspaceAction) => {
@@ -272,7 +272,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
       } else setCandidate({ result, manifest: null, runtime: null })
       setProposedAction(action)
     } catch (error) {
-      say(error instanceof Error ? error.message : 'BO could not prepare that workspace change.')
+      say(error instanceof Error ? error.message : 'Wesify could not prepare that workspace change.')
     } finally { setBuildState('') }
   }
   const applyCandidate = async () => {
@@ -292,7 +292,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
       persist(candidate.result.config, candidate.result.records)
       say(candidate.result.message)
       setCandidate(null); setProposedAction(null)
-    } catch (error) { say(error instanceof Error ? error.message : 'BO could not apply that change.') }
+    } catch (error) { say(error instanceof Error ? error.message : 'Wesify could not apply that change.') }
     finally { setBuildState('') }
   }
   const submitCommand = async () => {
@@ -393,7 +393,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     <div className="bo-dashboard__main">
       {setupSteps.length ? <div className="bo-setup-banner" data-testid="setup-banner">
         <span><Sparkles size={14}/></span>
-        <strong>Finish setting up BO</strong>
+        <strong>Finish setting up Wesify</strong>
         <em>{4 - setupSteps.length}/4 done</em>
         <div>{setupSteps.map(step => <button key={step.id} onClick={() => step.target && navigate(step.target)} title={step.detail}>{step.label}<ArrowRight size={13}/></button>)}</div>
       </div> : null}
@@ -412,7 +412,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     {proposedAction && <ChangePreview action={proposedAction} config={config} candidate={candidate?.manifest ?? null} onCancel={() => { setProposedAction(null); setCandidate(null) }} onApply={() => void applyCandidate()}/>} 
     {buildState && <ProjectBuildState label={buildState}/>}
     {/* The panel carries its own close control, so the launcher would be a second one saying the same thing. */}
-    {!assistantOpen && <button className="bo-assistant-launcher" onClick={() => setAssistantOpen(true)} aria-label="Ask BO" data-testid="assistant-launcher"><Bot size={20}/></button>}
+    {!assistantOpen && <button className="bo-assistant-launcher" onClick={() => setAssistantOpen(true)} aria-label="Ask Wesify" data-testid="assistant-launcher"><Bot size={20}/></button>}
     {assistantOpen && <AssistantPanel
       thread={assistantThread}
       working={assistantWorking || (commandWorking ? 'Working on it' : '')}
@@ -435,7 +435,7 @@ function AssistantPanel({ thread, working, command, setCommand, submit, close }:
   const foot = useRef<HTMLDivElement>(null)
   useEffect(() => { foot.current?.scrollIntoView({ block: 'end' }) }, [thread.length, working])
   return <aside className="bo-assistant-panel" data-testid="assistant-panel">
-    <header><span><Bot size={15}/></span><strong>Ask BO</strong><button onClick={close} aria-label="Close assistant"><X size={15}/></button></header>
+    <header><span><Bot size={15}/></span><strong>Ask Wesify</strong><button onClick={close} aria-label="Close assistant"><X size={15}/></button></header>
     <div className="bo-assistant-thread">
       {thread.length === 0 && null}
       {thread.map(message => <div key={message.id} className={`bo-assistant-turn bo-assistant-turn--${message.role}`}>{message.text}</div>)}
@@ -481,7 +481,7 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
       analytics: { icon: BarChart3, tint: 'indigo', hint: 'Live numbers' },
       links: { icon: Link2, tint: 'cyan', hint: 'Connect other apps' },
       automations: { icon: Zap, tint: 'cyan', hint: 'Connect other apps' },
-      settings: { icon: Zap, tint: 'slate', hint: 'How BO is set up' },
+      settings: { icon: Zap, tint: 'slate', hint: 'How Wesify is set up' },
     }
     const special = utility[item.kind]
     return {
@@ -519,7 +519,7 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
         </button>
       })}
     </section>
-    <section className="bo-schema-kpis">{metrics.map(metric => <article key={metric.id}><small>{metric.label}</small><strong>{metricValue(metric, records)}</strong><span>Live workspace data</span></article>)}{metrics.length === 0 && <div className="bo-empty-state">KPIs will appear when BO has operational data to measure.</div>}</section>
+    <section className="bo-schema-kpis">{metrics.map(metric => <article key={metric.id}><small>{metric.label}</small><strong>{metricValue(metric, records)}</strong><span>Live workspace data</span></article>)}{metrics.length === 0 && <div className="bo-empty-state">KPIs will appear when Wesify has operational data to measure.</div>}</section>
     {runtime?.widgets.length ? <section className="bo-generated-widgets">{runtime.widgets.map(widget => <article key={widget.id}><small>GENERATED FOR YOUR BUSINESS</small><strong>{widget.label}</strong><span>{records[widget.entityId]?.length ?? 0} connected records</span></article>)}</section> : null}
     <section className="bo-command-layout">
       <div className="bo-action-queue"><header><div><h2>What needs attention</h2></div><span>{attentionCount} open</span></header><div className="bo-action-list">
@@ -527,7 +527,7 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
         {recordAlerts.map(alert => <button key={alert.id} onClick={() => { const destination = navigationFor(alert.entityId); if (destination) navigate(destination) }}><span><Sparkles size={13}/></span><strong>{alert.message}</strong><small>{humanize(config.entities.find(item => item.id === alert.entityId)?.label ?? 'Record')}</small></button>)}
         {!attentionCount && <div className="bo-empty-state">Nothing needs your attention.</div>}
       </div><button className="bo-open-briefing" onClick={() => navigate('today')}>Open daily briefing <ArrowRight size={14}/></button></div>
-      <div className="bo-command-modules"><header><div><h2>Recent activity</h2></div></header>{recent.map(({ entity, record }) => <button key={`${entity.id}-${record.id}`} onClick={() => { const destination = navigationFor(entity.id); if (destination) navigate(destination) }}><FileText size={15}/><span><strong>{String(record[entity.primaryField] ?? entity.label)}</strong><small>{entity.label} · {record.updatedAt ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(record.updatedAt)) : 'Just now'}</small></span><ArrowRight size={14}/></button>)}{!recent.length && <div className="bo-empty-state">Activity appears as your team works in BO.</div>}</div>
+      <div className="bo-command-modules"><header><div><h2>Recent activity</h2></div></header>{recent.map(({ entity, record }) => <button key={`${entity.id}-${record.id}`} onClick={() => { const destination = navigationFor(entity.id); if (destination) navigate(destination) }}><FileText size={15}/><span><strong>{String(record[entity.primaryField] ?? entity.label)}</strong><small>{entity.label} · {record.updatedAt ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(record.updatedAt)) : 'Just now'}</small></span><ArrowRight size={14}/></button>)}{!recent.length && <div className="bo-empty-state">Activity appears as your team works in Wesify.</div>}</div>
     </section>
   </>
 }
@@ -554,7 +554,7 @@ function ConnectionBanner({ connection }: { connection: WorkspaceConnection }) {
       <strong>{connection.providerLabel} owns this</strong>
       <small>
         {connected
-          ? `BO shows your ${connection.providerLabel} records here. ${connection.mode === 'read-write' ? 'Changes you make are sent back.' : `To change one, open ${connection.providerLabel}.`}`
+          ? `Wesify shows your ${connection.providerLabel} records here. ${connection.mode === 'read-write' ? 'Changes you make are sent back.' : `To change one, open ${connection.providerLabel}.`}`
           : `Not connected yet, so this page is empty. Connect ${connection.providerLabel} in Settings and your records appear here.`}
       </small>
     </div>
@@ -628,12 +628,12 @@ function ConnectedApps({ workspaceId, onSynced }: { workspaceId: string; onSynce
     <article data-testid="connected-app-stripe">
       <div><strong>Stripe</strong>{stripe
         ? <small>{stripe.account} · {stripe.lastSyncAt ? `last synced ${new Date(stripe.lastSyncAt).toLocaleString()} · ${syncSummary(stripe.lastSyncCounts)}` : 'not synced yet'}</small>
-        : <small>Customers, subscriptions and payments, shown in BO. BO never changes anything in Stripe.</small>}
+        : <small>Customers, subscriptions and payments, shown in Wesify. Wesify never changes anything in Stripe.</small>}
         {stripe?.lastError ? <em>{stripe.lastError}</em> : null}
       </div>
       {stripe ? <div className="bo-connected-actions">
-        <button disabled={Boolean(busy)} onClick={() => void run('sync', async () => { await syncConnectedApp(workspaceId, 'stripe'); await onSynced() }, 'Stripe is up to date in BO.')} data-testid="sync-stripe">{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
-        <button disabled={Boolean(busy)} onClick={() => void run('remove', () => disconnectApp(workspaceId, 'stripe'), 'Stripe disconnected. The records it brought in stay in BO.')} data-testid="disconnect-stripe">Disconnect</button>
+        <button disabled={Boolean(busy)} onClick={() => void run('sync', async () => { await syncConnectedApp(workspaceId, 'stripe'); await onSynced() }, 'Stripe is up to date in Wesify.')} data-testid="sync-stripe">{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
+        <button disabled={Boolean(busy)} onClick={() => void run('remove', () => disconnectApp(workspaceId, 'stripe'), 'Stripe disconnected. The records it brought in stay in Wesify.')} data-testid="disconnect-stripe">Disconnect</button>
       </div> : <form onSubmit={(event: FormEvent) => { event.preventDefault(); void run('connect', () => connectStripe(workspaceId, apiKey.trim()), 'Stripe connected. Sync to bring your records in.').then(() => setApiKey('')) }}>
         <input value={apiKey} onChange={event => setApiKey(event.target.value)} type="password" autoComplete="off" placeholder="rk_live_… restricted key" aria-label="Stripe restricted key" data-testid="stripe-key"/>
         <button disabled={!apiKey.trim() || Boolean(busy)} data-testid="connect-stripe">{busy === 'connect' ? 'Checking…' : 'Connect'}</button>
@@ -655,7 +655,7 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
   const withRefresh = async (operation: () => Promise<unknown>, success: string) => {
     setWorking(true); setMessage('')
     try { await operation(); await refresh(); setMessage(success) }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'BO could not update the automation.') }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Wesify could not update the automation.') }
     finally { setWorking(false) }
   }
   const addConnector = (formEvent: FormEvent) => {
@@ -712,14 +712,14 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
     <section className="bo-links-studio">
       <aside>
         <header><h2>Drag onto canvas</h2></header>
-        <div><small>WHEN THIS HAPPENS</small>{config.entities.map(entity => { const node: LinkCanvasNode = { id: 'trigger', kind: 'trigger', entityId: entity.id, event: 'created', x: 90, y: 170 }; return <button key={entity.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('trigger', entity.id)} data-testid={`link-trigger-source-${entity.id}`}><GripVertical size={13}/><span><strong>{entity.label}</strong><em>BO record</em></span><Plus size={13}/></button> })}</div>
+        <div><small>WHEN THIS HAPPENS</small>{config.entities.map(entity => { const node: LinkCanvasNode = { id: 'trigger', kind: 'trigger', entityId: entity.id, event: 'created', x: 90, y: 170 }; return <button key={entity.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('trigger', entity.id)} data-testid={`link-trigger-source-${entity.id}`}><GripVertical size={13}/><span><strong>{entity.label}</strong><em>Wesify record</em></span><Plus size={13}/></button> })}</div>
         <div><small>DO THIS</small>{workspace.connectors.map(connector => { const node: LinkCanvasNode = { id: 'action', kind: 'action', connectorId: connector.id, x: 560, y: 170 }; return <button key={connector.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('action', connector.id)} data-testid="link-action-source"><GripVertical size={13}/><span><strong>{connector.name}</strong><em>{connector.endpointHost}</em></span><Plus size={13}/></button> })}{!workspace.connectors.length && null}</div>
       </aside>
       <div className="bo-links-canvas-scroll">
         <div className="bo-links-canvas" ref={canvasRef} data-testid="links-canvas">
           <div className="bo-links-grid"/>
           {trigger && action ? <svg viewBox="0 0 900 460" aria-hidden="true"><defs><marker id="bo-link-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z"/></marker></defs><path d={`M ${trigger.x + 190} ${trigger.y + 45} C ${trigger.x + 300} ${trigger.y + 45}, ${action.x - 110} ${action.y + 45}, ${action.x} ${action.y + 45}`} markerEnd="url(#bo-link-arrow)"/></svg> : null}
-          {!nodes.length ? <div className="bo-links-empty"><Link2 size={27}/><strong>Build your first Link</strong><span>Drag a BO event here, then drag the service that should receive it.</span></div> : null}
+          {!nodes.length ? <div className="bo-links-empty"><Link2 size={27}/><strong>Build your first Link</strong><span>Drag a Wesify event here, then drag the service that should receive it.</span></div> : null}
           {trigger ? <article className="bo-link-node trigger" style={{ left: trigger.x, top: trigger.y }} onPointerDown={() => setPointerNode(trigger)} data-testid="link-trigger-node"><i/><header><span><small>TRIGGER</small><strong>{config.entities.find(item => item.id === trigger.entityId)?.label}</strong></span><button onPointerDown={event => event.stopPropagation()} onClick={() => setNodes(current => current.filter(item => item.kind !== 'trigger'))}><X size={13}/></button></header><label onPointerDown={event => event.stopPropagation()}>When record is <select value={trigger.event} onChange={input => setNodes(current => current.map(item => item.kind === 'trigger' ? { ...item, event: input.target.value as 'created' | 'updated' } : item))} data-testid="link-event"><option value="created">created</option><option value="updated">updated</option></select></label><em><GripVertical size={12}/> Drag to move</em></article> : null}
           {action ? <article className="bo-link-node action" style={{ left: action.x, top: action.y }} onPointerDown={() => setPointerNode(action)} data-testid="link-action-node"><i/><header><span><small>ACTION</small><strong>{workspace.connectors.find(item => item.id === action.connectorId)?.name}</strong></span><button onPointerDown={event => event.stopPropagation()} onClick={() => setNodes(current => current.filter(item => item.kind !== 'action'))}><X size={13}/></button></header><label>Send secure event payload</label><em><GripVertical size={12}/> Drag to move</em></article> : null}
         </div>
@@ -736,7 +736,7 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
     </section>
     <section className="bo-automation-list"><header><div><h2>Saved Links</h2></div><span>{workspace.automations.filter(item => item.enabled).length} active</span></header>{workspace.automations.map(item => <article key={item.id} data-testid="saved-link" data-trigger={item.trigger.entityId}><span className={item.enabled ? 'on' : ''}><Link2 size={15}/></span><div><strong>{item.name}</strong><small>{humanize(item.trigger.entityId)} · {item.trigger.event}</small></div><button disabled={working} onClick={() => loadLink(item.id)}>View graph</button><button disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => testManagedAutomation(manifest.workspaceId, item.id), 'Simulation passed. No external data was sent.')}>Simulate</button><button className={item.enabled ? 'enabled' : ''} disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => setManagedAutomationEnabled(manifest.workspaceId, item.id, !item.enabled), item.enabled ? 'Link paused.' : 'Link is live.')}>{item.enabled ? 'On' : 'Off'}</button></article>)}{!workspace.automations.length && <div className="bo-empty-state">No Links saved yet.</div>}</section>
     {workspace.runs.length ? <section className="bo-automation-runs"><header><h2>Run history</h2></header>{workspace.runs.slice(0, 8).map(run => <div key={run.id}><span className={run.status}>{humanize(run.status)}</span><strong>{run.automationName}</strong><small>{humanize(run.event)} · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(run.finishedAt))}</small></div>)}</section> : null}
-    <section className="bo-built-in-workflows"><header><h2>Built-in notifications</h2></header>{config.workflows.map(item => <div key={item.id}><strong>{item.name}</strong><span>{item.trigger.event}{item.trigger.field ? ` · ${item.trigger.field} = ${item.trigger.equals}` : ''}</span><small>{item.enabled ? 'Active' : 'Paused'}</small></div>)}{config.workflows.length === 0 && <div className="bo-empty-state">Ask BO to add a notification rule in the assistant.</div>}</section>
+    <section className="bo-built-in-workflows"><header><h2>Built-in notifications</h2></header>{config.workflows.map(item => <div key={item.id}><strong>{item.name}</strong><span>{item.trigger.event}{item.trigger.field ? ` · ${item.trigger.field} = ${item.trigger.equals}` : ''}</span><small>{item.enabled ? 'Active' : 'Paused'}</small></div>)}{config.workflows.length === 0 && <div className="bo-empty-state">Ask Wesify to add a notification rule in the assistant.</div>}</section>
   </>
 }
 
@@ -748,11 +748,11 @@ function SettingsView({ config, manifest, versions, auditEvents, role, onRoleCha
           <b>{item.providerLabel}</b>
           <em>{capabilityById.get(item.capabilityId)?.label ?? item.capabilityId} · {item.status === 'connected' ? (item.mode === 'read-write' ? 'two-way' : 'read only') : 'not connected yet'}</em>
         </span>)}</div>
-      : <strong>BO holds all your records. Tell the assistant which apps you already use and BO will show them here instead.</strong>}</article><article className="bo-profile-grid__wide"><small>Why BO built this</small><div className="bo-audit-list" data-testid="capability-reasons">{Object.entries(config.capabilityPlan?.reasons ?? {}).filter(([id]) => (config.capabilities ?? []).includes(id)).slice(0, 8).map(([id, reason]) => <span key={id}><b>{capabilityById.get(id)?.label ?? humanize(id)}</b><em>{reason}</em></span>)}{!Object.keys(config.capabilityPlan?.reasons ?? {}).length && <strong>This workspace was assembled before BO recorded its selection reasons.</strong>}</div></article><article className="bo-profile-grid__wide bo-role-settings"><small>Role preview</small><select value={role} onChange={event => onRoleChange(event.target.value as WorkspaceRoleId)} data-testid="schema-role" aria-label="Preview workspace as role">{config.roles.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><strong>This previews visibility locally. Production users still require authenticated accounts and server-assigned roles.</strong></article><article className="bo-profile-grid__wide bo-export"><small>Your data</small><strong>Every record, with the field definitions that give them meaning, in one file. Yours to keep whatever happens to this account.</strong><button onClick={() => { if (manifest) void exportWorkspace(manifest.workspaceId).catch(() => undefined) }} data-testid="export-workspace"><Download size={14}/> Export everything</button></article><article className="bo-profile-grid__wide"><small>Security audit</small>{canViewAudit ? <div className="bo-audit-list">{auditEvents.slice(0, 5).map(item => <span key={item.id}><b>{humanize(item.event.replaceAll('.', '-'))}</b><em>{humanize(item.role)} · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(item.at))}</em></span>)}{!auditEvents.length && <strong>No administrative actions yet.</strong>}</div> : <strong>Visible to owners and administrators only.</strong>}</article></section></>
+      : <strong>Wesify holds all your records. Tell the assistant which apps you already use and Wesify will show them here instead.</strong>}</article><article className="bo-profile-grid__wide"><small>Why Wesify built this</small><div className="bo-audit-list" data-testid="capability-reasons">{Object.entries(config.capabilityPlan?.reasons ?? {}).filter(([id]) => (config.capabilities ?? []).includes(id)).slice(0, 8).map(([id, reason]) => <span key={id}><b>{capabilityById.get(id)?.label ?? humanize(id)}</b><em>{reason}</em></span>)}{!Object.keys(config.capabilityPlan?.reasons ?? {}).length && <strong>This workspace was assembled before Wesify recorded its selection reasons.</strong>}</div></article><article className="bo-profile-grid__wide bo-role-settings"><small>Role preview</small><select value={role} onChange={event => onRoleChange(event.target.value as WorkspaceRoleId)} data-testid="schema-role" aria-label="Preview workspace as role">{config.roles.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><strong>This previews visibility locally. Production users still require authenticated accounts and server-assigned roles.</strong></article><article className="bo-profile-grid__wide bo-export"><small>Your data</small><strong>Every record, with the field definitions that give them meaning, in one file. Yours to keep whatever happens to this account.</strong><button onClick={() => { if (manifest) void exportWorkspace(manifest.workspaceId).catch(() => undefined) }} data-testid="export-workspace"><Download size={14}/> Export everything</button></article><article className="bo-profile-grid__wide"><small>Security audit</small>{canViewAudit ? <div className="bo-audit-list">{auditEvents.slice(0, 5).map(item => <span key={item.id}><b>{humanize(item.event.replaceAll('.', '-'))}</b><em>{humanize(item.role)} · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(item.at))}</em></span>)}{!auditEvents.length && <strong>No administrative actions yet.</strong>}</div> : <strong>Visible to owners and administrators only.</strong>}</article></section></>
 }
 
 function ProjectBuildState({ label }: { label: string }) {
-  return <div className="bo-project-build"><section><Sparkles size={20}/><small>BO IS ADAPTING YOUR COMMAND CENTER</small><h2>{label}</h2><div><span className="done"><Check size={13}/> Understanding the change</span><span className="done"><Check size={13}/> Updating your business system</span><span><i/> Testing everything</span></div></section></div>
+  return <div className="bo-project-build"><section><Sparkles size={20}/><small>WESTIFY IS ADAPTING YOUR COMMAND CENTER</small><h2>{label}</h2><div><span className="done"><Check size={13}/> Understanding the change</span><span className="done"><Check size={13}/> Updating your business system</span><span><i/> Testing everything</span></div></section></div>
 }
 
 function RecordForm({ entity, entities, records, initialRecord, onClose, onSubmit, onDelete, onChangeEntity }: { entity: EntityDefinition; entities: EntityDefinition[]; records: WorkspaceRecords; initialRecord?: BusinessRecord; onClose: () => void; onSubmit: (values: Record<string, string | number | boolean>) => void; onDelete?: () => void; onChangeEntity: (entity: EntityDefinition) => void }) {
@@ -766,5 +766,5 @@ function ChangePreview({ action, config, candidate, onCancel, onApply }: { actio
   const plan = planWorkspaceMutation(config, action)
   const control = evaluateActionControl(config, action)
   const affected = [plan.affected.entityIds.length && `${plan.affected.entityIds.length} data types`, plan.affected.viewIds.length && `${plan.affected.viewIds.length} views`, plan.affected.workflowIds.length && `${plan.affected.workflowIds.length} workflows`, plan.affected.kpiIds.length && `${plan.affected.kpiIds.length} KPIs`, plan.affected.agentIds.length && `${plan.affected.agentIds.length} agents`, plan.affected.eventTypes.length && `${plan.affected.eventTypes.length} event types`].filter(Boolean).join(' · ')
-  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Sparkles size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>BO prepared your update</h2><div className="bo-change-impact"><strong>{description}</strong><span>Autonomy level {control.level}: {humanize(control.disposition)}</span>{affected && <span>Affects {affected}</span>}{plan.warnings.map(warning => <span key={warning}>{warning}</span>)}</div>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
+  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Sparkles size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>Wesify prepared your update</h2><div className="bo-change-impact"><strong>{description}</strong><span>Autonomy level {control.level}: {humanize(control.disposition)}</span>{affected && <span>Affects {affected}</span>}{plan.warnings.map(warning => <span key={warning}>{warning}</span>)}</div>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
 }

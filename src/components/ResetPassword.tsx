@@ -27,7 +27,7 @@ export function ResetPassword({ token, onSignedIn, onGiveUp }: { token: string; 
     try {
       onSignedIn(await resetPassword(token, password))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'BO could not change your password.')
+      setError(reason instanceof Error ? reason.message : 'Wesify could not change your password.')
     } finally {
       setWorking(false)
     }

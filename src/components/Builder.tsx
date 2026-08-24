@@ -34,7 +34,7 @@ interface BuilderProps {
 /** The four things BO does, named so the wait is legible without reading the journal. */
 const stages = ['Understanding you', 'Researching', 'Designing', 'Ready to build']
 
-const buildLabels = ['Creating data model', 'Building operational pages', 'Connecting workflows', 'Adding controls', 'Testing BO', 'Command Center ready']
+const buildLabels = ['Creating data model', 'Building operational pages', 'Connecting workflows', 'Adding controls', 'Testing Wesify', 'Command Center ready']
 
 interface BuildThought { id: string; title: string; body: string }
 
@@ -76,7 +76,7 @@ function researchNarrative(session: DiscoverySession, seen: Set<string>, frontie
 function architectureNarrative(session: DiscoverySession, architecture: ReturnType<typeof resilientArchitecture>) {
   const selected = architecture.capabilities.slice(0, 9).join(', ')
   const excluded = architecture.excludedCapabilityIds.length ? ` Unrelated systems remain hidden until the company needs them.` : ''
-  return `This company needs ${selected || 'a focused operating base'}. Therefore I’m connecting ${architecture.entities.slice(0, 7).map(entity => entity.name).join(', ')} into one workspace, with a focused set of operational pages instead of exposing the entire BO platform.${excluded}`
+  return `This company needs ${selected || 'a focused operating base'}. Therefore I’m connecting ${architecture.entities.slice(0, 7).map(entity => entity.name).join(', ')} into one workspace, with a focused set of operational pages instead of exposing the entire Wesify platform.${excluded}`
 }
 
 export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBlueprintChange, onExit, onComplete }: BuilderProps) {
@@ -142,7 +142,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     if (!(status.research ?? status.available)) return
     setFrontierModel(status.model)
     setResearching(true)
-    appendThought('Researching this kind of business', `BO is searching external sources with ${status.model} to learn how companies like this actually operate before deciding which systems it needs.`)
+    appendThought('Researching this kind of business', `Wesify is searching external sources with ${status.model} to learn how companies like this actually operate before deciding which systems it needs.`)
     try {
       const description = base.messages.find(message => message.role === 'user')?.content ?? ''
       const result = await requestFrontierResearch(base.workspaceId, description, base.messages.map(message => ({ role: message.role, content: message.content })))
@@ -151,7 +151,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       setFrontier(result)
       appendThoughts(researchNarrative(base, researched.current, result))
     } catch (reason) {
-      appendThought('External research unavailable', `${reason instanceof Error ? reason.message : 'The researcher could not be reached.'} BO continued with its built-in business researcher, so nothing was lost.`)
+      appendThought('External research unavailable', `${reason instanceof Error ? reason.message : 'The researcher could not be reached.'} Wesify continued with its built-in business researcher, so nothing was lost.`)
     } finally {
       setResearching(false)
     }
@@ -170,7 +170,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       appendThoughts(researchNarrative(responseSession, researched.current, frontierRef.current))
       if (response.decision === 'READY_TO_ARCHITECT') {
         setActivity('Designing your Command Center')
-        appendThought('Choosing the business systems', 'The main actors, work flow, and revenue path are now clear enough to create the first version. I’m selecting the smallest complete set of BO capabilities and their required dependencies, while keeping unrelated ERP areas out of view.')
+        appendThought('Choosing the business systems', 'The main actors, work flow, and revenue path are now clear enough to create the first version. I’m selecting the smallest complete set of Wesify capabilities and their required dependencies, while keeping unrelated ERP areas out of view.')
         const architectureResponse = await businessDiscoveryModel.generate(
           { mode: 'ARCHITECT', session: { ...base, phase: 'ARCHITECTING', businessState: response.businessState } },
           { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
@@ -193,8 +193,8 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
         commit(applyAgentResponse(base, response))
       }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'BO could not reach the local AI.'
-      appendThought('The build paused', `${message} No workspace changes were applied. BO can retry from the confirmed business facts without losing the conversation.`)
+      const message = reason instanceof Error ? reason.message : 'Wesify could not reach the local AI.'
+      appendThought('The build paused', `${message} No workspace changes were applied. Wesify can retry from the confirmed business facts without losing the conversation.`)
       setError(message)
     } finally {
       setLoading(false); setActivity(''); setStreamedText('')
@@ -223,7 +223,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           setIndustry(verdict)
           appendThought(
             `What ${verdict.companies} other ${verdict.label || 'companies like this'} actually kept`,
-            `BO is not guessing here. ${verdict.include.length + verdict.exclude.length} of these decisions come from what real companies in this industry did with the workspace BO built them: ${[...verdict.exclude.slice(0, 2).map(item => `dropped ${item.capabilityId}`), ...verdict.include.slice(0, 2).map(item => `kept ${item.capabilityId}`)].join(', ')}.`,
+            `Wesify is not guessing here. ${verdict.include.length + verdict.exclude.length} of these decisions come from what real companies in this industry did with the workspace Wesify built them: ${[...verdict.exclude.slice(0, 2).map(item => `dropped ${item.capabilityId}`), ...verdict.include.slice(0, 2).map(item => `kept ${item.capabilityId}`)].join(', ')}.`,
           )
         })
       const last = initial.messages.at(-1)
@@ -383,7 +383,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
         {error ? <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
-          <div className="bo-turn-error"><span className="bo-turn__text">BO couldn't finish that thought. {error}</span><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
+          <div className="bo-turn-error"><span className="bo-turn__text">Wesify couldn't finish that thought. {error}</span><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
         </div> : architecture && session?.phase === 'AWAITING_APPROVAL' ? <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
           <div>
@@ -409,7 +409,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             <div className="bo-proposal-actions">
               <button onClick={approve} data-testid="open-dashboard">Build my Command Center <ArrowRight size={16}/></button>
               <button type="button" className="bo-proposal-secondary" onClick={() => setProposalOpen(open => !open)} aria-expanded={proposalOpen} data-testid="check-proposal"><Eye size={15}/> {proposalOpen ? 'Hide proposal' : 'Check proposal'}</button>
-              <span>or tell BO what to change below</span>
+              <span>or tell Wesify what to change below</span>
             </div>
           </div>
         </div> : session?.currentQuestion ? <div className="bo-turn bo-turn--bo bo-turn--asking" data-testid="discovery-question">
@@ -418,7 +418,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             {currentAcknowledgment && <span className="bo-turn-ack">{currentAcknowledgment}</span>}
             <span className="bo-turn-ask">{session.currentQuestion.text}</span>
           </div>
-        </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div className="bo-typing" aria-label="BO is working"><i/><i/><i/></div></div> : null}
+        </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div className="bo-typing" aria-label="Wesify is working"><i/><i/><i/></div></div> : null}
       </div>
 
       {/* One composer, always in the same place: answering a question and asking for a change are the
@@ -436,7 +436,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }}
-            placeholder={architecture && session?.phase === 'AWAITING_APPROVAL' ? 'Tell BO what should change…' : 'Reply to BO…'}
+            placeholder={architecture && session?.phase === 'AWAITING_APPROVAL' ? 'Tell Wesify what should change…' : 'Reply to Wesify…'}
             rows={1}
             data-testid="discovery-answer"
           />

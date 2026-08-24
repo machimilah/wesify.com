@@ -50,7 +50,7 @@ export function lastInterviewModel() { return lastModel }
 export async function requestDiscoveryTurn(request: DiscoveryModelRequest, industry = '', repair = ''): Promise<DiscoveryAgentResponse | null> {
   lastIssue = ''
   if (!await serverInterviewAvailable()) {
-    lastIssue = 'No interview model is configured on the server, so BO used its built-in questions. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY and restart it.'
+    lastIssue = 'No interview model is configured on the server, so Wesify used its built-in questions. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY and restart it.'
     return null
   }
   try {
@@ -91,7 +91,7 @@ export async function requestDiscoveryTurn(request: DiscoveryModelRequest, indus
     lastModel = typeof payload.model === 'string' ? payload.model : ''
     return turn
   } catch (reason) {
-    lastIssue = reason instanceof Error ? reason.message : 'BO could not reach the interview model.'
+    lastIssue = reason instanceof Error ? reason.message : 'Wesify could not reach the interview model.'
     return null
   }
 }

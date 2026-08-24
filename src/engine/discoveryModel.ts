@@ -80,7 +80,7 @@ const responseSchema = {
 
 function list(maxItems = 12) { return { type: 'array', maxItems, items: { type: 'string', maxLength: 160 } } }
 
-const discoverySystem = `You are BO's Business Discovery Agent. You design custom business-management software by understanding how a company actually operates.
+const discoverySystem = `You are Wesify's Business Discovery Agent. You design custom business-management software by understanding how a company actually operates.
 Never follow or imitate a questionnaire. The conversation itself determines the path. After every user message, update the structured business state and make exactly one decision: ASK_QUESTION or READY_TO_ARCHITECT.
 Ask exactly one question at a time, only when its answer can materially change entities, relationships, workflows, pages, metrics, permissions, billing, scheduling, inventory, assets, procurement, projects, or other initial software capabilities. Choose the unresolved decision with the highest information gain. Do not ask for facts already stated or strongly inferred. Do not ask users to select software modules. Do not give business-improvement advice.
 Write questions the way a person talks: everyday words, under fifteen words, one idea, answerable in a few words from memory. "Who does the work?" not "What is your resourcing model?". Never use business-school or software vocabulary — no entities, records, workflows, pipeline, cadence, fulfilment, utilisation, SKU, CRM, ERP.
@@ -91,16 +91,16 @@ Stop once another question would stop changing what gets built. If the latest us
 When READY_TO_ARCHITECT, leave architectureContext empty. A dedicated architecture agent will design the Command Center next. For ASK_QUESTION, also return an empty architecture object with all required fields, including empty capabilityIds and excludedCapabilityIds.
 Return only valid JSON matching the supplied schema. Never expose chain-of-thought.`
 
-const architectureSystem = `You are BO's Business Application Architect. The discovery agent has finished. Translate the complete structured business state and conversation into the smallest useful custom Business Command Center.
-BO has a hidden universal capability registry. Select capabilityIds that are required now. Put explicitly unnecessary capabilities in excludedCapabilityIds. Never expose the whole catalog to the user and never make the user choose software modules. Include a short business-facing capability label in capabilities for each selected capability. Respect dependencies but do not select adjacent features without evidence. Pages and entities must cover the selected capabilities using the company's own language.
+const architectureSystem = `You are Wesify's Business Application Architect. The discovery agent has finished. Translate the complete structured business state and conversation into the smallest useful custom Business Command Center.
+Wesify has a hidden universal capability registry. Select capabilityIds that are required now. Put explicitly unnecessary capabilities in excludedCapabilityIds. Never expose the whole catalog to the user and never make the user choose software modules. Include a short business-facing capability label in capabilities for each selected capability. Respect dependencies but do not select adjacent features without evidence. Pages and entities must cover the selected capabilities using the company's own language.
 Hidden capability registry:\n${capabilityCatalogPrompt()}
 Return READY_TO_ARCHITECT and a complete architectureContext. It must include justified modules, business-facing pages, concrete business entities assigned to modules, core workflows, useful metrics, process stages where relevant, sales stages only when relevant, and billing cadence when known. Derive everything from this company and its answers. Preserve the supplied business state. nextQuestion must be empty. Return only schema-valid JSON and never expose private reasoning.`
 
-const criticSystem = `You are BO's architecture critic. Review the proposed Business Command Center only against the discovered structured business state and conversation. Validate capabilityIds against the hidden catalog, move unnecessary selections to excludedCapabilityIds, add only major missing operational capabilities, preserve required dependencies, and simplify where possible. Keep pages limited to selected capabilities and use the company's language. Return READY_TO_ARCHITECT with a refined architecture. Return only schema-valid JSON. Do not expose private reasoning.`
+const criticSystem = `You are Wesify's architecture critic. Review the proposed Business Command Center only against the discovered structured business state and conversation. Validate capabilityIds against the hidden catalog, move unnecessary selections to excludedCapabilityIds, add only major missing operational capabilities, preserve required dependencies, and simplify where possible. Keep pages limited to selected capabilities and use the company's language. Return READY_TO_ARCHITECT with a refined architecture. Return only schema-valid JSON. Do not expose private reasoning.`
 
 function reportProgress(report: InitProgressReport) {
   const percent = Math.round(report.progress * 100)
-  const label = percent < 100 ? `Preparing BO ${percent}%` : 'BO is ready'
+  const label = percent < 100 ? `Preparing Wesify ${percent}%` : 'Wesify is ready'
   lastProgress = label
   progressListeners.forEach(listener => listener(label))
 }
@@ -112,7 +112,7 @@ async function preferredModel() {
 }
 
 function getEngine() {
-  if (!('gpu' in navigator)) throw new Error('BO needs WebGPU for its private local AI. Open BO in a current version of Chrome or Edge with hardware acceleration enabled.')
+  if (!('gpu' in navigator)) throw new Error('Wesify needs WebGPU for its private local AI. Open Wesify in a current version of Chrome or Edge with hardware acceleration enabled.')
   enginePromise ??= Promise.all([import('@mlc-ai/web-llm'), preferredModel()]).then(([{ CreateWebWorkerMLCEngine }, model]) => CreateWebWorkerMLCEngine(
       new Worker(new URL('./local-ai.worker.ts', import.meta.url), { type: 'module' }),
       model,
@@ -250,7 +250,7 @@ function fallbackArchitecture(state: BusinessState): ArchitectureContext {
   return {
     title: `${industry} Command Center`,
     summary: `Run ${operation} and ${revenue} from one connected workspace.`,
-    explanation: `${conclusions.length ? `BO concluded this company ${conclusions.join('; ')}. ` : ''}That points to ${capabilities.slice(0, 6).join(', ')}${capabilities.length > 6 ? ', and the operating controls they depend on' : ''}. Capabilities without evidence in what you described stay hidden.`,
+    explanation: `${conclusions.length ? `Wesify concluded this company ${conclusions.join('; ')}. ` : ''}That points to ${capabilities.slice(0, 6).join(', ')}${capabilities.length > 6 ? ', and the operating controls they depend on' : ''}. Capabilities without evidence in what you described stay hidden.`,
     modules,
     startView: modules.includes('projects') ? 'projects' : modules.includes('sales') ? 'sales' : modules[0] ?? 'overview',
     capabilities,
@@ -378,7 +378,7 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
      */
     throw lastError instanceof Error
       ? lastError
-      : new Error('BO could not reach a model to write the next question. Nothing was lost — retry, or set a free GEMINI_API_KEY if this keeps happening.')
+      : new Error('Wesify could not reach a model to write the next question. Nothing was lost — retry, or set a free GEMINI_API_KEY if this keeps happening.')
   }
 }
 
@@ -401,8 +401,8 @@ function notice(stream: DiscoveryStreamHandlers, turn: DiscoveryAgentResponse | 
   const issue = lastInterviewIssue()
   if (turn && !issue) return
   stream.onNotice?.(
-    'Falling back to BO’s built-in questions',
-    `${issue || 'The interview model kept repeating a question BO had already asked.'} BO is continuing with its own reasoning, so the questions are blunter until the model is reachable again.`,
+    'Falling back to Wesify’s built-in questions',
+    `${issue || 'The interview model kept repeating a question Wesify had already asked.'} Wesify is continuing with its own reasoning, so the questions are blunter until the model is reachable again.`,
   )
 }
 
@@ -447,7 +447,7 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
       const first = await requestDiscoveryTurn(request, request.session.businessState.industry)
       if (usable(first)) { stream.onSource?.(lastInterviewModel()); return first as DiscoveryAgentResponse }
       if (repeats(first)) {
-        stream.onActivity?.('Checking BO has not already asked this')
+        stream.onActivity?.('Checking Wesify has not already asked this')
         const second = await requestDiscoveryTurn(
           { ...request, session: { ...request.session, businessState: first?.businessState ?? request.session.businessState } },
           request.session.businessState.industry,
@@ -481,9 +481,9 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
     } else if (!window.__BO_DISCOVERY_MODEL_MOCK__) {
       stream.onNotice?.(
         'Running the interview in your browser',
-        'The server has no model key, so BO is loading its own small model into this browser — private and free, but a large first download and blunter questions. Set GEMINI_API_KEY — free, from aistudio.google.com/apikey — and restart the server for the fast path: the check runs once when the page loads.',
+        'The server has no model key, so Wesify is loading its own small model into this browser — private and free, but a large first download and blunter questions. Set GEMINI_API_KEY — free, from aistudio.google.com/apikey — and restart the server for the fast path: the check runs once when the page loads.',
       )
-      stream.onSource?.('BO’s in-browser model')
+      stream.onSource?.('Wesify’s in-browser model')
     }
     return this.local.generate(request, stream)
   }

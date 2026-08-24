@@ -39,7 +39,7 @@ export interface BillingState {
 
 async function readOrThrow(response: Response) {
   const detail = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(detail.error || 'BO could not complete that.')
+  if (!response.ok) throw new Error(detail.error || 'Wesify could not complete that.')
   return detail
 }
 

@@ -130,7 +130,7 @@ export function DashboardSurface({ answers, blueprint, compact = false, editable
         <small>PLATFORM</small>
         {(Object.entries(platformMeta) as Array<[PlatformView, typeof platformMeta[PlatformView]]>).map(([id, item]) => { const Icon = item.icon; return <button key={id} className={activeView === id ? 'active' : ''} onClick={() => open(id)} data-testid={`nav-${id}`}><Icon size={18}/><span>{item.label}</span></button> })}
       </nav>
-      <div className="bo-dashboard__agent"><Bot size={16}/><span>Ask BO</span><i/></div>
+      <div className="bo-dashboard__agent"><Bot size={16}/><span>Ask Wesify</span><i/></div>
     </aside>
     <div className="bo-dashboard__main">
       <div className="bo-dashboard__content">

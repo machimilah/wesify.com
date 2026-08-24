@@ -229,7 +229,7 @@ export function planCapabilities(state: BusinessState, architecture: Architectur
   // real operating base rather than the conservative general one.
   const taxonomyPack = packMatch?.score ? null : industryCapabilityPacks.find(item => item.id === research.archetype?.id)
   const pack = packMatch?.score ? packMatch.pack : taxonomyPack ?? null
-  for (const id of architecture.capabilityIds ?? []) if (capabilityById.has(id)) { selected.add(id); reasons[id] = 'Selected by BO architecture' }
+  for (const id of architecture.capabilityIds ?? []) if (capabilityById.has(id)) { selected.add(id); reasons[id] = 'Selected by Wesify architecture' }
   for (const decision of research.include) if (capabilityById.has(decision.capabilityId) && !explicitExcluded.has(decision.capabilityId)) { selected.add(decision.capabilityId); reasons[decision.capabilityId] ||= decision.reason }
   if (pack) for (const id of pack.capabilities) if (!explicitExcluded.has(id)) { selected.add(id); reasons[id] ||= `${pack.label} operating base` }
   for (const definition of capabilityCatalog) {
