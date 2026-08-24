@@ -5,6 +5,7 @@ import {
   Plus, Receipt, RefreshCw, ScanLine, ScrollText, ShieldCheck, ShoppingCart, Sparkles, Target, TrendingUp, Truck,
   Users, UsersRound, Wallet, Warehouse,
   Workflow, Wrench, X, Zap,
+  Calendar,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -23,6 +24,9 @@ import { humanize, readStorage } from '../engine/shared'
 import { faceFor, faceForNavigation } from './faces'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
+import { evaluateActionControl } from '../engine/governanceArchitecture'
+import { planWorkspaceMutation } from '../engine/mutationArchitecture'
+import { refreshWorkspaceIntelligence } from '../engine/operatingArchitecture'
 
 const emptyAutomationWorkspace: AutomationWorkspace = { connectors: [], automations: [], runs: [] }
 
@@ -95,7 +99,7 @@ const navIcons: Record<NavigationDefinition['kind'], typeof LayoutDashboard> = {
 }
 
 export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfig: WorkspaceConfiguration; basePath?: string }) {
-  const normalizedInitial = normalizeNavigation(initialConfig)
+  const normalizedInitial = normalizeNavigation(refreshWorkspaceIntelligence(initialConfig))
   const storagePrefix = `bo-workspace:${initialConfig.id}`
   const [config, setConfig] = useState(normalizedInitial)
   const [records, setRecords] = useState<WorkspaceRecords>(() => readStorage(`${storagePrefix}:records`, readStorage('bo-workspace-records', {})))
@@ -132,7 +136,9 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
    */
   const mountedProject = useRef<Promise<GeneratedProjectManifest | null> | null>(null)
   const readyManifest = async () => manifest ?? await (mountedProject.current ?? Promise.resolve(null))
-  const activeNavigation = config.navigation.find(item => item.id === activeId) ?? config.navigation[0]
+  const visiblePageIds = new Set(config.interfaceArchitecture?.pages.filter(page => page.roleIds.includes(role)).map(page => page.id) ?? config.navigation.map(item => item.id))
+  const visibleNavigation = config.navigation.filter(item => visiblePageIds.has(item.id))
+  const activeNavigation = visibleNavigation.find(item => item.id === activeId) ?? visibleNavigation[0] ?? config.navigation[0]
   const activeView = config.views.find(view => view.id === activeNavigation.viewId)
   const activeEntity = config.entities.find(entity => entity.id === activeView?.entityId)
   const permissions = config.roles.find(item => item.id === role)?.permissions ?? []
@@ -234,10 +240,11 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     if (!manifest) return
     setAutomationWorkspace(await loadAutomationWorkspace(manifest.workspaceId))
   }
-  const runAction = async (action: WorkspaceAction) => {
+  const runAction = async (action: WorkspaceAction, forcePreview = false) => {
+    const control = evaluateActionControl(config, action, { roleId: role })
+    if (control.disposition === 'blocked') { say(control.reasons.at(-1) ?? 'Your role does not allow this action.'); return }
+    if (forcePreview || control.requiresApproval || !control.canExecuteDirectly) { await prepareChange(action); return }
     const result = executeWorkspaceAction(config, records, action)
-    const structural = ['add_field', 'activate_module', 'deactivate_module', 'deactivate_capability', 'create_workflow'].includes(action.type)
-    if (structural) { await prepareChange(action); return }
     try {
       const project = ['create_record', 'update_record', 'delete_record'].includes(action.type) ? await readyManifest() : null
       if (project) {
@@ -305,13 +312,11 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     try {
       const agent = await askWorkspaceAgent(request, config, records, label => setAssistantWorking(label))
       if (agent.response.message) say(agent.response.message)
-      if (agent.action && agent.response.decision === 'PREVIEW') await prepareChange(agent.action)
-      else if (agent.action) await runAction(agent.action)
+      if (agent.action) await runAction(agent.action, agent.response.decision === 'PREVIEW')
     } catch {
       const interpreted = interpretWorkspaceCommand(request, config, records)
       if (interpreted.message) say(interpreted.message)
-      if (interpreted.action && interpreted.needsPreview) await prepareChange(interpreted.action)
-      else if (interpreted.action) await runAction(interpreted.action)
+      if (interpreted.action) await runAction(interpreted.action, Boolean(interpreted.needsPreview))
     } finally { setCommandWorking(false); setAssistantWorking(''); answering.current = false }
   }
 
@@ -336,9 +341,9 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     } catch { /* The alert remains visible if the local service is unavailable. */ }
   }
 
-  const primaryNavigation = config.navigation.filter(item => item.kind === 'home' || item.kind === 'today')
-  const utilityNavigation = config.navigation.filter(item => !['home', 'today', 'entity'].includes(item.kind))
-  const businessNavigation = [...config.navigation.filter(item => item.kind === 'entity').reduce((groups, item) => {
+  const primaryNavigation = visibleNavigation.filter(item => item.kind === 'home' || item.kind === 'today')
+  const utilityNavigation = visibleNavigation.filter(item => !['home', 'today', 'entity'].includes(item.kind))
+  const businessNavigation = [...visibleNavigation.filter(item => item.kind === 'entity').reduce((groups, item) => {
     const module = item.module ?? 'operations'
     const group = groups.get(module) ?? []
     group.push(item)
@@ -432,7 +437,7 @@ function AssistantPanel({ thread, working, command, setCommand, submit, close }:
   return <aside className="bo-assistant-panel" data-testid="assistant-panel">
     <header><span><Bot size={15}/></span><strong>Ask BO</strong><button onClick={close} aria-label="Close assistant"><X size={15}/></button></header>
     <div className="bo-assistant-thread">
-      {thread.length === 0 && <p className="bo-assistant-hint">Tell BO what to do. “Create a client called ACME.” “Track account tier for clients.” “Which project is costing us the most?”</p>}
+      {thread.length === 0 && null}
       {thread.map(message => <div key={message.id} className={`bo-assistant-turn bo-assistant-turn--${message.role}`}>{message.text}</div>)}
       {working && <div className="bo-assistant-turn bo-assistant-turn--working">{working}<i/><i/><i/></div>}
       <div ref={foot}/>
@@ -472,10 +477,10 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
     const entity = config.entities.find(candidate => candidate.id === view?.entityId)
     const face = faceForNavigation(config, item)
     const utility: Record<string, { icon: typeof LayoutDashboard; tint: string; hint: string }> = {
-      today: { icon: Sparkles, tint: 'amber', hint: 'What needs you today' },
+      today: { icon: Calendar, tint: 'amber', hint: 'What needs you today' },
       analytics: { icon: BarChart3, tint: 'indigo', hint: 'Live numbers' },
-      links: { icon: Link2, tint: 'teal', hint: 'Connect other apps' },
-      automations: { icon: Zap, tint: 'teal', hint: 'Connect other apps' },
+      links: { icon: Link2, tint: 'cyan', hint: 'Connect other apps' },
+      automations: { icon: Zap, tint: 'cyan', hint: 'Connect other apps' },
       settings: { icon: Zap, tint: 'slate', hint: 'How BO is set up' },
     }
     const special = utility[item.kind]
@@ -537,7 +542,7 @@ function TodayView({ config, records, navigate }: { config: WorkspaceConfigurati
     { label: 'Operations', text: overdueTasks.length ? `${overdueTasks.length} tasks are overdue.` : 'No overdue tasks.', target: 'projects' },
     ...(config.modules.includes('inventory') ? [{ label: 'Inventory', text: lowStock.length ? `${lowStock.length} products are at or below their reorder point.` : 'No inventory alerts.', target: 'inventory' }] : []),
   ]
-  return <><div className="bo-schema-heading"><h1>Today</h1></div><section className="bo-today-list">{items.map(item => <button key={item.label} onClick={() => navigate(item.target)}><span>{item.label}</span><strong>{item.text}</strong><ArrowRight size={16}/></button>)}</section><section className="bo-recommendations"><small>RECOMMENDED ACTIONS</small>{[...overdueInvoices.slice(0, 2).map(record => `Follow up on ${record.number || 'an overdue invoice'}.`), ...overdueTasks.slice(0, 2).map(record => `Review ${record.title || 'an overdue task'}.`)].map((item, index) => <p key={item}><span>{index + 1}</span>{item}</p>)}{!overdueInvoices.length && !overdueTasks.length && <div className="bo-empty-state">No urgent recommendations from current records.</div>}</section></>
+  return <><div className="bo-schema-heading"><h1>Today</h1></div><section className="bo-today-list">{items.map(item => <button key={item.label} onClick={() => navigate(item.target)}><span>{item.label}</span><strong>{item.text}</strong><ArrowRight size={16}/></button>)}</section><section className="bo-recommendations"><small>RECOMMENDED ACTIONS</small>{!overdueInvoices.length && !overdueTasks.length && <div className="bo-empty-state">No urgent recommendations from current records.</div>}</section></>
 }
 
 function ConnectionBanner({ connection }: { connection: WorkspaceConnection }) {
@@ -618,8 +623,8 @@ function ConnectedApps({ workspaceId, onSynced }: { workspaceId: string; onSynce
 
   return <section className="bo-connected-apps" data-testid="connected-apps">
     <header><h2>Connected apps</h2><small>READ-ONLY</small></header>
-    {note ? <p className="bo-connected-note" role="status">{note}</p> : null}
-    {failed ? <p className="bo-connected-error" role="alert">{failed}</p> : null}
+    {note ? null : null}
+    {failed ? null : null}
     <article data-testid="connected-app-stripe">
       <div><strong>Stripe</strong>{stripe
         ? <small>{stripe.account} · {stripe.lastSyncAt ? `last synced ${new Date(stripe.lastSyncAt).toLocaleString()} · ${syncSummary(stripe.lastSyncCounts)}` : 'not synced yet'}</small>
@@ -708,7 +713,7 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
       <aside>
         <header><h2>Drag onto canvas</h2></header>
         <div><small>WHEN THIS HAPPENS</small>{config.entities.map(entity => { const node: LinkCanvasNode = { id: 'trigger', kind: 'trigger', entityId: entity.id, event: 'created', x: 90, y: 170 }; return <button key={entity.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('trigger', entity.id)} data-testid={`link-trigger-source-${entity.id}`}><GripVertical size={13}/><span><strong>{entity.label}</strong><em>BO record</em></span><Plus size={13}/></button> })}</div>
-        <div><small>DO THIS</small>{workspace.connectors.map(connector => { const node: LinkCanvasNode = { id: 'action', kind: 'action', connectorId: connector.id, x: 560, y: 170 }; return <button key={connector.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('action', connector.id)} data-testid="link-action-source"><GripVertical size={13}/><span><strong>{connector.name}</strong><em>{connector.endpointHost}</em></span><Plus size={13}/></button> })}{!workspace.connectors.length && <p>Add a connection below before placing an action.</p>}</div>
+        <div><small>DO THIS</small>{workspace.connectors.map(connector => { const node: LinkCanvasNode = { id: 'action', kind: 'action', connectorId: connector.id, x: 560, y: 170 }; return <button key={connector.id} onPointerDown={() => setPointerNode(node)} onClick={() => addPaletteNode('action', connector.id)} data-testid="link-action-source"><GripVertical size={13}/><span><strong>{connector.name}</strong><em>{connector.endpointHost}</em></span><Plus size={13}/></button> })}{!workspace.connectors.length && null}</div>
       </aside>
       <div className="bo-links-canvas-scroll">
         <div className="bo-links-canvas" ref={canvasRef} data-testid="links-canvas">
@@ -721,7 +726,7 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
       </div>
     </section>
     <section className="bo-automation-connect bo-links-connection">
-      <div><h2>Plug in Make or another service</h2><p>Create a Custom Webhook in Make and paste its HTTPS URL. BO hides the address after it is saved.</p></div>
+      <div><h2>Plug in Make or another service</h2></div>
       <form onSubmit={addConnector}>
         <label><span>Name</span><input value={connectorName} onChange={input => setConnectorName(input.target.value)} required data-testid="connector-name"/></label>
         <label><span>Connector</span><select value={connectorType} onChange={input => setConnectorType(input.target.value as ConnectorType)}><option value="make-webhook">Make custom webhook</option><option value="generic-webhook">Other HTTPS webhook</option></select></label>
@@ -758,5 +763,8 @@ function RecordForm({ entity, entities, records, initialRecord, onClose, onSubmi
 
 function ChangePreview({ action, config, candidate, onCancel, onApply }: { action: WorkspaceAction; config: WorkspaceConfiguration; candidate: GeneratedProjectManifest | null; onCancel: () => void; onApply: () => void }) {
   const description = action.type === 'add_field' ? `Add “${action.field.label}” to ${config.entities.find(item => item.id === action.entityId)?.pluralLabel}.` : action.type === 'create_workflow' ? `Create the automation “${action.workflow.name}”.` : action.type === 'delete_record' ? `Delete this ${config.entities.find(item => item.id === action.entityId)?.label.toLowerCase()} record.` : action.type === 'activate_module' ? `Add ${action.capabilityId ? capabilityById.get(action.capabilityId)?.label ?? action.capabilityId : action.entities.map(entity => entity.pluralLabel).join(', ')} and everything it requires.` : action.type === 'deactivate_capability' ? `Remove ${capabilityById.get(action.capabilityId)?.label ?? action.capabilityId} from the visible workspace. Existing data stays recoverable.` : `Apply ${action.type.replaceAll('_', ' ')}.`
-  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Sparkles size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>BO prepared your update</h2><p>{description}</p>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
+  const plan = planWorkspaceMutation(config, action)
+  const control = evaluateActionControl(config, action)
+  const affected = [plan.affected.entityIds.length && `${plan.affected.entityIds.length} data types`, plan.affected.viewIds.length && `${plan.affected.viewIds.length} views`, plan.affected.workflowIds.length && `${plan.affected.workflowIds.length} workflows`, plan.affected.kpiIds.length && `${plan.affected.kpiIds.length} KPIs`, plan.affected.agentIds.length && `${plan.affected.agentIds.length} agents`, plan.affected.eventTypes.length && `${plan.affected.eventTypes.length} event types`].filter(Boolean).join(' · ')
+  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Sparkles size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>BO prepared your update</h2><div className="bo-change-impact"><strong>{description}</strong><span>Autonomy level {control.level}: {humanize(control.disposition)}</span>{affected && <span>Affects {affected}</span>}{plan.warnings.map(warning => <span key={warning}>{warning}</span>)}</div>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
 }

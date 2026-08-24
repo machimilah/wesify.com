@@ -14,31 +14,16 @@ gsap.registerPlugin(useGSAP)
  * be told apart by the suite that proves the product itself is still behind an account.
  */
 
-/**
- * One-click starts. The blank prompt box is the hardest moment in the product: people know their
- * business but not what BO wants to hear. A starter fills that in and begins immediately, and the
- * interview refines it from there — so nothing about the first sentence has to be precise.
- */
-const starters = [
-  { label: 'Marketing agency', brief: 'We run a marketing agency with monthly retainers and client campaigns for other businesses.' },
-  { label: 'Plumbing & repairs', brief: 'We run a plumbing service business. Technicians visit customer homes and customers pay on completion.' },
-  { label: 'Online store', brief: 'We sell physical products online, hold stock and ship orders to customers.' },
-  { label: 'Consulting', brief: 'We are a consulting firm delivering client projects billed per project with a small internal team.' },
-  { label: 'Restaurant', brief: 'We run a restaurant with table reservations, suppliers, stock and shift staff.' },
-  { label: 'Manufacturing', brief: 'We manufacture custom furniture and track orders, materials and production in our workshop.' },
-]
-
 const exampleBriefs = [
   'We run a marketing agency with monthly retainers and client campaigns.',
   'We manufacture custom furniture and need to track orders, materials, and production.',
   'We sell B2B SaaS subscriptions with a sales pipeline and customer support.',
 ]
 
-export function CompanyPrompt({ initialValue = '', onSubmit, testId, starterTestId = 'starter' }: {
+export function CompanyPrompt({ initialValue = '', onSubmit, testId }: {
   initialValue?: string
   onSubmit: (brief: string) => void
   testId: string
-  starterTestId?: string
 }) {
   const [brief, setBrief] = useState(initialValue)
   const [focused, setFocused] = useState(false)
@@ -93,15 +78,6 @@ export function CompanyPrompt({ initialValue = '', onSubmit, testId, starterTest
       />
       <button onClick={submit} disabled={!brief.trim()} aria-label="Start building" data-testid="start-building"><ArrowUp size={20}/></button>
     </div>
-    <div className="bo-starters">
-      <small>Or pick the closest one</small>
-      <div>
-        {starters.map(starter => (
-          <button key={starter.label} onClick={() => { setBrief(starter.brief); onSubmit(starter.brief) }} data-testid={starterTestId}>
-            {starter.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <div className="bo-prompt__guidance">Describe what your business does, how work moves, and what you need to manage.</div>
   </>
 }

@@ -85,6 +85,23 @@ export async function discoveryRoutes(request, response, segments) {
       catalog: String(input.catalog ?? '').slice(0, 20000),
       forceArchitecture: input.forceArchitecture === true,
       industry: String(input.industry ?? '').slice(0, 120),
+      knowledgeRequirements: (Array.isArray(input.knowledgeRequirements) ? input.knowledgeRequirements : []).slice(0, 12).map(item => ({
+        id: String(item?.id ?? '').slice(0, 80),
+        domain: String(item?.domain ?? '').slice(0, 80),
+        objective: String(item?.objective ?? '').slice(0, 240),
+        priority: ['critical', 'high', 'medium'].includes(item?.priority) ? item.priority : 'medium',
+        informationNeeded: (Array.isArray(item?.informationNeeded) ? item.informationNeeded : []).slice(0, 8).map(value => String(value).slice(0, 100)),
+        decisionImpact: idsFrom(item?.decisionImpact, 20),
+        rank: Number.isFinite(item?.rank) ? Math.max(0, Math.min(400, item.rank)) : 0,
+      })).filter(item => item.id && item.objective),
+      businessGaps: (Array.isArray(input.businessGaps) ? input.businessGaps : []).slice(0, 12).map(item => ({
+        id: String(item?.id ?? '').slice(0, 80),
+        title: String(item?.title ?? '').slice(0, 160),
+        rationale: String(item?.rationale ?? '').slice(0, 260),
+        classification: ['required', 'recommended', 'future'].includes(item?.classification) ? item.classification : 'recommended',
+        confidence: Number.isFinite(item?.confidence) ? Math.max(0, Math.min(1, item.confidence)) : 0,
+        capabilityIds: idsFrom(item?.capabilityIds, 30),
+      })).filter(item => item.id && item.title),
       // Set only when BO has just rejected this turn's question as one already asked, so the retry
       // knows why rather than rolling the dice on the same prompt.
       repair: String(input.repair ?? '').slice(0, 400),

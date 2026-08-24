@@ -18,7 +18,7 @@
 
 :root {
   /* Surfaces, darkest to lightest role, not literal lightness */
-  --bg: #f4f3ef;
+  --bg: #ffffff;
   --bg-alt: #f1f1ed;
   --surface: #fafaf7;
   --surface-2: #ffffff;
@@ -34,10 +34,17 @@
   --text-3: #7d847d;
   --icon-ink: #181b18;
 
-  /* Brand green */
-  --accent: #2c6b45;
-  --accent-strong: #1c6b45;
-  --accent-soft: #dcede0;
+  /**
+   * Brand accent — graphite, not a hue.
+   *
+   * This was a green, and green was therefore everywhere: every selected chip, every progress bar,
+   * every number BO wanted to draw the eye to. An accent that is a neutral several steps darker than
+   * the text does the same job — it separates "this one" from "the rest" by weight rather than by
+   * colour — and it leaves the only coloured things on screen the ones that are coloured on purpose.
+   */
+  --accent: #3b423f;
+  --accent-strong: #232826;
+  --accent-soft: #e6e7e3;
 
   /* Status */
   --danger: #8a3a31;
@@ -50,7 +57,10 @@
      "something needs attention" regardless of theme, the way a status LED does not change color
      depending on the room lighting. */
   --solid-fill: #202420;
-  --online: #7cc99b;
+  /* The one place a hue is doing work no neutral can: "running" against "needs you". Kept as an
+     amber rather than the usual green, because nothing else in BO is a hue any more and a lone
+     green dot would read as the brand rather than as a state. */
+  --online: #c99a3f;
   --notify: #b4472f;
 }
 
@@ -69,9 +79,9 @@
   --text-3: #7f877f;
   --icon-ink: #eceee9;
 
-  --accent: #b8d8bf;
-  --accent-strong: #b6d7bd;
-  --accent-soft: rgba(184, 216, 191, .14);
+  --accent: #d3d7d2;
+  --accent-strong: #e6e9e5;
+  --accent-soft: rgba(214, 218, 213, .14);
 
   --danger: #e7b6ae;
   --danger-soft: #2c2220;

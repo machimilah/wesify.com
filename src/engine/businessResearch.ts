@@ -1,5 +1,6 @@
 import { industryCapabilityPacks, type IndustryCapabilityPack } from './capabilityCatalog'
 import { resolveIndustry } from './industryResolver'
+import { evaluateOperatingKnowledge, type BusinessGap, type KnowledgeRequirement } from './knowledgeEngine'
 import { saysSignal } from './shared'
 
 /**
@@ -49,6 +50,8 @@ export interface BusinessResearch {
   findings: ResearchFinding[]
   include: ResearchDecision[]
   exclude: ResearchDecision[]
+  knowledgeRequirements: KnowledgeRequirement[]
+  gaps: BusinessGap[]
   coverage: number
 }
 
@@ -281,6 +284,8 @@ export function researchBusiness({ text }: ResearchInput): BusinessResearch {
   }
   for (const capabilityId of exclude.keys()) include.delete(capabilityId)
 
+  const operatingKnowledge = evaluateOperatingKnowledge(normalized, [...include.keys()])
+
   const findings: ResearchFinding[] = resolved.map(reading => {
     const definition = optionOf(researchDimensions.find(item => item.id === reading.dimensionId)!, reading.optionId)!
     return {
@@ -307,6 +312,8 @@ export function researchBusiness({ text }: ResearchInput): BusinessResearch {
     findings,
     include: [...include.entries()].map(([capabilityId, reason]) => ({ capabilityId, reason })),
     exclude: [...exclude.entries()].map(([capabilityId, reason]) => ({ capabilityId, reason })),
+    knowledgeRequirements: operatingKnowledge.requirements,
+    gaps: operatingKnowledge.gaps,
     coverage: Number((resolvedWeight / totalWeight).toFixed(2)),
   }
 }

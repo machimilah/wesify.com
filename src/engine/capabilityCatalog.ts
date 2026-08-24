@@ -6,6 +6,8 @@ import { extendedIndustryPacks } from '../data/industryPacks'
 import { commerceCapabilities } from '../data/capabilities.commerce'
 import { operationsCapabilities } from '../data/capabilities.operations'
 import { financeCapabilities } from '../data/capabilities.finance'
+import type { CapabilityKnowledge } from '../data/operatingKnowledge'
+import { capabilityKnowledgeFor } from './knowledgeEngine'
 import { saysSignal } from './shared'
 
 export type CatalogFieldType = 'text' | 'long-text' | 'number' | 'currency' | 'date' | 'boolean' | 'email' | 'phone' | 'select' | 'relation' | 'file'
@@ -61,6 +63,7 @@ export interface CapabilityDefinition {
   pages: Array<{ id: string; label: string; entityId: string; view?: 'table' | 'kanban' | 'calendar' }>
   metrics?: CatalogMetric[]
   workflows?: CatalogWorkflow[]
+  knowledge?: CapabilityKnowledge
 }
 
 
@@ -138,7 +141,11 @@ const coreCapabilities: CapabilityDefinition[] = [
 ]
 
 /** The whole buildable surface: the core systems plus the extended ERP and CRM coverage. */
-export const capabilityCatalog: CapabilityDefinition[] = [...coreCapabilities, ...commerceCapabilities, ...operationsCapabilities, ...financeCapabilities]
+const rawCapabilityCatalog: CapabilityDefinition[] = [...coreCapabilities, ...commerceCapabilities, ...operationsCapabilities, ...financeCapabilities]
+export const capabilityCatalog: CapabilityDefinition[] = rawCapabilityCatalog.map(item => ({
+  ...item,
+  knowledge: capabilityKnowledgeFor(item.id),
+}))
 
 export const capabilityIds = capabilityCatalog.map(item => item.id)
 export const capabilityById = new Map(capabilityCatalog.map(item => [item.id, item]))

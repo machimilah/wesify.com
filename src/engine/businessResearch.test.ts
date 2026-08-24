@@ -70,4 +70,10 @@ describe('business researcher', () => {
     expect(thin.coverage).toBeLessThan(rich.coverage)
     expect(rich.coverage).toBeGreaterThan(0.6)
   })
+
+  it('reports gap candidates without silently selecting their capabilities', () => {
+    const research = researchBusiness({ text: 'We want a KPI dashboard for management.' })
+    expect(research.gaps).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'operational-reporting', classification: 'future' })]))
+    expect(research.include.map(item => item.capabilityId)).not.toContain('analytics.reporting')
+  })
 })

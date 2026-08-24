@@ -119,13 +119,21 @@ async function openSection(page, id) {
 try {
   // A person meets the home page first, and it is the prompt, so the journey starts by typing.
   await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' })
-  // One page: `/` is the prompt, so there is nowhere to click through to any more.
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  // One page: `/` reveals the prompt in place, so there is nowhere else to navigate first.
+  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  await page.getByTestId('learn-more').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('company-brief').count()) throw new Error('The home page showed the prompt before Get started was clicked.')
+  await page.getByTestId('learn-more').click()
+  await page.waitForFunction(() => document.querySelector('.bo-home__explain')?.getBoundingClientRect().top < window.innerHeight * .25)
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
+  await page.getByTestId('get-started').click()
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('get-started').count()) throw new Error('Get started remained after the prompt opened.')
   await page.waitForFunction(() => (document.querySelector('.bo-prompt__example span')?.textContent?.length ?? 0) > 12)
   if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-home-typewriter.png'), fullPage: true })
-  if ((await page.getByTestId('starter').count()) < 3) throw new Error('The home page lost its one-click starters.')
+  if (await page.getByTestId('starter').count()) throw new Error('The removed homepage starter choices returned.')
+  if (await page.getByText('Describe what your business does, how work moves, and what you need to manage.', { exact: true }).count() !== 1) throw new Error('The homepage prompt guidance is missing.')
   await page.getByTestId('company-brief').click()
   await page.locator('.bo-prompt__example.hidden').waitFor({ state: 'attached' })
   await page.getByTestId('company-brief').fill('We run a marketing agency for technology companies.')
@@ -207,7 +215,7 @@ try {
   await page.getByRole('heading', { name: 'Today', exact: true }).waitFor()
   // An unknown path must fall back to the prompt home rather than rendering an empty workspace.
   await page.goto('http://127.0.0.1:4174/not-a-real-section', { waitUntil: 'networkidle' })
-  await page.getByTestId('company-brief').waitFor()
+  await page.getByTestId('get-started').waitFor()
   await page.goto('http://127.0.0.1:4174/home', { waitUntil: 'networkidle' })
   await page.getByTestId('app-grid').waitFor()
 

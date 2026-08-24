@@ -194,11 +194,11 @@ function CapabilityStrip({ view }: { view: ViewId }) {
 }
 
 function GovernancePanel() {
-  return <section className="bo-control-grid"><article><ShieldCheck size={20}/><strong>Roles & permissions</strong><p>Define view, edit, export, and administrative access by role.</p><button>Configure roles</button></article><article><FileText size={20}/><strong>Activity & audit log</strong><p>Administrative events will appear here as users take action.</p><span>No events recorded</span></article><article><AlertTriangle size={20}/><strong>Security setup</strong><p>MFA, retention, and compliance controls require production configuration.</p><span>Configuration required</span></article></section>
+  return <section className="bo-control-grid"><article><ShieldCheck size={20}/><strong>Roles & permissions</strong><button>Configure roles</button></article><article><FileText size={20}/><strong>Activity & audit log</strong><span>No events recorded</span></article><article><AlertTriangle size={20}/><strong>Security setup</strong><span>Configuration required</span></article></section>
 }
 
 function AutomationPanel() {
-  return <section className="bo-control-grid"><article><Zap size={20}/><strong>Triggers</strong><p>Run an action when an invoice is paid, a contract is signed, or work is overdue.</p><button>Create trigger</button></article><article><Workflow size={20}/><strong>Integrations & API</strong><p>Connect banking, calendars, communication tools, and external systems.</p><span>No connections</span></article><article><FileText size={20}/><strong>Import & export</strong><p>Move operational data using CSV or JSON.</p><button>Import data</button></article></section>
+  return <section className="bo-control-grid"><article><Zap size={20}/><strong>Triggers</strong><button>Create trigger</button></article><article><Workflow size={20}/><strong>Integrations & API</strong><span>No connections</span></article><article><FileText size={20}/><strong>Import & export</strong><button>Import data</button></article></section>
 }
 
 function PipelineBoard({ stages, records }: { stages: string[]; records: string[] }) {

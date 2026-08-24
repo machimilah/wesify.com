@@ -45,6 +45,9 @@ const observe = (subsector, payload, as = '') => {
       'content-type': 'application/json',
       'x-bo-workspace-id': workspaceId,
       'x-bo-access-token': `token-${workspaceId}`.padEnd(40, 'x'),
+      // Separate companies do not normally share one source address. Keep a pinned workspace on one
+      // address while allowing cohort tests to exercise the evidence threshold, not the rate limit.
+      'x-forwarded-for': `198.51.100.${Math.max(1, workspaceCounter % 250)}`,
     },
     body: JSON.stringify({ ...payload, workspaceId }),
   }).then(response => response.json())
@@ -122,6 +125,38 @@ try {
   const forged = industryVerdict(afterForgery)
   assert.ok(!forged.exclude.some(item => item.capabilityId === 'crm.pipeline'), 'one caller reached a verdict on its own')
 
+  // Reusable platform patterns compound too, but only after the same anonymous cohort threshold.
+  for (let i = 0; i < MIN_COMPANIES; i += 1) {
+    await observe('484', {
+      patterns: [
+        { kind: 'process', id: 'distribution', outcome: 'adopted' },
+        { kind: 'process', id: 'distribution', outcome: 'adopted' },
+      ],
+      newCompany: true,
+    })
+  }
+  const patternVerdict = await verdictOf('484')
+  const distribution = patternVerdict.patterns.find(item => item.kind === 'process' && item.patternId === 'distribution')
+  assert.equal(distribution?.companies, MIN_COMPANIES, 'duplicate patterns in one request must count once')
+  assert.equal(distribution?.adoptionShare, 1)
+
+  // A workspace-local receipt prevents repeated reports from inflating a shared pattern count.
+  for (let i = 0; i < MIN_COMPANIES * 2; i += 1) {
+    await observe('485', { patterns: [{ kind: 'kpi', id: 'on-time-delivery', outcome: 'adopted' }], newCompany: true }, 'ws-pattern-reporter')
+  }
+  const repeatedPattern = await readIndustryProfile('485')
+  assert.equal(repeatedPattern.patterns.kpi['on-time-delivery'].adopted, 1)
+  assert.equal(repeatedPattern.companies, 1)
+  assert.deepEqual(industryVerdict(repeatedPattern).patterns, [], 'one workspace must not establish an industry pattern')
+
+  await observe('486', { patterns: [
+    { kind: 'process', id: 'customer private workflow text', outcome: 'adopted' },
+    { kind: 'process', id: 'invented-valid-id', outcome: 'adopted' },
+    { kind: 'unknown', id: 'distribution', outcome: 'adopted' },
+  ], newCompany: true })
+  const rejectedPatterns = await readIndustryProfile('486')
+  assert.deepEqual(rejectedPatterns.patterns, {}, 'free text and unknown pattern kinds must not enter shared learning')
+
   // Reading stays open: the knowledge is aggregate and belongs to everyone using BO.
   assert.equal((await fetch(`http://127.0.0.1:${port}/api/industries/541`)).status, 200)
 
@@ -148,7 +183,7 @@ try {
   assert.ok(freshVerdict.include.some(item => item.capabilityId === 'work.projects'), 'fresh research stopped deciding anything')
   assert.equal(freshVerdict.research.stale, false)
 
-  console.log('Industry test passed: no verdict without evidence, a threshold before deciding, splits left open, behaviour beating research, per-company counting, anonymity, input validation, anonymous writes refused, one workspace counting once however often it reports, and research standing down once it is too old to be evidence.')
+  console.log('Industry test passed: evidence thresholds, aggregate capability and platform-pattern learning, duplicate suppression, anonymity, guarded writes, validation, and expiring research all hold.')
 } finally {
   api.kill()
   await rm(root, { recursive: true, force: true })

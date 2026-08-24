@@ -58,7 +58,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
     <form onSubmit={submit} data-testid="signin-form">
       <Brand/>
       <h1>{forgot ? 'Reset your password' : creating ? 'Create your BO account' : 'Welcome back'}</h1>
-      {forgot && <p className="bo-signin-hint">Tell BO the address on the account and it will send a link to set a new password.</p>}
+      {forgot && null}
       <label>
         <span>Email</span>
         <input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" required autoFocus data-testid="signin-email"/>
@@ -68,8 +68,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
         <input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete={creating ? 'new-password' : 'current-password'} required minLength={creating ? 10 : undefined} data-testid="signin-password"/>
         {creating && <em>At least 10 characters.</em>}
       </label>}
-      {error && <p className="bo-signin-error" role="alert" data-testid="signin-error">{error}</p>}
-      {notice && <p className="bo-signin-notice" role="status" data-testid="signin-notice">{notice}</p>}
+      {error && <div className="bo-signin-error" role="alert" data-testid="signin-error">{error}</div>}
+      {notice && <div className="bo-signin-notice" role="status" data-testid="signin-notice">{notice}</div>}
       <button disabled={working} data-testid="signin-submit">{working ? 'One moment…' : forgot ? 'Send reset link' : creating ? 'Create account' : 'Sign in'} <ArrowRight size={15}/></button>
       {!creating && !forgot && <button type="button" className="bo-signin-switch" onClick={() => go('forgot')} data-testid="signin-forgot">I forgot my password</button>}
       <button type="button" className="bo-signin-switch" onClick={() => go(creating ? 'signin' : 'create')} data-testid="signin-switch">

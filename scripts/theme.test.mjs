@@ -112,6 +112,7 @@ try {
 
   // 4. It survives navigation, not just a reload of one page.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving between pages.')
 

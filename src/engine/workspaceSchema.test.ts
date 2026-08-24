@@ -75,6 +75,7 @@ describe('schema-driven workspace', () => {
     expect(equipment.action?.type).toBe('activate_module')
     const evolved = executeWorkspaceAction(config, {}, equipment.action!).config
     expect(evolved.entities.map(entity => entity.id)).toEqual(expect.arrayContaining(['equipment', 'equipment-assignments', 'maintenance']))
+    expect(evolved.kpis?.map(item => item.id)).toContain('equipment-costs')
     expect(evolved.entities.find(entity => entity.id === 'project-costs')?.fields.map(field => field.id)).toContain('equipment')
     const workflow = interpretWorkspaceCommand('Remind me when equipment requires maintenance', evolved)
     expect(workflow.action?.type).toBe('create_workflow')

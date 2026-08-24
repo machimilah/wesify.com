@@ -1,4 +1,5 @@
 import type { EntityDefinition, FieldDefinition, MetricDefinition, NavigationDefinition, ViewDefinition, WorkflowDefinition, WorkspaceConfiguration } from './workspaceSchema'
+import { refreshWorkspaceIntelligence } from './operatingArchitecture'
 
 export type BusinessRecord = Record<string, string | number | boolean> & { id: string; createdAt: string; updatedAt: string }
 export type WorkspaceRecords = Record<string, BusinessRecord[]>
@@ -62,7 +63,8 @@ export function executeWorkspaceAction(config: WorkspaceConfiguration, records: 
     return { config, records: { ...records, [action.entityId]: (records[action.entityId] ?? []).filter(record => record.id !== action.recordId) }, message: 'Record deleted.' }
   }
   if (action.type === 'add_field') {
-    return { config: { ...config, entities: config.entities.map(entity => entity.id === action.entityId ? { ...entity, fields: [...entity.fields, action.field] } : entity) }, records, message: `${action.field.label} added.` }
+    const nextConfig = { ...config, entities: config.entities.map(entity => entity.id === action.entityId ? { ...entity, fields: [...entity.fields, action.field] } : entity) }
+    return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.field.label} added.` }
   }
   if (action.type === 'activate_module') {
     const updatedEntities = config.entities.map(entity => {
@@ -73,10 +75,14 @@ export function executeWorkspaceAction(config: WorkspaceConfiguration, records: 
     const insertionIndex = utilityIndex < 0 ? config.navigation.length : utilityIndex
     const capabilityIds = [...(action.capabilityIds ?? []), ...(action.capabilityId ? [action.capabilityId] : [])]
     const capabilityPlan = config.capabilityPlan && capabilityIds.length ? { ...config.capabilityPlan, excluded: config.capabilityPlan.excluded.filter(id => !capabilityIds.includes(id)), reasons: { ...config.capabilityPlan.reasons, ...Object.fromEntries(capabilityIds.map(id => [id, 'Added later through BO'])) } } : config.capabilityPlan
-    return { config: { ...config, capabilityPlan, modules: [...new Set([...config.modules, action.module, ...action.entities.map(entity => entity.module)])], capabilities: capabilityIds.length ? [...new Set([...(config.capabilities ?? []), ...capabilityIds])] : config.capabilities, entities: [...updatedEntities, ...action.entities.filter(entity => !updatedEntities.some(existing => existing.id === entity.id))], views: [...config.views, ...action.views.filter(view => !config.views.some(existing => existing.id === view.id))], navigation: [...config.navigation.slice(0, insertionIndex), ...action.navigation.filter(item => !config.navigation.some(existing => existing.id === item.id)), ...config.navigation.slice(insertionIndex)], metrics: [...config.metrics, ...(action.metrics ?? []).filter(metric => !config.metrics.some(existing => existing.id === metric.id))], workflows: [...config.workflows, ...(action.workflows ?? []).filter(workflow => !config.workflows.some(existing => existing.id === workflow.id))] }, records, message: `${action.capabilityLabel ?? action.capabilityId ?? action.module} added to the workspace.` }
+    const nextConfig: WorkspaceConfiguration = { ...config, capabilityPlan, modules: [...new Set([...config.modules, action.module, ...action.entities.map(entity => entity.module)])], capabilities: capabilityIds.length ? [...new Set([...(config.capabilities ?? []), ...capabilityIds])] : config.capabilities, entities: [...updatedEntities, ...action.entities.filter(entity => !updatedEntities.some(existing => existing.id === entity.id))], views: [...config.views, ...action.views.filter(view => !config.views.some(existing => existing.id === view.id))], navigation: [...config.navigation.slice(0, insertionIndex), ...action.navigation.filter(item => !config.navigation.some(existing => existing.id === item.id)), ...config.navigation.slice(insertionIndex)], metrics: [...config.metrics, ...(action.metrics ?? []).filter(metric => !config.metrics.some(existing => existing.id === metric.id))], workflows: [...config.workflows, ...(action.workflows ?? []).filter(workflow => !config.workflows.some(existing => existing.id === workflow.id))] }
+    return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.capabilityLabel ?? action.capabilityId ?? action.module} added to the workspace.` }
   }
   if (action.type === 'deactivate_module') {
-    return { config: { ...config, modules: config.modules.filter(module => module !== action.module), entities: config.entities.filter(entity => entity.module !== action.module), views: config.views.filter(view => config.entities.find(entity => entity.id === view.entityId)?.module !== action.module), navigation: config.navigation.filter(item => item.module !== action.module) }, records, message: `${action.module} removed from the workspace.` }
+    const remainingEntities = config.entities.filter(entity => entity.module !== action.module)
+    const remainingEntityIds = new Set(remainingEntities.map(entity => entity.id))
+    const nextConfig: WorkspaceConfiguration = { ...config, modules: config.modules.filter(module => module !== action.module), entities: remainingEntities, views: config.views.filter(view => remainingEntityIds.has(view.entityId)), navigation: config.navigation.filter(item => item.module !== action.module), metrics: config.metrics.filter(metric => remainingEntityIds.has(metric.entityId)), workflows: config.workflows.filter(workflow => remainingEntityIds.has(workflow.trigger.entityId)) }
+    return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.module} removed from the workspace.` }
   }
   if (action.type === 'deactivate_capability') {
     const remainingEntities = config.entities.filter(entity => !action.entityIds.includes(entity.id))
@@ -86,9 +92,10 @@ export function executeWorkspaceAction(config: WorkspaceConfiguration, records: 
     const remainingCapabilities = (config.capabilities ?? []).filter(id => id !== action.capabilityId)
     const remainingModules = config.modules.filter(module => remainingEntities.some(entity => entity.module === module))
     const capabilityPlan = config.capabilityPlan ? { ...config.capabilityPlan, excluded: [...new Set([...config.capabilityPlan.excluded, action.capabilityId])], reasons: { ...config.capabilityPlan.reasons, [action.capabilityId]: 'Removed later through BO' } } : config.capabilityPlan
-    return { config: { ...config, capabilityPlan, capabilities: remainingCapabilities, modules: remainingModules, entities: remainingEntities, views: remainingViews, navigation: config.navigation.filter(item => !item.viewId || remainingViewIds.has(item.viewId)), metrics: config.metrics.filter(item => !action.metricIds.includes(item.id) && remainingEntityIds.has(item.entityId)), workflows: config.workflows.filter(item => !action.workflowIds.includes(item.id) && remainingEntityIds.has(item.trigger.entityId)) }, records, message: `${action.capabilityLabel ?? action.capabilityId} removed from the workspace. Existing record data is preserved for recovery.` }
+    const nextConfig: WorkspaceConfiguration = { ...config, capabilityPlan, capabilities: remainingCapabilities, modules: remainingModules, entities: remainingEntities, views: remainingViews, navigation: config.navigation.filter(item => !item.viewId || remainingViewIds.has(item.viewId)), metrics: config.metrics.filter(item => !action.metricIds.includes(item.id) && remainingEntityIds.has(item.entityId)), workflows: config.workflows.filter(item => !action.workflowIds.includes(item.id) && remainingEntityIds.has(item.trigger.entityId)) }
+    return { config: refreshWorkspaceIntelligence(nextConfig), records, message: `${action.capabilityLabel ?? action.capabilityId} removed from the workspace. Existing record data is preserved for recovery.` }
   }
-  if (action.type === 'create_workflow') return { config: { ...config, workflows: [...config.workflows, action.workflow] }, records, message: 'Automation created.' }
+  if (action.type === 'create_workflow') return { config: refreshWorkspaceIntelligence({ ...config, workflows: [...config.workflows, action.workflow] }), records, message: 'Automation created.' }
   if (action.type === 'navigate') return { config, records, message: '', navigationId: action.navigationId }
   return { config, records, message: `${records[action.entityId]?.length ?? 0} records found.`, navigationId: config.navigation.find(item => config.views.find(view => view.id === item.viewId)?.entityId === action.entityId)?.id }
 }

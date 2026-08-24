@@ -148,6 +148,7 @@ create table if not exists industry_knowledge (
   label      text        not null default '',
   companies  integer     not null default 0,
   observed   jsonb       not null default '{}'::jsonb,
+  patterns   jsonb       not null default '{}'::jsonb,
   researched jsonb,
   updated_at timestamptz not null default now()
 );
@@ -304,7 +305,8 @@ $$;
 
 insert into schema_migrations (name)
 values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'),
-       ('004_billing.sql'), ('005_industry_knowledge.sql'), ('006_interview_and_builds.sql')
+       ('004_billing.sql'), ('005_industry_knowledge.sql'), ('006_interview_and_builds.sql'),
+       ('007_platform_patterns.sql')
 on conflict (name) do nothing;
 
 

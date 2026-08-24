@@ -17,3 +17,9 @@ docs/*.toc
 
 # Coverage reports are generated on every run and belong to whoever ran it.
 coverage/
+
+# Local document QA renders and Python caches
+docs/investor-render/
+docs/investor-pdf-render/
+__pycache__/
+*.pyc

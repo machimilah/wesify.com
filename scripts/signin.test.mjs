@@ -90,6 +90,8 @@ try {
    * account. What stays gated is the workspace that describing one produces — so the check is not
    * "can a stranger see a prompt" but "can a stranger reach a Command Center".
    */
+  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
   await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
@@ -99,6 +101,7 @@ try {
 
   // 2. Describing a company asks who you are before building anything — and keeps what was typed,
   //    so it is not asked for twice.
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
   await page.getByTestId('start-building').click()
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
@@ -194,6 +197,7 @@ try {
 
   // The public home page still offers the way back in, and a legacy flat link is gated the same way.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   await page.getByTestId('open-signin').waitFor({ timeout: 20_000 })
 
@@ -203,6 +207,7 @@ try {
 
   // 9. And the home page still works signed out, which is where a stranger starts.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)

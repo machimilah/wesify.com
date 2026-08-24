@@ -6,6 +6,15 @@ import { selectCompanyTemplate } from './companyTemplates'
 import { slug } from './shared'
 import { resolveIndustry } from './industryResolver'
 import { planConnections, type WorkspaceConnection } from './connections'
+import { createBusinessModelV2, type BusinessModelV2 } from './businessModel'
+import { enrichEntityFieldsFromKnowledge } from './knowledgeEngine'
+import { generateKpiDefinitions, type GeneratedKpiDefinition } from './kpiEngine'
+import { refreshWorkspaceIntelligence } from './operatingArchitecture'
+import type { CompiledBusinessAgent } from './agentArchitecture'
+import type { BusinessGraph } from './businessGraph'
+import type { EventArchitecture } from './eventArchitecture'
+import type { GeneratedInterfaceArchitecture } from './interfaceArchitecture'
+import type { GovernanceArchitecture } from './governanceArchitecture'
 
 export type FieldType = 'text' | 'long-text' | 'number' | 'currency' | 'date' | 'boolean' | 'email' | 'phone' | 'select' | 'relation' | 'file'
 export type ViewType = 'table' | 'kanban' | 'cards' | 'calendar' | 'timeline'
@@ -103,6 +112,13 @@ export interface WorkspaceConfiguration {
   views: ViewDefinition[]
   navigation: NavigationDefinition[]
   metrics: MetricDefinition[]
+  /** Rich KPI specifications generated from the selected operating model. */
+  kpis?: GeneratedKpiDefinition[]
+  agents?: CompiledBusinessAgent[]
+  businessGraph?: BusinessGraph
+  eventArchitecture?: EventArchitecture
+  interfaceArchitecture?: GeneratedInterfaceArchitecture
+  governanceArchitecture?: GovernanceArchitecture
   workflows: WorkflowDefinition[]
   roles: RoleDefinition[]
   /** Capabilities another app owns. BO shows these pages but does not hold the records. */
@@ -110,6 +126,8 @@ export interface WorkspaceConfiguration {
   /** Where this company sits in the industry taxonomy, so BO can learn per industry. */
   industrySubsector?: string
   industryLabel?: string
+  /** Additive operating intelligence. Version-1 workspaces remain valid without this field. */
+  businessModel?: BusinessModelV2
 }
 
 const field = (id: string, label: string, type: FieldType, extra: Partial<FieldDefinition> = {}): FieldDefinition => ({ id, label, type, ...extra })
@@ -212,7 +230,7 @@ export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBl
     ...(entities.some(item => item.id === 'tasks') ? [{ id: 'open-tasks', label: 'Open tasks', entityId: 'tasks', operation: 'count' as const, filter: { field: 'status', notEquals: 'Done' }, roles: ['owner', 'admin', 'manager', 'employee'] as WorkspaceRoleId[], format: 'number' as const }] : []),
     ...(entities.some(item => item.id === 'project-costs') ? [{ id: 'project-costs', label: 'Project costs', entityId: 'project-costs', operation: 'sum' as const, field: 'amount', roles: ['owner', 'admin', 'manager', 'accountant'] as WorkspaceRoleId[], format: 'currency' as const }] : []),
   ]
-  return { version: 1, id: crypto.randomUUID(), profile, modules, entities, views, navigation, metrics, workflows: [], roles }
+  return refreshWorkspaceIntelligence({ version: 1, id: crypto.randomUUID(), profile, modules, entities, views, navigation, metrics, workflows: [], roles })
 }
 
 export function isWorkspaceConfiguration(value: unknown): value is WorkspaceConfiguration {
@@ -395,6 +413,18 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     }
     else entities.push(compiled)
   }
+  const knowledgeText = [
+    businessState.companySummary,
+    businessState.industry,
+    ...businessState.businessModel,
+    ...businessState.productsOrServices,
+    ...businessState.operations,
+    ...businessState.resources,
+    ...businessState.knownEntities,
+    ...businessState.knownWorkflows,
+    ...businessState.facts.map(item => `${item.topic} ${item.value}`),
+  ].join(' ')
+  entities = enrichEntityFieldsFromKnowledge(entities, knowledgeText, capabilityPlan.selected.map(item => item.id))
   const views: ViewDefinition[] = entities.map(entity => {
     const preferred = catalogEntityMetadata.get(entity.id)
     const type = preferred?.view ?? (entity.fields.some(item => item.id === 'status') && /project|task|job|deal|lead|order|booking|campaign|production|ticket/i.test(entity.id) ? 'kanban' : 'table')
@@ -471,5 +501,9 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   const modules = [...new Set([...capabilityPlan.selected.map(item => item.module), ...architecture.modules, ...blueprint.modules.filter(module => entities.some(entity => entity.module === module))])]
   const connections = planConnections(capabilityPlan.selected.map(item => item.id), [...businessState.currentTools, ...businessState.softwareImplications, businessState.companySummary].join(' '))
   const industry = resolveIndustry([businessState.companySummary, businessState.industry, ...businessState.productsOrServices].filter(Boolean).join('. '))
-  return { version: 1, id: crypto.randomUUID(), profile, modules, capabilities: capabilityPlan.selected.map(item => item.id), capabilityPlan: { packId: capabilityPlan.pack?.id ?? 'custom', excluded: capabilityPlan.excluded, reasons: capabilityPlan.reasons }, entities, views, navigation, metrics, workflows, roles, connections, industrySubsector: industry?.subsector, industryLabel: industry?.subsectorTitle }
+  const capabilities = capabilityPlan.selected.map(item => item.id)
+  const kpis = generateKpiDefinitions({ capabilityIds: capabilities, entities, metrics, goals: businessState.goals })
+  const config: WorkspaceConfiguration = { version: 1, id: crypto.randomUUID(), profile, modules, capabilities, capabilityPlan: { packId: capabilityPlan.pack?.id ?? 'custom', excluded: capabilityPlan.excluded, reasons: capabilityPlan.reasons }, entities, views, navigation, metrics, kpis, workflows, roles, connections, industrySubsector: industry?.subsector, industryLabel: industry?.subsectorTitle }
+  config.businessModel = createBusinessModelV2({ config, state: businessState, architecture, research: capabilityPlan.research })
+  return refreshWorkspaceIntelligence(config)
 }

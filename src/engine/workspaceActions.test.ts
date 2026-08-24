@@ -102,6 +102,9 @@ describe('changing the workspace itself', () => {
     for (const workflow of after.config.workflows) {
       expect(after.config.entities.some(candidate => candidate.id === workflow.trigger.entityId), `${workflow.name} triggers on records that no longer exist`).toBe(true)
     }
+    for (const kpi of after.config.kpis ?? []) for (const source of kpi.dataSources) {
+      expect(after.config.entities.some(candidate => candidate.id === source.entityId), `${kpi.name} reads an entity that no longer exists`).toBe(true)
+    }
   })
 
   it('adds a field without disturbing the fields already there', () => {

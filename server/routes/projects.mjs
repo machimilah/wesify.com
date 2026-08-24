@@ -9,6 +9,7 @@ import { buildProject, currentManifest, listVersions, promoteProject, rollbackPr
 import { readWorkspaceData, writeWorkspaceData } from '../records.mjs'
 import { readDiscoverySession } from '../discoverySessions.mjs'
 import { compileOpeningRecords, proposeOpeningRecords } from '../openingRecords.mjs'
+import { dispatchMutationEvents, mutationEventDefinitions, triggerEventNotifications } from '../businessEvents.mjs'
 
 /**
  * The workspace itself: building it, changing it, and everything inside it.
@@ -95,7 +96,8 @@ export async function buildRoutes(request, response, segments) {
   const input = await body(request)
   await tenant(request, input.workspaceId)
   const existing = await currentManifest(input.workspaceId)
-  if (existing?.specification?.profile?.description === input.specification?.profile?.description) return send(response, 200, existing)
+  const currentArchitecture = existing?.specification?.interfaceArchitecture?.version === 1 && existing?.specification?.governanceArchitecture?.version === 1
+  if (currentArchitecture && existing?.specification?.profile?.description === input.specification?.profile?.description) return send(response, 200, existing)
   const pending = initialBuilds.get(input.workspaceId)
   if (pending) return send(response, 200, await pending)
   const build = (async () => {
@@ -134,7 +136,7 @@ export async function projectRoutes(request, response, segments, url) {
     if (databaseAvailable() && caller?.user) await requireRebuildRoom(caller.user.id)
     const project = await buildProject({ workspaceId, specification: input.specification, changeDescription: input.changeDescription ?? 'Updated Command Center', changeType: input.changeType ?? 'workspace-change', promote: false })
     if (databaseAvailable() && caller?.user) await recordRebuild(caller.user.id, workspaceId)
-    await audit(workspaceId, 'project.change_prepared', request, { version: project.version, changeType: input.changeType ?? 'workspace-change' })
+    await audit(workspaceId, 'project.change_prepared', request, { version: project.version, changeType: input.changeType ?? 'workspace-change', mutationPlan: input.mutationPlan ?? null })
     return send(response, 201, project)
   }
 
@@ -210,7 +212,8 @@ export async function projectRoutes(request, response, segments, url) {
       authorize(manifest, request, 'admin')
       const input = await body(request)
       const state = await readAutomationWorkspace(workspaceId)
-      if (!manifest.entities.some(item => item.id === input.entityId) || !['created', 'updated'].includes(input.event) || !state.connectors.some(item => item.id === input.connectorId)) {
+      const compiledEvent = (manifest.specification?.eventArchitecture?.definitions ?? []).some(definition => definition.type === input.event && definition.sourceEntityIds?.includes(input.entityId))
+      if (!manifest.entities.some(item => item.id === input.entityId) || (!['created', 'updated'].includes(input.event) && !compiledEvent) || !state.connectors.some(item => item.id === input.connectorId)) {
         return send(response, 400, { error: 'Choose a valid record type, trigger, and connector.' })
       }
       const now = new Date().toISOString()
@@ -294,9 +297,12 @@ export async function projectRoutes(request, response, segments, url) {
       const record = { id: randomUUID(), workspaceId, ...values, createdAt: now, updatedAt: now }
       let next = { ...data, [entityId]: [...collection, record] }
       next = triggerWorkflows(manifest, next, entityId, 'created', record)
+      const events = mutationEventDefinitions(manifest, entityId, 'created')
+      next = triggerEventNotifications(manifest, next, events, entityId, record)
       await writeWorkspaceData(workspaceId, next)
       await audit(workspaceId, 'record.created', request, { entityId, recordId: record.id })
       await triggerManagedAutomations(workspaceId, 'created', entityId, record)
+      await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'created', record)
       return send(response, 201, record)
     }
 
@@ -311,16 +317,22 @@ export async function projectRoutes(request, response, segments, url) {
       const record = { ...current, ...values, workspaceId, updatedAt: new Date().toISOString() }
       let next = { ...data, [entityId]: collection.map(item => item.id === recordId ? record : item) }
       next = triggerWorkflows(manifest, next, entityId, 'updated', record)
+      const events = mutationEventDefinitions(manifest, entityId, 'updated')
+      next = triggerEventNotifications(manifest, next, events, entityId, record)
       await writeWorkspaceData(workspaceId, next)
       await audit(workspaceId, 'record.updated', request, { entityId, recordId })
       await triggerManagedAutomations(workspaceId, 'updated', entityId, record)
+      await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'updated', record, values)
       return send(response, 200, record)
     }
 
     if (request.method === 'DELETE') {
       authorize(manifest, request, 'delete')
-      await writeWorkspaceData(workspaceId, { ...data, [entityId]: collection.filter(record => record.id !== recordId) })
+      const events = mutationEventDefinitions(manifest, entityId, 'deleted')
+      const next = triggerEventNotifications(manifest, { ...data, [entityId]: collection.filter(record => record.id !== recordId) }, events, entityId, current)
+      await writeWorkspaceData(workspaceId, next)
       await audit(workspaceId, 'record.deleted', request, { entityId, recordId })
+      await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'deleted', current)
       return send(response, 200, { deleted: true })
     }
   }

@@ -36,13 +36,18 @@ const { recordObservations, saveResearch, readIndustryProfile, listIndustries, i
 try {
   // 1. An observation is a row, not a file.
   for (let company = 0; company < MIN_COMPANIES + 1; company += 1) {
-    await recordObservations('541', { removed: ['work.time'], kept: ['crm.contacts'], newCompany: true, label: 'Professional services' })
+    await recordObservations('541', {
+      removed: ['work.time'], kept: ['crm.contacts'],
+      patterns: [{ kind: 'process', id: 'collections', outcome: 'adopted' }],
+      newCompany: true, label: 'Professional services',
+    })
   }
   const rows = (await query('select * from industry_knowledge')).rows
   assert.equal(rows.length, 1, 'the observation did not reach Postgres')
   assert.equal(rows[0].subsector, '541')
   assert.equal(Number(rows[0].companies), MIN_COMPANIES + 1)
   assert.equal(rows[0].observed['work.time'].removed, MIN_COMPANIES + 1)
+  assert.equal(rows[0].patterns.process.collections.adopted, MIN_COMPANIES + 1)
   assert.equal(rows[0].label, 'Professional services')
 
   // 2. Nothing about it is on local disk. This is the property that actually matters: with a
@@ -72,6 +77,7 @@ try {
   const verdict = industryVerdict(withResearch)
   assert.ok(verdict.exclude.some(item => item.capabilityId === 'work.time' && item.basis === 'observed'))
   assert.ok(verdict.include.some(item => item.capabilityId === 'crm.pipeline' && item.basis === 'researched'))
+  assert.ok(verdict.patterns.some(item => item.kind === 'process' && item.patternId === 'collections'))
   assert.equal(verdict.research.stale, false)
 
   // 5. It survives the server being replaced. A fresh import — the same thing a redeploy does — sees

@@ -111,6 +111,7 @@ try {
   if (status.available !== true) throw new Error(`The frontier tier should be available in this run: ${JSON.stringify(status)}`)
 
   // Every essential operating-model dimension is stated, so BO has enough to architect without asking.
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business. Technicians visit customer homes. Customers pay on completion. We have a small team.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')

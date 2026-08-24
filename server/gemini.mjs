@@ -13,22 +13,37 @@
  * schema sanitiser below is the only part that needs explaining.
  */
 
-export const GEMINI_MODEL = process.env.BO_GEMINI_MODEL || 'gemini-3.7-flash'
+/**
+ * Ordered by what answers fastest, not by what is newest.
+ *
+ * Measured against a live free key, one interview turn each:
+ *
+ *   gemini-3.5-flash        2.7-4.0s   honours thinkingBudget 0
+ *   gemini-3.1-flash-lite   1.0-3.4s   honours thinkingBudget 0
+ *   gemini-3.6-flash        7-10s      rejects thinkingBudget, so it always thinks first
+ *   gemini-3.7-flash        503 after 12s, then 503 after 39s, then 429
+ *
+ * The newest model was first, which is why an interview took ten seconds and sometimes far longer:
+ * BO spent the operator's wait discovering that the most contended model on the free tier was busy,
+ * before trying anything that would answer. Asked the same question, 3.5-flash and 3.1-flash-lite
+ * returned the identical question text, so leading with a smaller model costs nothing that shows.
+ *
+ * Every name was checked against a real key. The 2.5 family, which reads like the safe conservative
+ * fallback, is refused outright for keys issued now — so when this list needs updating, run the
+ * models rather than reasoning about which ought to work.
+ */
+export const GEMINI_MODEL = process.env.BO_GEMINI_MODEL || 'gemini-3.5-flash'
+const GEMINI_FALLBACK_MODELS = (process.env.BO_GEMINI_FALLBACK_MODELS ?? 'gemini-3.1-flash-lite,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash-preview')
+  .split(',').map(name => name.trim()).filter(Boolean)
 
 /**
- * Other free models to try when the first one has no quota left.
+ * Models that refuse `thinkingConfig`, remembered after the first refusal.
  *
- * The free tier meters per model, not per key: the newest flash model runs out first because it is
- * the one everybody uses, while another on the same key still answers. Without this, the first 429 of
- * the day ends the intelligent interview — the failure this whole path exists to prevent.
- *
- * Every name here was checked against a real free key. The 2.5 family, which read like the safe
- * conservative fallback, is refused outright for keys issued now: "no longer available to new users".
- * A fallback list nobody has actually called is a list of names, not a fallback — so when this needs
- * updating, run the models through a live key rather than reasoning about which ought to work.
+ * They answer a flat "Request contains an invalid argument.", so BO learns it the only way available:
+ * by being told once. Without this the same 400 is paid on every single call — a wasted round trip in
+ * front of somebody waiting, on every question of every interview.
  */
-const GEMINI_FALLBACK_MODELS = (process.env.BO_GEMINI_FALLBACK_MODELS ?? 'gemini-3.5-flash,gemini-3.6-flash,gemini-3.1-flash-lite,gemini-3-flash-preview')
-  .split(',').map(name => name.trim()).filter(Boolean)
+const refusesThinkingConfig = new Set()
 
 /**
  * What this process has learned about each model, so one turn's discovery is not re-paid by the next.
@@ -114,17 +129,20 @@ function retryAfter(detail) {
  *
  * The whole point is that none of these reach the operator as BO reverting to a fixed questionnaire.
  */
-export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, thinkingBudget = 0, temperature = 0.4 }) {
+export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, thinkingBudget = 0, temperature = 0.4, timeoutMs = 12000 }) {
   if (!geminiAvailable()) throw Object.assign(new Error('BO is not configured for Gemini. Set GEMINI_API_KEY to enable it.'), { status: 503 })
 
   const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS.filter(name => name !== GEMINI_MODEL)]
-  let generationConfig = {
+  const wireSchema = geminiSchema(schema)
+  // Rebuilt per attempt rather than mutated, so a model already known to refuse thinkingConfig never
+  // gets sent it a second time — the 400 that used to cost a round trip on every single question.
+  const configFor = name => ({
     responseMimeType: 'application/json',
-    responseSchema: geminiSchema(schema),
+    responseSchema: wireSchema,
     maxOutputTokens: maxTokens,
     temperature,
-    thinkingConfig: { thinkingBudget },
-  }
+    ...(refusesThinkingConfig.has(name) ? {} : { thinkingConfig: { thinkingBudget } }),
+  })
   // Anything this process already knows to be gone or spent is skipped, rather than re-proved on
   // every question. If that leaves nothing, the whole list is tried again: better a slow turn than a
   // refusal based on a note BO wrote to itself an hour ago.
@@ -143,15 +161,32 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
   }
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const response = await fetch(`${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey() },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig,
-      }),
-    })
+    /**
+     * A deadline, because a busy model does not always say so quickly.
+     *
+     * One measured 503 took 12 seconds to arrive and another took 39, all of it spent in front of
+     * somebody waiting for a question. Past the deadline BO stops listening and asks the next model,
+     * which on the same key answers in about two seconds.
+     */
+    const deadline = AbortSignal.timeout(timeoutMs)
+    let response
+    try {
+      response = await fetch(`${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey() },
+        signal: deadline,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: configFor(model),
+        }),
+      })
+    } catch (error) {
+      lastError = Object.assign(new Error(`${model} did not answer within ${Math.round(timeoutMs / 1000)}s.`), { status: 504 })
+      parkModel(model, 60 * 1000)
+      if (moveOn()) continue
+      throw lastError
+    }
     if (response.ok) return { text: textFrom(await response.json()), model }
 
     const detail = await response.text().catch(() => '')
@@ -169,15 +204,27 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
      * while three usable models sat in the list. The parameter is an optimisation; dropping it and
      * asking again costs one round trip and is right whatever the wording.
      */
-    if (response.status === 400 && generationConfig.thinkingConfig) {
-      const { thinkingConfig, ...rest } = generationConfig
-      generationConfig = rest
+    if (response.status === 400 && !refusesThinkingConfig.has(model)) {
+      refusesThinkingConfig.add(model)
       continue
     }
-    if (BUSY.has(response.status) && busyAttempts < 2) {
-      busyAttempts += 1
-      await wait(busyAttempts * 1500)
-      continue
+    /**
+     * A busy model is left, not waited for — while there is another one to ask.
+     *
+     * BO used to sleep 1.5s and try the same model again, twice, before moving on. On a free tier
+     * where "currently experiencing high demand" is the normal answer from the newest model, that is
+     * three seconds of sleep plus three slow round trips, all of it in front of somebody waiting for
+     * a question that another model on the same key would have answered in two. Waiting is right
+     * only when there is nothing else left to try.
+     */
+    if (BUSY.has(response.status)) {
+      parkModel(model, 60 * 1000)
+      if (moveOn()) continue
+      if (busyAttempts < 2) {
+        busyAttempts += 1
+        await wait(busyAttempts * 1000)
+        continue
+      }
     }
     if (response.status === 404) {
       // Google names the replacement in the message — "use models/gemini-3.5-flash-lite" — so BO

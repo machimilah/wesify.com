@@ -32,6 +32,18 @@ const question = {
 }
 const architecture = {
   ...question,
+  businessState: {
+    ...question.businessState,
+    facts: [
+      ...question.businessState.facts,
+      { topic: 'Job flow', value: 'Customer calls, technician visits, completed work is invoiced', status: 'explicit', confidence: 0.9, evidence: 'First the customer calls, then a technician visits, and after completion we invoice.', basis: 'user' },
+      { topic: 'Billing', value: 'Invoice on completion', status: 'explicit', confidence: 0.9, evidence: 'We invoice after the job is complete.', basis: 'user' },
+    ],
+    revenueModel: ['Invoice on completion'],
+    team: ['Technicians'],
+    resources: ['Parts held in service vans'],
+    knownWorkflows: ['First the customer calls, then a technician visits, and after completion the job is invoiced'],
+  },
   decision: 'READY_TO_ARCHITECT',
   acknowledgment: 'Ready.',
   nextQuestion: { text: '', reason: '', suggestedAnswers: [] },
@@ -130,6 +142,7 @@ try {
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')

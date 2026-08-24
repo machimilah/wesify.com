@@ -1,5 +1,6 @@
 import type { ArchitectureContext } from './businessDiscovery'
 import { workspaceAccessHeaders } from './workspaceAccess'
+import { automationPatterns, knowledgeRequirementSpecs, kpiPatterns, masterDataTemplates, processPatterns } from '../data/operatingKnowledge'
 
 /**
  * What other companies in the same industry actually kept.
@@ -26,6 +27,7 @@ export interface IndustryVerdict {
   include: IndustryDecision[]
   exclude: IndustryDecision[]
   sources: Array<{ title: string; url: string }>
+  patterns?: Array<{ kind: 'workflow' | 'kpi' | 'schema' | 'business-rule' | 'automation' | 'process' | 'diagnostic'; patternId: string; companies: number; adoptionShare: number; reason: string }>
 }
 
 export async function loadIndustryVerdict(subsector: string | undefined): Promise<IndustryVerdict | null> {
@@ -34,7 +36,7 @@ export async function loadIndustryVerdict(subsector: string | undefined): Promis
     const response = await fetch(`/api/industries/${subsector}`)
     if (!response.ok) return null
     const verdict = await response.json() as IndustryVerdict
-    return verdict.include.length || verdict.exclude.length ? verdict : null
+    return verdict.include.length || verdict.exclude.length || (verdict.patterns?.length ?? 0) ? verdict : null
   } catch {
     return null
   }
@@ -47,7 +49,9 @@ export async function loadIndustryVerdict(subsector: string | undefined): Promis
  * The id is used for that check and is not stored in the shared knowledge. Failure is silent: losing
  * one observation is never worth interrupting someone's work.
  */
-export async function recordIndustryObservations(subsector: string | undefined, workspaceId: string, observations: { kept?: string[]; removed?: string[]; added?: string[]; label?: string; newCompany?: boolean }) {
+type IndustryPatternKind = NonNullable<IndustryVerdict['patterns']>[number]['kind']
+
+export async function recordIndustryObservations(subsector: string | undefined, workspaceId: string, observations: { kept?: string[]; removed?: string[]; added?: string[]; patterns?: Array<{ kind: IndustryPatternKind; id: string; outcome: 'adopted' | 'removed' }>; label?: string; newCompany?: boolean }) {
   if (!subsector || !/^\d{3}$/.test(subsector) || !workspaceId) return
   try {
     await fetch(`/api/industries/${subsector}/observations`, {
@@ -67,9 +71,21 @@ export async function recordIndustryObservations(subsector: string | undefined, 
 export function applyIndustryVerdict(architecture: ArchitectureContext, verdict: IndustryVerdict | null): ArchitectureContext {
   if (!verdict) return architecture
   const excluded = new Set(verdict.exclude.map(item => item.capabilityId))
+  const patternCatalog: Partial<Record<IndustryPatternKind, Array<{ id: string; capabilityIds: string[] }>>> = {
+    process: processPatterns,
+    kpi: kpiPatterns,
+    schema: masterDataTemplates,
+    automation: automationPatterns,
+    workflow: automationPatterns,
+    'business-rule': automationPatterns,
+    diagnostic: knowledgeRequirementSpecs,
+  }
+  const learnedCapabilities = (verdict.patterns ?? []).flatMap(pattern =>
+    patternCatalog[pattern.kind]?.find(candidate => candidate.id === pattern.patternId)?.capabilityIds ?? [],
+  )
   return {
     ...architecture,
-    capabilityIds: [...new Set([...architecture.capabilityIds, ...verdict.include.map(item => item.capabilityId)])].filter(id => !excluded.has(id)),
+    capabilityIds: [...new Set([...architecture.capabilityIds, ...verdict.include.map(item => item.capabilityId), ...learnedCapabilities])].filter(id => !excluded.has(id)),
     excludedCapabilityIds: [...new Set([...architecture.excludedCapabilityIds, ...excluded])],
   }
 }

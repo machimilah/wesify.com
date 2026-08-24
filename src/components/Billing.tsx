@@ -54,32 +54,26 @@ export function Billing({ onBack }: { onBack: () => void }) {
       <ThemeToggle/>
     </header>
 
-    {outcome === 'done' && <p className="bo-billing__notice" role="status" data-testid="billing-checkout-done">Payment received. Your new plan appears here as soon as Stripe confirms it.</p>}
-    {outcome === 'cancelled' && <p className="bo-billing__notice" role="status">Checkout cancelled. Nothing was charged.</p>}
-    {error && <p className="bo-signin-error" role="alert" data-testid="billing-error">{error}</p>}
+    {outcome === 'done' && null}
+    {outcome === 'cancelled' && null}
+    {error && null}
 
-    {!state ? <p className="bo-billing__loading">Loading…</p> : <>
+    {!state ? null : <>
       <section className="bo-billing__current" data-testid="billing-current">
         <small>Your plan</small>
         <h1>{state.planName}</h1>
-        <p>
-          {state.limits.records === null ? 'Unlimited records' : `Up to ${state.limits.records} records`}
-          {typeof state.workspaces === 'number' && ` · ${state.workspaces} of ${state.limits.workspaces} workspace${state.limits.workspaces === 1 ? '' : 's'} used`}
-          {state.limits.rebuildsPerMonth > 0 && ` · ${state.rebuildsUsedThisMonth ?? 0} of ${state.limits.rebuildsPerMonth} rebuilds used this month`}
-        </p>
-        {state.status === 'past_due' && <p className="bo-billing__warning" data-testid="billing-past-due">Your last payment did not go through. Stripe will try again — update your card to keep your plan.</p>}
+        {state.status === 'past_due' && null}
         {state.plan !== 'free' && <button type="button" onClick={() => void go(billingPortal, 'portal')} disabled={Boolean(working)} data-testid="billing-portal">
           {working === 'portal' ? 'One moment…' : 'Manage subscription'}
         </button>}
       </section>
 
-      {!state.billingAvailable && <p className="bo-billing__notice" data-testid="billing-unavailable">This BO has no payment provider configured, so every account is on the free plan.</p>}
+      {!state.billingAvailable && null}
 
       <section className="bo-billing__plans">
         {state.plans.map(plan => <article key={plan.id} className={plan.id === state.plan ? 'is-current' : ''} data-testid={`billing-plan-${plan.id}`}>
           <h2>{plan.name}</h2>
           <strong>{plan.priceUsd === 0 ? 'Free' : `$${plan.priceUsd}`}<em>{plan.priceUsd === 0 ? ' forever' : ' / month'}</em></strong>
-          <p>{plan.summary}</p>
           <ul>
             {limitLine(plan).map(line => <li key={line}><Check size={13}/> {line}</li>)}
             <li>{plan.limits.connectedApps ? <Check size={13}/> : <Minus size={13}/>} Connected apps</li>
@@ -94,10 +88,6 @@ export function Billing({ onBack }: { onBack: () => void }) {
               : <span className="bo-billing__on">&nbsp;</span>}
         </article>)}
       </section>
-
-      <p className="bo-billing__footnote">
-        Nothing is ever deleted for non-payment. If a plan lapses, everything you have stays readable and exportable — you simply stop adding to it until you are back on a plan that covers it.
-      </p>
     </>}
   </main>
 }

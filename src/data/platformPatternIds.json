@@ -1,0 +1,29 @@
+{
+  "process": [
+    "planning", "supply", "sales", "production-planning", "production", "quality-control",
+    "nonconformance", "corrective-maintenance", "finished-output-handoff", "finished-goods-warehouse",
+    "distribution", "collections", "payments", "complaints", "preventive-maintenance",
+    "indirect-purchasing", "recruiting", "offboarding", "period-close", "waste-recovery"
+  ],
+  "kpi": [
+    "revenue-vs-plan", "cash-position", "days-to-collect", "margin", "commitment-reliability",
+    "customer-complaints", "supplier-reliability", "inventory-accuracy", "stockouts", "on-time-delivery",
+    "project-delivery", "time-to-hire", "employee-turnover", "training-completion",
+    "production-effectiveness", "quality-conformance", "waste-rate", "asset-availability",
+    "maintenance-duration", "period-close-duration"
+  ],
+  "schema": [
+    "products", "machines", "people", "materials", "spares", "indirect-costs", "warehouses",
+    "quality-specifications", "logistics", "customers", "suppliers", "audits", "projects"
+  ],
+  "automation": [
+    "commitment-escalation", "approval-threshold", "external-confirmation", "constraint-release",
+    "inventory-replenishment", "quality-exception", "asset-lock-release", "delivery-proof",
+    "collections-escalation", "complaint-resolution", "preventive-schedule", "employee-lifecycle", "period-close"
+  ],
+  "diagnostic": [
+    "value-flow", "revenue-and-collection", "ownership-and-access", "supply-continuity",
+    "inventory-control", "planning-and-capacity", "quality-and-exceptions", "asset-continuity",
+    "performance-and-goals", "systems-and-source-of-truth"
+  ]
+}

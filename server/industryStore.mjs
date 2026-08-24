@@ -22,7 +22,7 @@ import { databaseAvailable, query, queryOne } from './db.mjs'
 
 const root = () => path.resolve(process.env.BO_GENERATED_ROOT || path.join(process.cwd(), 'generated-projects'), '.industry-knowledge')
 
-export const emptyProfile = subsector => ({ subsector, label: '', researched: null, observed: {}, companies: 0, updatedAt: '' })
+export const emptyProfile = subsector => ({ subsector, label: '', researched: null, observed: {}, patterns: {}, companies: 0, updatedAt: '' })
 
 export function checkSubsector(subsector) {
   if (!/^\d{3}$/.test(String(subsector))) throw Object.assign(new Error('A NAICS subsector is three digits.'), { status: 400 })
@@ -36,6 +36,7 @@ const fromRow = row => ({
   label: row.label ?? '',
   companies: Number(row.companies ?? 0),
   observed: row.observed ?? {},
+  patterns: row.patterns ?? {},
   researched: row.researched ?? null,
   updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
 })
@@ -57,12 +58,12 @@ export async function writeProfile(profile) {
   checkSubsector(profile.subsector)
   if (databaseAvailable()) {
     await query(
-      `insert into industry_knowledge (subsector, label, companies, observed, researched, updated_at)
-       values ($1, $2, $3, $4, $5, now())
+      `insert into industry_knowledge (subsector, label, companies, observed, patterns, researched, updated_at)
+       values ($1, $2, $3, $4, $5, $6, now())
        on conflict (subsector) do update set
          label = excluded.label, companies = excluded.companies,
-         observed = excluded.observed, researched = excluded.researched, updated_at = now()`,
-      [profile.subsector, profile.label ?? '', profile.companies ?? 0, JSON.stringify(profile.observed ?? {}), profile.researched ? JSON.stringify(profile.researched) : null],
+         observed = excluded.observed, patterns = excluded.patterns, researched = excluded.researched, updated_at = now()`,
+      [profile.subsector, profile.label ?? '', profile.companies ?? 0, JSON.stringify(profile.observed ?? {}), JSON.stringify(profile.patterns ?? {}), profile.researched ? JSON.stringify(profile.researched) : null],
     )
     return profile
   }

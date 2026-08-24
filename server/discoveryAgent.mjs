@@ -60,7 +60,7 @@ Ask plenty. Ten to fourteen questions is a good interview, and more is fine whil
 - If they ask you to just build it, or say they do not know, stop asking immediately and build with stated assumptions.
 - Leave suggestedAnswers empty. The operator answers in their own words; offering choices teaches them BO wants a pick rather than a sentence, and their sentence is worth more.
 
-Record what you learn in businessState: what the operator said is explicit, what you reasonably concluded is inferred, what is still open is unknown. Never invent facts about this company — no customer names, no numbers, no volumes.
+Record what you learn in businessState: what the operator said is explicit, what you reasonably concluded is inferred, what is still open is unknown. Include concise evidence and a basis of user or inference for each fact when possible. Never invent facts about this company — no customer names, no numbers, no volumes.
 
 While the decision is ASK_QUESTION, return an empty architectureContext with every required field present. Return only schema-valid JSON. Never expose private reasoning.`
 
@@ -83,6 +83,9 @@ Name pages and entities in the company's own language — not BO's, and not anot
  */
 const stringList = (_maxItems = 12, maxLength = 160) => ({ type: 'array', items: { type: 'string', maxLength } })
 
+/** Business-state fields the interview no longer asks for, because nothing in BO reads them. */
+const UNREAD_STATE_FIELDS = ['painPoints', 'uncertainties', 'assumptions']
+
 /**
  * Built from the ids the client holds rather than a copy kept here.
  *
@@ -97,7 +100,7 @@ export function discoverySchema(capabilityIds, modules, { architecting = true } 
         type: 'object', additionalProperties: false,
         properties: {
           companySummary: { type: 'string', maxLength: 280 }, industry: { type: 'string', maxLength: 80 },
-          facts: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', maxLength: 60 }, value: { type: 'string', maxLength: 160 }, status: { type: 'string', enum: ['explicit', 'inferred', 'unknown', 'irrelevant'] }, confidence: { type: 'number', minimum: 0, maximum: 1 } }, required: ['topic', 'value', 'status', 'confidence'] } },
+          facts: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', maxLength: 60 }, value: { type: 'string', maxLength: 160 }, status: { type: 'string', enum: ['explicit', 'inferred', 'unknown', 'irrelevant'] }, confidence: { type: 'number', minimum: 0, maximum: 1 }, evidence: { type: 'string', maxLength: 180 }, basis: { type: 'string', enum: ['user', 'inference', 'research'] } }, required: ['topic', 'value', 'status', 'confidence'] } },
           businessModel: stringList(), productsOrServices: stringList(), customers: stringList(), revenueModel: stringList(), team: stringList(), operations: stringList(), resources: stringList(), locations: stringList(), currentTools: stringList(), painPoints: stringList(), goals: stringList(), knownEntities: stringList(), knownWorkflows: stringList(), uncertainties: stringList(), assumptions: stringList(), softwareImplications: stringList(),
         },
         required: ['companySummary', 'industry', 'facts', 'businessModel', 'productsOrServices', 'customers', 'revenueModel', 'team', 'operations', 'resources', 'locations', 'currentTools', 'painPoints', 'goals', 'knownEntities', 'knownWorkflows', 'uncertainties', 'assumptions', 'softwareImplications'],
@@ -164,11 +167,27 @@ export function discoverySchema(capabilityIds, modules, { architecting = true } 
   const keep = architecting
     ? ['decision', 'acknowledgment', 'nextQuestion', 'architectureContext']
     : ['businessState', 'decision', 'acknowledgment', 'nextQuestion']
-  return {
-    type: 'object', additionalProperties: false,
-    properties: Object.fromEntries(keep.map(key => [key, full.properties[key]])),
-    required: keep,
+  const kept = Object.fromEntries(keep.map(key => [key, full.properties[key]]))
+
+  /**
+   * Three fields nobody has ever read, no longer written.
+   *
+   * `painPoints`, `uncertainties` and `assumptions` were generated on every single turn — three more
+   * lists of sentences for the model to compose — and grepping the whole product finds not one place
+   * that displays, stores or reasons over any of them. Every one of those tokens was time an operator
+   * spent watching a spinner. They are filled back in as empty arrays where the reply is parsed, so
+   * the shape the client validates against is unchanged.
+   */
+  if (!architecting) {
+    const state = kept.businessState
+    kept.businessState = {
+      ...state,
+      properties: Object.fromEntries(Object.entries(state.properties).filter(([key]) => !UNREAD_STATE_FIELDS.includes(key))),
+      required: state.required.filter(key => !UNREAD_STATE_FIELDS.includes(key)),
+    }
   }
+
+  return { type: 'object', additionalProperties: false, properties: kept, required: keep }
 }
 
 /** What a turn returns for the half it was not asked to produce. */
@@ -184,7 +203,7 @@ const emptyArchitecture = () => ({
  * No web tools and no second pass. A question the operator is sitting and waiting for has to come
  * back in seconds; researching the industry is a separate, slower call that runs alongside it.
  */
-export async function runDiscoveryTurn({ mode, conversation = [], businessState = null, capabilityIds = [], modules = [], catalog = '', forceArchitecture = false, industry = '', repair = '' }) {
+export async function runDiscoveryTurn({ mode, conversation = [], businessState = null, capabilityIds = [], modules = [], catalog = '', forceArchitecture = false, industry = '', repair = '', knowledgeRequirements = [], businessGaps = [] }) {
   if (!capabilityIds.length || !modules.length) throw Object.assign(new Error('The capability catalog is required.'), { status: 400 })
   const architecting = mode !== 'DISCOVER'
 
@@ -207,9 +226,11 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   ].join('\n') : ''
   const repairLine = repair ? `\n\n${repair}` : ''
   const industryLine = industry ? `\n\nBO classified this company as: ${industry}. Treat that as a hint, not a fact.` : ''
+  const knowledgeLine = knowledgeRequirements.length ? `\n\nUnresolved operating knowledge objectives, highest value first:\n${knowledgeRequirements.map(item => `- [${item.priority}] ${item.objective}${item.informationNeeded?.length ? ` Relevant information may include: ${item.informationNeeded.join(', ')}.` : ''}`).join('\n')}\nThese are decision objectives, not a questionnaire. Use only objectives relevant to this company, translate one into a short natural question only when its answer changes the software, and never ask for an objective already answered in the conversation.` : ''
+  const gapLine = businessGaps.length ? `\n\nContextual operating-gap candidates:\n${businessGaps.map(item => `- [${item.classification}, confidence ${item.confidence}] ${item.title}: ${item.rationale} Candidate capabilities: ${item.capabilityIds.join(', ') || 'none'}.`).join('\n')}\nThese are advisory candidates, not automatic features. Reject candidates unsupported by the operator's evidence. During discovery, use a candidate only to choose a high-value question. During architecture, select its capability only when the conversation supports it.` : ''
   const instruction = architecting
-    ? `${known}\n\nThe conversation:\n${said}${industryLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
-    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${repairLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
+    ? `${known}\n\nThe conversation:\n${said}${industryLine}${knowledgeLine}${gapLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
+    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
 
   const schema = discoverySchema(capabilityIds, modules, { architecting })
   const system = architecting ? architectSystem : consultantSystem
@@ -229,6 +250,10 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
       maxTokens: architecting ? 8000 : 3000,
       thinkingBudget: architecting ? 2048 : 0,
       temperature: architecting ? 0.2 : 0.6,
+      // A question is something a person is sitting and waiting for, so BO gives up on a slow model
+      // quickly and asks a faster one. The architecture pass is the one long wait BO is allowed, and
+      // it produces far more text, so it gets real patience instead.
+      timeoutMs: architecting ? 40000 : 9000,
     })
     raw = result.text
     usedModel = result.model
@@ -267,8 +292,13 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   // The half this turn was not asked for, filled from what BO already holds. The architect echoing
   // back a business state it never changed was pure output tokens; the interview describing an
   // architecture it was told to leave empty was the same waste in the other direction.
-  if (architecting) parsed.businessState ??= businessState ?? undefined
-  else parsed.architectureContext ??= emptyArchitecture()
+  if (architecting) {
+    parsed.businessState ??= businessState ?? undefined
+  } else {
+    parsed.architectureContext ??= emptyArchitecture()
+    // Put back what the schema stopped asking for, so the client validates the same shape as always.
+    if (parsed.businessState) for (const key of UNREAD_STATE_FIELDS) parsed.businessState[key] ??= []
+  }
 
   const allowed = new Set(capabilityIds)
   const architecture = parsed.architectureContext

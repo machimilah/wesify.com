@@ -13,6 +13,7 @@ import {
 import { capabilityCatalogPrompt, capabilityIds, planCapabilities } from './capabilityCatalog'
 import { researchBusiness, type BusinessResearch } from './businessResearch'
 import { lastInterviewIssue, lastInterviewModel, requestDiscoveryTurn, serverInterviewAvailable } from './discoveryTurnClient'
+import { evaluateOperatingKnowledge, knowledgeRequirementsFor } from './knowledgeEngine'
 
 const MODEL_F16 = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
 const MODEL_F32 = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
@@ -54,7 +55,7 @@ const responseSchema = {
       type: 'object', additionalProperties: false,
       properties: {
         companySummary: { type: 'string', maxLength: 280 }, industry: { type: 'string', maxLength: 80 },
-        facts: { type: 'array', maxItems: 24, items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', maxLength: 60 }, value: { type: 'string', maxLength: 160 }, status: { type: 'string', enum: ['explicit', 'inferred', 'unknown', 'irrelevant'] }, confidence: { type: 'number', minimum: 0, maximum: 1 } }, required: ['topic', 'value', 'status', 'confidence'] } },
+        facts: { type: 'array', maxItems: 24, items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', maxLength: 60 }, value: { type: 'string', maxLength: 160 }, status: { type: 'string', enum: ['explicit', 'inferred', 'unknown', 'irrelevant'] }, confidence: { type: 'number', minimum: 0, maximum: 1 }, evidence: { type: 'string', maxLength: 180 }, basis: { type: 'string', enum: ['user', 'inference', 'research'] } }, required: ['topic', 'value', 'status', 'confidence'] } },
         businessModel: list(), productsOrServices: list(), customers: list(), revenueModel: list(), team: list(), operations: list(), resources: list(), locations: list(), currentTools: list(), painPoints: list(), goals: list(), knownEntities: list(), knownWorkflows: list(), uncertainties: list(), assumptions: list(), softwareImplications: list(),
       },
       required: ['companySummary', 'industry', 'facts', 'businessModel', 'productsOrServices', 'customers', 'revenueModel', 'team', 'operations', 'resources', 'locations', 'currentTools', 'painPoints', 'goals', 'knownEntities', 'knownWorkflows', 'uncertainties', 'assumptions', 'softwareImplications'],
@@ -85,7 +86,7 @@ Ask exactly one question at a time, only when its answer can materially change e
 Write questions the way a person talks: everyday words, under fifteen words, one idea, answerable in a few words from memory. "Who does the work?" not "What is your resourcing model?". Never use business-school or software vocabulary — no entities, records, workflows, pipeline, cadence, fulfilment, utilisation, SKU, CRM, ERP.
 Ask plenty: ten to fourteen questions is a good interview, and more is fine while each still changes what gets built. Cover what they sell, who does the work, who they sell to, how a job runs start to finish, how and when money arrives, what they buy or keep in stock, what they schedule, who works there and who may do what, what they track today, and what goes wrong most often.
 Leave suggestedAnswers empty: the operator answers in their own words, and their sentence is worth more than a pick from a list. Put your private selection rationale only in nextQuestion.reason. It is never shown. Keep acknowledgment short and factual.
-Confidence: record user statements as explicit, reasonable implications as inferred, unresolved material facts as unknown, and non-material facts as irrelevant. Do not invent operational facts.
+Confidence: record user statements as explicit, reasonable implications as inferred, unresolved material facts as unknown, and non-material facts as irrelevant. For each fact, include concise evidence and basis when possible. Do not invent operational facts.
 Stop once another question would stop changing what gets built. If the latest user asks to just build, or says they do not know, decide READY_TO_ARCHITECT immediately using stated facts and explicit assumptions.
 When READY_TO_ARCHITECT, leave architectureContext empty. A dedicated architecture agent will design the Command Center next. For ASK_QUESTION, also return an empty architecture object with all required fields, including empty capabilityIds and excludedCapabilityIds.
 Return only valid JSON matching the supplied schema. Never expose chain-of-thought.`
@@ -191,12 +192,23 @@ export async function generateLocalStructuredJson<T>({ messages, schema, maxToke
 
 function modelMessages(request: DiscoveryModelRequest): ChatCompletionMessageParam[] {
   const instruction = request.mode === 'REVIEW_ARCHITECTURE' ? criticSystem : request.mode === 'ARCHITECT' ? architectureSystem : discoverySystem
+  const conversation = conversationForModel(request.session)
+  const knowledgeText = [
+    ...conversation.filter(message => message.role === 'user').map(message => message.content),
+    request.session.businessState.companySummary,
+    request.session.businessState.industry,
+    ...request.session.businessState.operations,
+    ...request.session.businessState.resources,
+  ].join(' ')
+  const operatingKnowledge = evaluateOperatingKnowledge(knowledgeText, request.session.architecture?.capabilityIds ?? [])
   const context = {
     mode: request.mode,
     forceArchitecture: Boolean(request.forceArchitecture),
     businessState: request.session.businessState,
-    conversation: conversationForModel(request.session),
+    conversation,
     priorQuestions: request.session.messages.filter(message => message.role === 'assistant' && message.content.includes('?')).map(message => message.content),
+    unresolvedOperatingKnowledge: knowledgeRequirementsFor(knowledgeText, request.session.architecture?.capabilityIds ?? []),
+    businessGapCandidates: operatingKnowledge.gaps,
     proposedArchitecture: request.mode === 'REVIEW_ARCHITECTURE' ? request.session.architecture : undefined,
     repairInstruction: request.repairInstruction || undefined,
   }
@@ -287,6 +299,21 @@ export function researchSession(session: DiscoverySession, state: BusinessState 
   return researchBusiness(researchInput(session, state))
 }
 
+export interface DiscoveryReadiness {
+  ready: boolean
+  coverage: number
+  unresolvedCritical: Array<{ id: string; objective: string }>
+}
+
+/** A model may end the interview only after the operating flow and revenue path are resolved. */
+export function assessDiscoveryReadiness(session: DiscoverySession, state: BusinessState = session.businessState): DiscoveryReadiness {
+  const research = researchSession(session, state)
+  const unresolvedCritical = research.knowledgeRequirements
+    .filter(item => item.priority === 'critical')
+    .map(item => ({ id: item.id, objective: item.objective }))
+  return { ready: unresolvedCritical.length === 0 && research.coverage >= 0.35, coverage: research.coverage, unresolvedCritical }
+}
+
 async function generateOnce(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}) {
   if (window.__BO_DISCOVERY_MODEL_MOCK__) return window.__BO_DISCOVERY_MODEL_MOCK__(request, stream)
   stream.onActivity?.(request.mode === 'REVIEW_ARCHITECTURE' ? 'Reviewing the Command Center' : request.mode === 'ARCHITECT' ? 'Designing your Command Center' : 'Understanding your business')
@@ -322,6 +349,10 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
         const result = await generateOnce({ ...request, repairInstruction }, stream)
         if (request.mode === 'DISCOVER' && result.decision === 'ASK_QUESTION' && isDuplicateQuestion(result.nextQuestion.text, request.session)) {
           throw new Error('The proposed question repeats information already resolved.')
+        }
+        if (request.mode === 'DISCOVER' && result.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture) {
+          const readiness = assessDiscoveryReadiness(request.session, result.businessState)
+          if (!readiness.ready) throw new Error(`The interview ended before these critical operating decisions were resolved: ${readiness.unresolvedCritical.map(item => item.objective).join('; ') || `operating-model coverage is ${Math.round(readiness.coverage * 100)}%`}. Ask one natural high-value question instead.`)
         }
         if (request.mode !== 'DISCOVER' && !hasUsableArchitecture(result.architectureContext)) throw new Error('The architecture is incomplete.')
         console.info('[BO discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
@@ -382,6 +413,24 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
     // A mock stands in for the model, not for the pipeline around it: it falls through to the local
     // path so the repair loop and the question BO insists on asking still apply to it.
     if (!window.__BO_DISCOVERY_MODEL_MOCK__ && await serverInterviewAvailable()) {
+      /**
+       * The critic pass is skipped on this path, and it costs nothing to skip.
+       *
+       * It was written for the 0.5B model in the browser, where a second opinion genuinely repaired
+       * bad output. On the server there is no separate critic prompt: `runDiscoveryTurn` treats every
+       * non-DISCOVER turn as an architecture turn, so this re-ran the *identical* architect prompt
+       * over the same inputs and waited another seven seconds to be told roughly the same thing.
+       * That was half of the wait at the end of an interview, spent re-deriving an answer BO had.
+       */
+      if (request.mode === 'REVIEW_ARCHITECTURE') {
+        return {
+          businessState: request.session.businessState,
+          decision: 'READY_TO_ARCHITECT',
+          acknowledgment: '',
+          nextQuestion: { text: '', reason: '', suggestedAnswers: [] },
+          architectureContext: request.session.architecture ?? emptyArchitecture(),
+        }
+      }
       stream.onActivity?.(request.mode === 'DISCOVER' ? 'Understanding your business' : 'Designing your Command Center')
       /**
        * A repeat is asked again, not given up on.
@@ -392,16 +441,27 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
        * second attempt is told what went wrong, and only then does the browser model take over.
        */
       const repeats = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && isDuplicateQuestion(turn.nextQuestion.text, request.session))
-      const usable = (turn: DiscoveryAgentResponse | null) => Boolean(turn && !repeats(turn) && (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)))
+      const premature = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture && !assessDiscoveryReadiness(request.session, turn.businessState).ready)
+      const usable = (turn: DiscoveryAgentResponse | null) => Boolean(turn && !repeats(turn) && !premature(turn) && (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)))
 
       const first = await requestDiscoveryTurn(request, request.session.businessState.industry)
       if (usable(first)) { stream.onSource?.(lastInterviewModel()); return first as DiscoveryAgentResponse }
       if (repeats(first)) {
         stream.onActivity?.('Checking BO has not already asked this')
         const second = await requestDiscoveryTurn(
-          request,
+          { ...request, session: { ...request.session, businessState: first?.businessState ?? request.session.businessState } },
           request.session.businessState.industry,
           `You just proposed "${first?.nextQuestion.text}", which repeats something already asked or already answered. Ask about a different part of how this company runs, or decide READY_TO_ARCHITECT if nothing left to ask would change what gets built.`,
+        )
+        if (usable(second)) { stream.onSource?.(lastInterviewModel()); return second as DiscoveryAgentResponse }
+      }
+      if (premature(first)) {
+        stream.onActivity?.('Checking the operating model is complete')
+        const readiness = assessDiscoveryReadiness(request.session, first?.businessState ?? request.session.businessState)
+        const second = await requestDiscoveryTurn(
+          { ...request, session: { ...request.session, businessState: first?.businessState ?? request.session.businessState } },
+          request.session.businessState.industry,
+          `You tried to finish before the operating model was ready. Unresolved critical objectives: ${readiness.unresolvedCritical.map(item => item.objective).join('; ') || `coverage is ${Math.round(readiness.coverage * 100)}%`}. Ask one short natural question that resolves the highest-value objective. Do not return READY_TO_ARCHITECT yet.`,
         )
         if (usable(second)) { stream.onSource?.(lastInterviewModel()); return second as DiscoveryAgentResponse }
       }

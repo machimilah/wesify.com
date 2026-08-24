@@ -95,7 +95,23 @@ export async function countedIndustries(workspaceId) {
 export async function markIndustryCounted(workspaceId, subsector, already) {
   const root = projectPaths(workspaceId).root
   await mkdir(root, { recursive: true })
-  await writeFile(path.join(root, 'industry.json'), `${JSON.stringify({ counted: [...already, subsector] }, null, 2)}\n`, 'utf8')
+  let receipt = {}
+  try { receipt = JSON.parse(await readFile(path.join(root, 'industry.json'), 'utf8')) } catch { /* First receipt. */ }
+  await writeFile(path.join(root, 'industry.json'), `${JSON.stringify({ ...receipt, counted: [...already, subsector] }, null, 2)}\n`, 'utf8')
+}
+
+export async function industryContributionKeys(workspaceId, subsector) {
+  try { return JSON.parse(await readFile(path.join(projectPaths(workspaceId).root, 'industry.json'), 'utf8')).contributions?.[subsector] ?? [] }
+  catch { return [] }
+}
+
+export async function markIndustryContributions(workspaceId, subsector, keys) {
+  const root = projectPaths(workspaceId).root
+  await mkdir(root, { recursive: true })
+  let receipt = {}
+  try { receipt = JSON.parse(await readFile(path.join(root, 'industry.json'), 'utf8')) } catch { /* First receipt. */ }
+  const contributions = { ...(receipt.contributions ?? {}), [subsector]: [...new Set([...(receipt.contributions?.[subsector] ?? []), ...keys])] }
+  await writeFile(path.join(root, 'industry.json'), `${JSON.stringify({ ...receipt, contributions }, null, 2)}\n`, 'utf8')
 }
 
 /**

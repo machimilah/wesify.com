@@ -19,7 +19,6 @@ import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoveryS
 import { generateWorkspaceConfigurationFromDiscovery } from '../engine/workspaceSchema'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
-import { DashboardSurface } from './Dashboard'
 
 gsap.registerPlugin(useGSAP)
 
@@ -93,7 +92,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const [error, setError] = useState('')
   const [launching, setLaunching] = useState(false)
   const [launchPhase, setLaunchPhase] = useState(0)
-  const [launchBlueprint, setLaunchBlueprint] = useState<AIBlueprint | null>(null)
   const [thoughts, setThoughts] = useState<BuildThought[]>([])
   const [frontier, setFrontier] = useState<FrontierResearch | null>(null)
   const [industry, setIndustry] = useState<IndustryVerdict | null>(null)
@@ -280,13 +278,19 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     localStorage.setItem(`bo-workspace-config:${workspaceId}`, JSON.stringify(config))
     localStorage.setItem('bo-workspace-id', workspaceId)
     // What this company was given becomes evidence for the next company in the same industry.
-    void recordIndustryObservations(config.industrySubsector, workspaceId, { kept: config.capabilities ?? [], label: config.industryLabel, newCompany: true })
+    const patterns = [
+      ...(config.businessModel?.operatingModel.processIds ?? []).map(id => ({ kind: 'process' as const, id, outcome: 'adopted' as const })),
+      ...(config.businessModel?.intelligence.kpiPatternIds ?? []).map(id => ({ kind: 'kpi' as const, id, outcome: 'adopted' as const })),
+      ...(config.businessModel?.governance.approvalPatternIds ?? []).map(id => ({ kind: 'automation' as const, id, outcome: 'adopted' as const })),
+      ...(config.businessModel?.knowledge.requirementIds ?? []).map(id => ({ kind: 'diagnostic' as const, id, outcome: 'adopted' as const })),
+    ]
+    void recordIndustryObservations(config.industrySubsector, workspaceId, { kept: config.capabilities ?? [], patterns, label: config.industryLabel, newCompany: true })
     onAnswersChange(nextAnswers)
     onBlueprintChange(blueprint)
     const now = new Date().toISOString()
     commit({ ...session, phase: 'BUILDING', projectId: workspaceId, metrics: { ...session.metrics, architectureApproved: true, approvedAt: now }, updatedAt: now })
     launchRect.current = root.current?.getBoundingClientRect() ?? null
-    setLaunchBlueprint(blueprint); setLaunchPhase(0); setLaunching(true)
+    setLaunchPhase(0); setLaunching(true)
   }
 
   useEffect(() => {
@@ -301,7 +305,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   }
 
   useGSAP(() => {
-    if (!launching || !launchRect.current || !launchBlueprint) return
+    if (!launching || !launchRect.current) return
     const rect = launchRect.current
     const media = gsap.matchMedia()
     media.add('(prefers-reduced-motion: no-preference)', () => {
@@ -333,7 +337,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     : loading && /design|architect|command center/i.test(activity) ? 'Designing'
     : 'Understanding you'
   const stageIndex = Math.max(0, activeStages.indexOf(stageName))
-  const proposalReasoning = useMemo(() => session && architecture ? mergeFrontierResearch(researchSession(session), frontier).findings.slice(0, 5) : [], [session, architecture, frontier])
+  const proposalResearch = useMemo(() => session && architecture ? mergeFrontierResearch(researchSession(session), frontier) : null, [session, architecture, frontier])
+  const proposalReasoning = proposalResearch?.findings.slice(0, 5) ?? []
+  const proposalGaps = proposalResearch?.gaps.slice(0, 5) ?? []
   // How much of the operating model is settled. The same number the planner uses to decide whether
   // another question is worth asking, so the bar cannot claim progress the interview has not made.
   const coverage = useMemo(() => session ? mergeFrontierResearch(researchSession(session), frontier).coverage : 0, [session, frontier])
@@ -355,11 +361,11 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
       {/* One thread, oldest first. The question BO is asking is simply the newest thing in it. */}
       <div className="bo-thread" ref={chat} data-testid="build-thread">
-        {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><p>Tell me how your company works.</p></div></div>}
+        {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><span className="bo-turn__text">Tell me how your company works.</span></div></div>}
 
         {session?.messages.map(message => message.id === currentAssistantId ? null : message.role === 'user'
-          ? <div className="bo-turn bo-turn--you" key={message.id}><div><p>{message.content}</p></div></div>
-          : <div className="bo-turn bo-turn--bo" key={message.id}><span><Sparkles size={15}/></span><div><p>{message.content}</p></div></div>)}
+          ? <div className="bo-turn bo-turn--you" key={message.id}><div><span className="bo-turn__text">{message.content}</span></div></div>
+          : <div className="bo-turn bo-turn--bo" key={message.id}><span><Sparkles size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
 
         {(thoughts.length > 0 || loading) && <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
@@ -377,7 +383,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
         {error ? <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
-          <div className="bo-turn-error"><p>BO couldn’t finish that thought. {error}</p><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
+          <div className="bo-turn-error"><span className="bo-turn__text">BO couldn't finish that thought. {error}</span><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
         </div> : architecture && session?.phase === 'AWAITING_APPROVAL' ? <div className="bo-turn bo-turn--bo">
           <span><Sparkles size={15}/></span>
           <div>
@@ -392,8 +398,12 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             {proposalOpen && <div className="bo-proposal" data-testid="architecture-proposal">
               <small>PROPOSED COMMAND CENTER</small>
               <strong>{architecture.title || 'Your Command Center'}</strong>
-              <p>{architecture.explanation || architecture.summary}</p>
+              <span className="bo-proposal__summary">{architecture.explanation || architecture.summary}</span>
               {proposalReasoning.length > 0 && <ul className="bo-proposal-reasoning" data-testid="proposal-reasoning">{proposalReasoning.map(finding => <li key={finding.id}><b>{finding.conclusion}</b><span>{finding.implication}</span><em>“{finding.because}”</em></li>)}</ul>}
+              {proposalGaps.length > 0 && <>
+                <small>OPERATING GAPS TO REVIEW</small>
+                <ul className="bo-proposal-reasoning" data-testid="proposal-gaps">{proposalGaps.map(gap => <li key={gap.id}><b>{gap.title}</b><span>{gap.rationale}</span><em>{gap.classification}</em></li>)}</ul>
+              </>}
               <div className="bo-workspace-plan">{architecture.pages.map(page => <span key={page}><Check size={11}/>{page}</span>)}</div>
             </div>}
             <div className="bo-proposal-actions">
@@ -405,8 +415,8 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
         </div> : session?.currentQuestion ? <div className="bo-turn bo-turn--bo bo-turn--asking" data-testid="discovery-question">
           <span><Sparkles size={15}/></span>
           <div>
-            {currentAcknowledgment && <p className="bo-turn-ack">{currentAcknowledgment}</p>}
-            <p className="bo-turn-ask">{session.currentQuestion.text}</p>
+            {currentAcknowledgment && <span className="bo-turn-ack">{currentAcknowledgment}</span>}
+            <span className="bo-turn-ask">{session.currentQuestion.text}</span>
           </div>
         </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div className="bo-typing" aria-label="BO is working"><i/><i/><i/></div></div> : null}
       </div>
@@ -435,6 +445,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       </footer>
     </section>
 
-    {launching && launchBlueprint && <div className="bo-launch-overlay"><DashboardSurface answers={initialAnswers} blueprint={launchBlueprint}/><div className="bo-generation-status"><Sparkles size={17}/><strong>{buildLabels[launchPhase]}</strong><span/></div></div>}
+    {launching && <div className="bo-launch-overlay"><div className="bo-generation-status"><Sparkles size={17}/><strong>{buildLabels[launchPhase]}</strong><span/></div></div>}
   </main>
 }

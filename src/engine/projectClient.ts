@@ -1,6 +1,7 @@
 import type { WorkspaceAction, WorkspaceRecords } from './workspaceActions'
 import type { WorkspaceConfiguration } from './workspaceSchema'
 import { workspaceAccessHeaders } from './workspaceAccess'
+import { planWorkspaceMutation } from './mutationArchitecture'
 
 export interface GeneratedProjectManifest {
   workspaceId: string
@@ -86,7 +87,8 @@ export async function loadGeneratedManifest(workspaceId: string): Promise<Genera
 }
 
 export function buildGeneratedChange(config: WorkspaceConfiguration, action: WorkspaceAction, description: string) {
-  return request<GeneratedProjectManifest>(config.id, `/api/projects/${config.id}/changes`, { method: 'POST', body: JSON.stringify({ specification: config, changeDescription: description, changeType: action.type }) })
+  const mutationPlan = planWorkspaceMutation(config, action)
+  return request<GeneratedProjectManifest>(config.id, `/api/projects/${config.id}/changes`, { method: 'POST', body: JSON.stringify({ specification: config, changeDescription: description, changeType: action.type, mutationPlan }) })
 }
 
 export function promoteGeneratedChange(workspaceId: string, version: number) {

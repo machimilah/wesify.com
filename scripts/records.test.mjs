@@ -57,6 +57,12 @@ const specification = {
   version: 1, id: workspaceId,
   profile: { companyName: 'Records Co', description: 'A company for testing record persistence.', archetype: 'generic', industry: 'Testing', businessModel: '', revenueModel: '', teamStructure: '', customers: '', productsAndServices: '', operatingProcesses: [], suppliers: '', locations: '', goals: [], terminology: {} },
   modules: ['customers', 'projects'], capabilities: [], entities, views, navigation, metrics: [], workflows: [],
+  eventArchitecture: {
+    version: 1,
+    definitions: [{ type: 'customer.created', label: 'customer created', domain: 'customers', sourceEntityIds: ['customers'], capabilityIds: [], payloadFields: ['eventId', 'workspaceId', 'entityId', 'recordId', 'occurredAt'], severity: 'informational', audit: true, lifecycle: 'created', canTrigger: ['audit-log'] }],
+    routes: [{ eventType: 'customer.created', targets: [{ kind: 'audit-log', ids: [] }] }],
+    delivery: { mode: 'at-least-once', idempotencyKey: 'eventId', orderingKey: 'workspaceId:entityId', deadLetter: true },
+  },
   roles: [{ id: 'owner', label: 'Owner', permissions: ['view', 'create', 'edit', 'delete', 'approve', 'financial', 'people', 'admin'] }],
 }
 
@@ -77,6 +83,9 @@ try {
   assert.ok(row, 'the record was not written to Postgres')
   assert.equal(row.data.name, 'ACME')
   assert.equal(row.id, created.payload.id, 'the row id must match the record id, or a later update/delete could not find it')
+  const audit = await json(`/api/projects/${workspaceId}/audit`, { headers: auth })
+  assert.equal(audit.status, 200)
+  assert.ok(audit.payload.some(item => item.event === 'customer.created' && item.detail?.recordId === created.payload.id), 'the compiled customer.created event was not recorded')
 
   // 2. No data.json anywhere under the generated root. This is the property that actually matters:
   //    with a database configured, nothing about a workspace's records depends on local disk surviving.

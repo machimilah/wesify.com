@@ -4,6 +4,9 @@ import { capabilityCatalog } from './capabilityCatalog'
 import type { BusinessRecord, WorkspaceAction, WorkspaceRecords } from './workspaceActions'
 import type { EntityDefinition, FieldType, NavigationDefinition, ViewDefinition, WorkflowDefinition, WorkspaceConfiguration } from './workspaceSchema'
 import { slug } from './shared'
+import { agentAllows, selectBusinessAgent, type CompiledBusinessAgent } from './agentArchitecture'
+import type { BusinessAgentPermission } from '../data/businessAgentCatalog'
+import { evaluateActionControl } from './governanceArchitecture'
 
 type AgentDecision = 'EXECUTE' | 'PREVIEW' | 'ANSWER' | 'CLARIFY'
 type AgentActionKind = 'none' | 'create_record' | 'update_record' | 'delete_record' | 'add_field' | 'add_collection' | 'add_capability' | 'remove_capability' | 'create_workflow' | 'navigate' | 'query'
@@ -54,13 +57,14 @@ const responseSchema = {
 }
 
 const system = `You are BO, the operating agent inside a custom Business Command Center. Translate the user's request into one safe structured action using only the supplied workspace schema and records.
+Act within the supplied actingAgent scope. Use only its accessible entities, permissions and tools. Respect every prohibited action and escalation rule. All agents read and write the same shared company state; never invent or maintain a private version of company information.
 Use create_record, update_record, delete_record, add_field, add_collection, add_capability, remove_capability, create_workflow, navigate, or query. Never invent capability IDs, entity IDs, navigation IDs, record IDs, field IDs, or business data. Use IDs exactly as supplied. Put all field values in values.
 EXECUTE non-destructive record creation/updates, navigation, and queries. PREVIEW deletion and every structural change. CLARIFY when required information is missing or a target is ambiguous. ANSWER only from supplied data and say when data is unavailable.
 Prefer add_capability over add_collection whenever the request matches an available capability; a capability installs its complete dependency-aware operating package. remove_capability removes a complete active capability, but CLARIFY if another active capability depends on it. add_collection is only for a genuinely company-specific record type absent from the catalog. create_workflow creates an event-driven notification. query opens the relevant records and reports their count; do not calculate unsupported financial answers.
 Return only schema-valid JSON. Do not expose chain-of-thought.`
 
-function recordContext(config: WorkspaceConfiguration, records: WorkspaceRecords) {
-  return config.entities.flatMap(entity => (records[entity.id] ?? []).slice(0, 12).map(record => ({ entityId: entity.id, id: record.id, label: String(record[entity.primaryField] ?? ''), status: record.status, amount: record.amount, dueDate: record.dueDate }))).slice(0, 60)
+function recordContext(config: WorkspaceConfiguration, records: WorkspaceRecords, agent?: CompiledBusinessAgent) {
+  return config.entities.filter(entity => !agent || agent.accessibleEntityIds.includes(entity.id)).flatMap(entity => (records[entity.id] ?? []).slice(0, 12).map(record => ({ entityId: entity.id, id: record.id, label: String(record[entity.primaryField] ?? ''), status: record.status, amount: record.amount, dueDate: record.dueDate }))).slice(0, 60)
 }
 
 function parseValue(value: string, type: FieldType) {
@@ -70,9 +74,10 @@ function parseValue(value: string, type: FieldType) {
 }
 
 
-function toWorkspaceAction(result: WorkspaceAgentResponse, config: WorkspaceConfiguration): WorkspaceAction | undefined {
+function toWorkspaceAction(result: WorkspaceAgentResponse, config: WorkspaceConfiguration, agent?: CompiledBusinessAgent): WorkspaceAction | undefined {
   const candidate = result.action
   if (!actionKinds.includes(candidate.kind) || candidate.kind === 'none') return undefined
+  if (agent && !agentAllows(agent, candidate.kind)) return undefined
   const entity = config.entities.find(item => item.id === candidate.entityId)
   if (candidate.kind === 'navigate') return config.navigation.some(item => item.id === candidate.navigationId) ? { type: 'navigate', navigationId: candidate.navigationId } : undefined
   if (candidate.kind === 'query') return entity ? { type: 'query_business_data', entityId: entity.id } : undefined
@@ -120,14 +125,23 @@ function validate(value: unknown): WorkspaceAgentResponse {
 }
 
 export async function askWorkspaceAgent(command: string, config: WorkspaceConfiguration, records: WorkspaceRecords, onActivity?: (label: string) => void) {
+  const actingAgent = selectBusinessAgent(command, config)
+  const authorizingAgent = config.agents?.length ? actingAgent : undefined
   if (window.__BO_WORKSPACE_AGENT_MOCK__) {
     const response = await window.__BO_WORKSPACE_AGENT_MOCK__(command, config, records)
-    return { response, action: toWorkspaceAction(response, config) }
+    const allowed = !authorizingAgent || response.action.kind === 'none' || agentAllows(authorizingAgent, response.action.kind)
+    const guarded = allowed ? response : { ...response, decision: 'CLARIFY' as const, message: `${actingAgent?.label ?? 'BO'} cannot perform that action within its current scope.` }
+    const action = toWorkspaceAction(guarded, config, authorizingAgent)
+    const control = action ? evaluateActionControl(config, action, { agentApprovalRequired: authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission) }) : undefined
+    const controlled = control?.requiresApproval ? { ...guarded, decision: 'PREVIEW' as const } : guarded
+    return { response: controlled, action, agent: actingAgent, control }
   }
+  const accessibleEntities = config.entities.filter(entity => !actingAgent || actingAgent.accessibleEntityIds.includes(entity.id))
   const context = {
     command,
-    workspace: { company: config.profile, activeCapabilities: config.capabilities ?? [], availableCapabilities: capabilityCatalog.map(item => ({ id: item.id, label: item.label, description: item.description, dependencies: item.dependencies })), entities: config.entities.map(entity => ({ id: entity.id, label: entity.label, primaryField: entity.primaryField, fields: entity.fields.map(field => ({ id: field.id, label: field.label, type: field.type, options: field.options })) })), navigation: config.navigation.map(item => ({ id: item.id, label: item.label, kind: item.kind })), workflows: config.workflows },
-    records: recordContext(config, records),
+    actingAgent,
+    workspace: { company: config.profile, sharedState: actingAgent?.memory.reference, activeCapabilities: config.capabilities ?? [], availableCapabilities: capabilityCatalog.map(item => ({ id: item.id, label: item.label, description: item.description, dependencies: item.dependencies })), entities: accessibleEntities.map(entity => ({ id: entity.id, label: entity.label, primaryField: entity.primaryField, fields: entity.fields.map(field => ({ id: field.id, label: field.label, type: field.type, options: field.options })) })), navigation: config.navigation.filter(item => !item.viewId || accessibleEntities.some(entity => config.views.some(view => view.id === item.viewId && view.entityId === entity.id))).map(item => ({ id: item.id, label: item.label, kind: item.kind })), workflows: config.workflows.filter(workflow => accessibleEntities.some(entity => entity.id === workflow.trigger.entityId)), governance: config.governanceArchitecture },
+    records: recordContext(config, records, actingAgent),
   }
   let lastError: unknown
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -135,7 +149,12 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
       onActivity?.(attempt ? 'Checking the command' : 'BO is working')
       const raw = await generateLocalStructuredJson<unknown>({ messages: [{ role: 'system', content: system }, { role: 'user', content: `Use this live workspace context. JSON only.\n${JSON.stringify(context)}` }], schema: responseSchema, maxTokens: 520, temperature: 0.1, onActivity })
       const response = validate(raw)
-      return { response, action: toWorkspaceAction(response, config) }
+      if (authorizingAgent && response.action.kind !== 'none' && !agentAllows(authorizingAgent, response.action.kind)) return { response: { ...response, decision: 'CLARIFY', message: `${actingAgent?.label ?? 'BO'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent }
+      const action = toWorkspaceAction(response, config, authorizingAgent)
+      const agentApprovalRequired = authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission)
+      const control = action ? evaluateActionControl(config, action, { agentApprovalRequired }) : undefined
+      const guarded = control?.requiresApproval ? { ...response, decision: 'PREVIEW' as const } : response
+      return { response: guarded, action, agent: actingAgent, control }
     } catch (error) { lastError = error }
   }
   throw lastError instanceof Error ? lastError : new Error('BO could not understand that command.')

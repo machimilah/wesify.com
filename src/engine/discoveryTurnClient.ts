@@ -2,6 +2,7 @@ import { parseDiscoveryResponse, type DiscoveryAgentResponse, type DiscoverySess
 import { capabilityCatalogPrompt, capabilityIds } from './capabilityCatalog'
 import { moduleIds } from './blueprint'
 import type { DiscoveryModelRequest } from './discoveryModel'
+import { evaluateOperatingKnowledge, knowledgeRequirementsFor } from './knowledgeEngine'
 
 /**
  * The interview, asked of the server.
@@ -53,12 +54,21 @@ export async function requestDiscoveryTurn(request: DiscoveryModelRequest, indus
     return null
   }
   try {
+    const conversation = conversationOf(request.session)
+    const knowledgeText = [
+      ...conversation.filter(message => message.role === 'user').map(message => message.content),
+      request.session.businessState.companySummary,
+      request.session.businessState.industry,
+      ...request.session.businessState.operations,
+      ...request.session.businessState.resources,
+    ].join(' ')
+    const operatingKnowledge = evaluateOperatingKnowledge(knowledgeText, request.session.architecture?.capabilityIds ?? [])
     const response = await fetch('/api/discovery/turn', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         mode: request.mode,
-        conversation: conversationOf(request.session),
+        conversation,
         businessState: request.session.businessState,
         capabilityIds,
         modules: [...moduleIds],
@@ -67,6 +77,8 @@ export async function requestDiscoveryTurn(request: DiscoveryModelRequest, indus
         forceArchitecture: request.forceArchitecture === true,
         industry,
         repair,
+        knowledgeRequirements: knowledgeRequirementsFor(knowledgeText, request.session.architecture?.capabilityIds ?? []),
+        businessGaps: operatingKnowledge.gaps,
       }),
     })
     if (!response.ok) {

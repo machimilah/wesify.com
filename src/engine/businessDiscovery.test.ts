@@ -7,7 +7,7 @@ import {
   parseDiscoveryResponse,
   type BusinessState,
 } from './businessDiscovery'
-import { LocalBusinessDiscoveryModel, resilientArchitecture } from './discoveryModel'
+import { assessDiscoveryReadiness, LocalBusinessDiscoveryModel, resilientArchitecture } from './discoveryModel'
 
 const state: BusinessState = {
   companySummary: 'A construction company renovating offices', industry: 'Construction',
@@ -60,6 +60,19 @@ describe('AI business discovery contract', () => {
     const base = createDiscoverySession('workspace-1234', 'Clients pay us monthly.')
     const withFact = { ...base, businessState: { ...base.businessState, facts: [{ topic: 'client payment cadence', value: 'Clients pay monthly', status: 'explicit' as const, confidence: 1 }] } }
     expect(isDuplicateQuestion('How do clients normally pay you each month?', withFact)).toBe(true)
+  })
+
+  it('accepts optional evidence provenance and blocks premature completion', () => {
+    const parsed = parseDiscoveryResponse({
+      businessState: { ...state, facts: [{ topic: 'billing', value: 'Progress invoices', status: 'explicit', confidence: 1, evidence: 'We invoice each stage', basis: 'user' }] },
+      decision: 'ASK_QUESTION', acknowledgment: '', nextQuestion: { text: 'What happens after a project is approved?', reason: 'Resolve the operating flow.', suggestedAnswers: [] }, architectureContext: emptyArchitecture(),
+    })
+    expect(parsed.businessState.facts[0]).toEqual(expect.objectContaining({ evidence: 'We invoice each stage', basis: 'user' }))
+
+    const thin = createDiscoverySession('thin-workspace', 'I run a business.')
+    expect(assessDiscoveryReadiness(thin).ready).toBe(false)
+    const rich = { ...createDiscoverySession('rich-workspace', 'We are a construction company with employees. First we quote, then run each project, and after completion we issue progress invoices to commercial clients. We buy materials for each job.'), businessState: state }
+    expect(assessDiscoveryReadiness(rich).ready).toBe(true)
   })
 
   /**

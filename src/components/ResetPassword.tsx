@@ -39,7 +39,6 @@ export function ResetPassword({ token, onSignedIn, onGiveUp }: { token: string; 
     <form onSubmit={event => { event.preventDefault(); onGiveUp() }} data-testid="reset-form">
       <Brand/>
       <h1>That reset link is incomplete</h1>
-      <p className="bo-signin-error" role="alert" data-testid="reset-error">Open the link from your email again, or ask for a new one.</p>
       <button data-testid="reset-submit">Back to sign in <ArrowRight size={15}/></button>
     </form>
   </main>
@@ -54,7 +53,7 @@ export function ResetPassword({ token, onSignedIn, onGiveUp }: { token: string; 
         <input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required minLength={10} autoFocus data-testid="reset-password"/>
         <em>At least 10 characters.</em>
       </label>
-      {error && <p className="bo-signin-error" role="alert" data-testid="reset-error">{error}</p>}
+      {error && null}
       <button disabled={working} data-testid="reset-submit">{working ? 'One moment…' : 'Set password and sign in'} <ArrowRight size={15}/></button>
       <button type="button" className="bo-signin-switch" onClick={onGiveUp} data-testid="reset-cancel">Back to sign in</button>
     </form>

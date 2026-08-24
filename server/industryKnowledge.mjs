@@ -45,9 +45,10 @@ export const readIndustryProfile = readProfile
  * `added` are the corrections it made afterwards. A company is counted once, however many
  * capabilities it touched, so a single busy operator cannot outvote an industry.
  */
-export async function recordObservations(subsector, { kept = [], removed = [], added = [], label = '', newCompany = false }) {
+export async function recordObservations(subsector, { kept = [], removed = [], added = [], patterns = [], label = '', newCompany = false }) {
   checkSubsector(subsector)
   const profile = await readIndustryProfile(subsector)
+  profile.patterns ??= {}
   const bump = (capabilityId, field) => {
     const entry = profile.observed[capabilityId] ?? { kept: 0, removed: 0, added: 0 }
     entry[field] += 1
@@ -56,6 +57,16 @@ export async function recordObservations(subsector, { kept = [], removed = [], a
   for (const id of new Set(kept)) bump(id, 'kept')
   for (const id of new Set(removed)) bump(id, 'removed')
   for (const id of new Set(added)) bump(id, 'added')
+  for (const item of patterns) {
+    const kind = String(item.kind)
+    const id = String(item.id)
+    const outcome = item.outcome === 'removed' ? 'removed' : 'adopted'
+    const byKind = profile.patterns[kind] ?? {}
+    const entry = byKind[id] ?? { adopted: 0, removed: 0 }
+    entry[outcome] += 1
+    byKind[id] = entry
+    profile.patterns[kind] = byKind
+  }
   if (newCompany) profile.companies += 1
   if (label && !profile.label) profile.label = label
   profile.updatedAt = new Date().toISOString()
@@ -128,12 +139,21 @@ export function industryVerdict(profile) {
   }
 
   const included = new Set(include.map(item => item.capabilityId))
+  const patterns = []
+  if (enoughCompanies) for (const [kind, entries] of Object.entries(profile.patterns ?? {})) for (const [patternId, counts] of Object.entries(entries)) {
+    const adopted = counts.adopted ?? 0
+    const removed = counts.removed ?? 0
+    const decisions = adopted + removed
+    if (decisions < MIN_COMPANIES || adopted / decisions < VERDICT_SHARE) continue
+    patterns.push({ kind, patternId, companies: decisions, adoptionShare: adopted / decisions, reason: `${adopted} of ${decisions} companies in this industry adopted this ${kind} pattern` })
+  }
   return {
     subsector: profile.subsector,
     label: profile.label,
     companies: profile.companies ?? 0,
     include: include.filter(item => !exclude.some(other => other.capabilityId === item.capabilityId)),
     exclude: exclude.filter(item => !(item.basis === 'researched' && included.has(item.capabilityId))),
+    patterns,
     sources: profile.researched?.sources ?? [],
     // Said plainly rather than left to be worked out from a date: research that has stopped
     // deciding anything should not look identical to research that still is.
@@ -152,5 +172,6 @@ export async function listIndustries() {
     researched: Boolean(profile.researched),
     researchStale: Boolean(profile.researched) && !researchIsFresh(profile),
     capabilities: Object.keys(profile.observed ?? {}).length,
+    patterns: Object.values(profile.patterns ?? {}).reduce((total, entries) => total + Object.keys(entries).length, 0),
   }))
 }

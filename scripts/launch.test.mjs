@@ -26,16 +26,18 @@ page.on('console', message => message.type() === 'error' && errors.push(message.
 
 // Watch for the overlay at all times, not only when we happen to look — it is transient by nature.
 let overlaySeen = 0
+let legacyPreviewSeen = 0
 await page.exposeFunction('__boOverlaySeen', () => { overlaySeen += 1 })
+await page.exposeFunction('__boLegacyPreviewSeen', () => { legacyPreviewSeen += 1 })
 
 await page.addInitScript(() => {
   window.__BO_DISCOVERY_MODEL_MOCK__ = async () => {
     const businessState = {
       companySummary: 'A plumbing service business', industry: 'Plumbing', facts: [],
       businessModel: ['Field service'], productsOrServices: ['A plumbing service business'], customers: ['Homeowners'],
-      revenueModel: ['Customers pay on completion'], team: ['A small team'], operations: ['Technicians visit customer homes'],
+      revenueModel: ['An invoice is issued after completion and customers pay on completion'], team: ['A small team'], operations: ['A customer requests service, dispatch schedules a technician, the technician completes the job, then finance invoices the customer'],
       resources: [], locations: [], currentTools: [], painPoints: [], goals: [], knownEntities: ['Jobs'],
-      knownWorkflows: [], uncertainties: [], assumptions: [], softwareImplications: [],
+      knownWorkflows: ['Customer request to scheduled visit to completed job to invoice to payment'], uncertainties: [], assumptions: [], softwareImplications: [],
     }
     const architectureContext = {
       title: 'Plumbing Command Center', summary: 'Run dispatch and billing together.',
@@ -52,6 +54,7 @@ await page.addInitScript(() => {
   // exists, so wait for a root to observe.
   const watch = () => new MutationObserver(() => {
     if (document.querySelector('.bo-project-build')) window.__boOverlaySeen?.()
+    if (document.querySelector('.bo-launch-overlay .bo-dashboard')) window.__boLegacyPreviewSeen?.()
   }).observe(document.documentElement, { childList: true, subtree: true })
   if (document.documentElement) watch()
   else document.addEventListener('readystatechange', function once() { if (document.documentElement) { document.removeEventListener('readystatechange', once); watch() } })
@@ -63,12 +66,18 @@ try {
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 
+  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business. Technicians visit customer homes. Customers pay on completion. We have a small team.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
 
-  await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
+  try { await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 }) }
+  catch (error) {
+    const visible = (await page.locator('main').allInnerTexts().catch(() => [])).join(' ').replace(/\s+/g, ' ').slice(0, 800)
+    throw new Error(`Command Center approval did not appear at ${page.url()}. Visible screen: ${visible || 'empty'}. ${error instanceof Error ? error.message : error}`)
+  }
   overlaySeen = 0
+  legacyPreviewSeen = 0
 
   await page.getByTestId('open-dashboard').click()
   await page.waitForURL('**/home')
@@ -77,6 +86,7 @@ try {
   await page.waitForTimeout(2500)
 
   if (overlaySeen > 0) throw new Error(`Opening the finished Command Center showed the build overlay ${overlaySeen} time(s). It should open like a finished app.`)
+  if (legacyPreviewSeen > 0) throw new Error(`The launch transition rendered a legacy dashboard preview ${legacyPreviewSeen} time(s). The configured Command Center must be the first dashboard shown.`)
   if (await page.locator('.bo-project-build').count()) throw new Error('The build overlay is still on screen after opening the Command Center.')
 
   // The workspace must actually be usable, not merely quiet.

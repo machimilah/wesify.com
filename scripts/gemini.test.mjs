@@ -129,7 +129,7 @@ try {
   // operator reads as BO being broken.
   const status = await (await fetch(`http://127.0.0.1:${apiPort}/api/research/status`)).json()
   assert.equal(status.available, true, 'The interview should be available on a Gemini key alone.')
-  assert.equal(status.model, 'gemini-3.7-flash')
+  assert.equal(status.model, 'gemini-3.5-flash')
   assert.equal(status.research, false, 'Web-search research is not available without an Anthropic key.')
 
   const response = await fetch(`http://127.0.0.1:${apiPort}/api/discovery/turn`, {
@@ -152,7 +152,7 @@ try {
   const body = await response.json()
   assert.equal(body.decision, 'ASK_QUESTION')
   assert.equal(body.nextQuestion.text, 'Do your technicians carry stock in their vans?')
-  assert.equal(body.model, 'gemini-3.7-flash')
+  assert.equal(body.model, 'gemini-3.5-flash')
 
   // Two calls: the first rejected `thinkingConfig`, the second dropped it and went through.
   assert.equal(calls.length, 2, `Expected the thinking retry, saw ${calls.length} calls.`)
@@ -205,7 +205,7 @@ try {
    * rest of the day while every older one on the same key still answers. Falling back to the fixed
    * question bank there is exactly the bug the free tier was added to fix.
    */
-  state.exhausted.add('gemini-3.7-flash')
+  state.exhausted.add('gemini-3.5-flash')
   const spent = await fetch(`http://127.0.0.1:${apiPort}/api/discovery/turn`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -219,7 +219,7 @@ try {
   assert.equal(spent.status, 200, 'A spent daily quota on one model ended the interview.')
   const spentBody = await spent.json()
   assert.equal(spentBody.decision, 'ASK_QUESTION')
-  assert.notEqual(spentBody.model, 'gemini-3.7-flash', 'BO stayed on the model that has no quota left.')
+  assert.notEqual(spentBody.model, 'gemini-3.5-flash', 'BO stayed on the model that has no quota left.')
   assert.ok(spentBody.model.startsWith('gemini-'), `BO moved to something unexpected: ${spentBody.model}`)
 
   /**
@@ -229,8 +229,10 @@ try {
    * instead. A free key that met that on every remaining fallback ended the interview — with the
    * answer sitting in the error message BO had just been handed.
    */
-  state.retired.set('gemini-3.5-flash', 'gemini-3.5-flash-lite')
-  state.exhausted.add('gemini-3.6-flash')
+  // Retires whichever model BO actually reaches here. The quota case above parked the one it leads
+  // with for fifteen minutes, and these cases share a server process, so retiring that one again
+  // would prove nothing: BO would skip it without ever seeing the 404.
+  state.retired.set('gemini-3.1-flash-lite', 'gemini-3.5-flash-lite')
   const retired = await fetch(`http://127.0.0.1:${apiPort}/api/discovery/turn`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

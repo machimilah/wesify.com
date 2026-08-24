@@ -9,6 +9,8 @@ export interface BusinessFact {
   value: string
   status: KnowledgeStatus
   confidence: number
+  evidence?: string
+  basis?: 'user' | 'inference' | 'research'
 }
 
 export interface BusinessState {
@@ -164,7 +166,9 @@ export function isBusinessState(value: unknown): value is BusinessState {
     && Array.isArray(value.facts) && value.facts.length <= 40 && value.facts.every(fact => isObject(fact)
       && typeof fact.topic === 'string' && typeof fact.value === 'string'
       && knowledgeStatuses.includes(fact.status as KnowledgeStatus)
-      && typeof fact.confidence === 'number' && fact.confidence >= 0 && fact.confidence <= 1)
+      && typeof fact.confidence === 'number' && fact.confidence >= 0 && fact.confidence <= 1
+      && (fact.evidence === undefined || typeof fact.evidence === 'string')
+      && (fact.basis === undefined || ['user', 'inference', 'research'].includes(fact.basis as string)))
 }
 
 export function isArchitectureContext(value: unknown): value is ArchitectureContext {
