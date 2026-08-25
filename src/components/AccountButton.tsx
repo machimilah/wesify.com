@@ -7,6 +7,11 @@ import { UserButton } from '@clerk/react'
  * their password, or the devices they are signed in on — none of which Wesify stores, and all of which
  * it would otherwise have to build a settings page for.
  *
+ * Deliberately only the person, not an organization. Clerk can model companies and Wesify does not use
+ * it: a workspace has an owner and a members table of its own, and belonging to something is what
+ * Wesify's whole data model is about. Two systems for "which company is this" would eventually
+ * disagree, and the one Wesify can enforce in its own queries is the one worth keeping.
+ *
  * The key check is what keeps this safe to place anywhere. `UserButton` needs the Clerk provider, and
  * that provider is mounted only when this build has a publishable key (see main.tsx), so without one
  * this renders nothing instead of throwing inside a workspace that never had accounts.

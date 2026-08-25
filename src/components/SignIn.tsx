@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SignIn as ClerkSignIn, useAuth } from '@clerk/react'
-import { currentAccount, type Account } from '../engine/authClient'
+import { currentAccount, type Account, type AccountWorkspace } from '../engine/authClient'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -21,7 +21,7 @@ import { ThemeToggle } from './ThemeToggle'
  * Clerk could hook into, and with no `path` given the component keeps its flow on this screen
  * instead of pushing paths that App.tsx would then have to know about.
  */
-export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
+export function SignIn({ onSignedIn }: { onSignedIn: (account: Account, workspaces: AccountWorkspace[]) => void }) {
   /**
    * A server with accounts and an interface built without a Clerk key is a real deployment mistake —
    * the two are configured in different places, by different people, at different times. Saying so is
@@ -42,7 +42,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void 
   return <ClerkGate onSignedIn={onSignedIn}/>
 }
 
-function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
+function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account, workspaces: AccountWorkspace[]) => void }) {
   const { isLoaded, isSignedIn } = useAuth()
   const [error, setError] = useState('')
 
@@ -56,7 +56,10 @@ function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
       // different Clerk instance, or a database that is down. Saying so beats a screen that sits on
       // "one moment" forever.
       if (!found) return setError('You are signed in, but Wesify could not open your account. Try again in a moment.')
-      onSignedIn(found.user)
+      // Both halves, because this call already fetched them: the workspaces are what decides where
+      // the person lands, and asking the server a second time for what is in hand is a round trip
+      // spent on a screen whose whole job is to get out of the way.
+      onSignedIn(found.user, found.workspaces)
     })()
     return () => { cancelled = true }
   }, [isLoaded, isSignedIn, onSignedIn])
@@ -67,7 +70,24 @@ function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
       <Brand/>
       {error
         ? <div className="bo-signin-error" role="alert" data-testid="signin-error">{error}</div>
-        : <ClerkSignIn appearance={{ variables: { colorBackground: 'transparent' } }}/>}
+        : <ClerkSignIn
+            /**
+             * Signing up happens here too, rather than behind a link to Clerk's hosted pages.
+             *
+             * Almost everybody arriving at Wesify is new, and the alternative sends exactly those
+             * people off to another domain in the middle of describing their company. One screen,
+             * both jobs, which is what this screen always was.
+             */
+            withSignUp
+            /**
+             * Something in the shape of the form while Clerk's own script is still arriving.
+             *
+             * Without it the panel is empty for as long as that takes, and an empty panel under a
+             * logo reads as a page that has finished loading badly rather than one still loading.
+             */
+            fallback={<div className="bo-signin__loading" aria-hidden="true"><i/><i/><i/></div>}
+            appearance={{ variables: { colorBackground: 'transparent' } }}
+          />}
     </div>
   </main>
 }

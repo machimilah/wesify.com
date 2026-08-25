@@ -48,10 +48,20 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const enabled = await accountsEnabled()
-      // The stored session is checked against the server rather than trusted: it may have expired,
-      // been signed out from another device, or belong to a database that has since been replaced.
-      const existing = enabled ? await currentAccount() : null
+      /**
+       * Both questions at once, because the answers do not depend on each other.
+       *
+       * "Does this server have accounts" and "who is holding this browser" used to be asked in
+       * sequence, so every load — signed in or not — cost two round trips end to end before Wesify
+       * would draw anything. They are asked together now and the second is simply discarded if the
+       * first says there are no accounts to have; with none configured it costs nothing anyway,
+       * because there is no session to ask Clerk about and it never reaches the network.
+       *
+       * The session is checked against the server rather than trusted either way: it may have
+       * expired, been signed out from another device, or belong to a database since replaced.
+       */
+      const [enabled, found] = await Promise.all([accountsEnabled(), currentAccount()])
+      const existing = enabled ? found : null
       if (cancelled) return
       setAccount(existing?.user ?? null)
       setAccounts(enabled)
@@ -114,21 +124,22 @@ export default function App() {
   }
 
   /**
-   * What happens right after somebody proves who they are, whether that was signing in, registering,
-   * or spending a password-reset link.
+   * What happens the moment somebody proves who they are.
    *
    * A typed-but-unsent brief wins outright: someone who described their company before being asked
    * to sign in has already done the one thing this product needs from them, and asking again to
-   * prove they now have an account is how they get lost between the two screens. Otherwise they go
-   * to the workspace they already have — /api/auth/register and /api/auth/login do not return the
-   * list, so it is asked for here, once, right after.
+   * prove they now have an account is how they get lost between the two screens.
+   *
+   * Otherwise they go to the workspace they already have, and the list arrives with them. The
+   * sign-in screen asks the server who this is — that call is also what creates the account — and it
+   * comes back with the workspaces attached, so asking again here would be a second round trip for
+   * something already in hand, paid for by the person waiting on the screen.
    */
-  const afterSignedIn = async (signedIn: Account) => {
+  const afterSignedIn = (signedIn: Account, signedInWorkspaces: AccountWorkspace[]) => {
     setAccount(signedIn)
     if (pendingBrief) return build(pendingBrief)
-    const found = (await currentAccount())?.workspaces ?? []
-    setWorkspaces(found)
-    navigate(homeFor(found))
+    setWorkspaces(signedInWorkspaces)
+    navigate(homeFor(signedInWorkspaces))
   }
 
   if (path === '/') return <Home
@@ -158,7 +169,7 @@ export default function App() {
     return <main className="bo-home"/>
   }
 
-  if (accounts && !account) return <SignIn onSignedIn={account => void afterSignedIn(account)}/>
+  if (accounts && !account) return <SignIn onSignedIn={afterSignedIn}/>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.

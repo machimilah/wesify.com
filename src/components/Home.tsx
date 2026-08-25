@@ -6,6 +6,7 @@ import { capabilityIds } from '../engine/capabilityCatalog'
 import { prepareBusinessDiscoveryModel } from '../engine/discoveryModel'
 import { Brand } from './Brand'
 import { CompanyPrompt } from './CompanyPrompt'
+import { AccountButton } from './AccountButton'
 import { ThemeToggle } from './ThemeToggle'
 import wave04 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_04.png'
 import wave05 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_05.png'
@@ -119,6 +120,9 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
         {/* Only where it means something: with no accounts there is nothing to sign in to, and
             somebody already signed in does not need to be offered it. */}
         {accounts && !signedIn && <button type="button" className="bo-home__signin" onClick={onSignIn} data-testid="open-signin">Sign in</button>}
+        {/* And the other half of the same thought: somebody signed in gets their account here, so
+            the page they land on after signing in shows that it worked. */}
+        {accounts && signedIn && <div className="bo-home__account" data-testid="home-account"><AccountButton/></div>}
       </header>
       <section className="bo-home__center" ref={center}>
         {/**

@@ -452,6 +452,13 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-signin__panel { width: 100%; max-width: 400px; display: grid; justify-items: center; gap: 18px; }
 .bo-signin .brand { color: var(--text); }
 .bo-signin .brand-mark { color: var(--text); background: var(--bg-alt); }
+/* Three bars where the fields will be, pulsing, while Clerk's script arrives. */
+.bo-signin__loading { width: 100%; max-width: 360px; display: grid; gap: 14px; padding: 30px 28px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-alt); }
+.bo-signin__loading i { height: 42px; border-radius: 11px; background: var(--surface); animation: bo-signin-pulse 1.4s ease-in-out infinite; }
+.bo-signin__loading i:nth-child(2) { animation-delay: .15s; }
+.bo-signin__loading i:nth-child(3) { animation-delay: .3s; }
+@keyframes bo-signin-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bo-signin__loading i { animation: none; } }
 .bo-signin-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--danger); background: var(--surface); font-size: 12px; line-height: 1.5; }
 
 
@@ -487,6 +494,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-theme-toggle { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); background: transparent; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
 /* On the home page it sits on a plain field, so it keeps the same readable surface treatment as the prompt. */
+.bo-home__account { display: flex; align-items: center; }
 .bo-home__theme-toggle { margin-left: auto; border-color: var(--border-strong); background: var(--surface-2); }
 .bo-signin__theme-toggle { position: absolute; top: 22px; right: 22px; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
