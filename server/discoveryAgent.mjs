@@ -11,15 +11,73 @@ import { GEMINI_MODEL, geminiAvailable, runGeminiJson } from './gemini.mjs'
  *
  * `BO_INTERVIEW_PROVIDER` forces one, for a deployment that holds both keys and has a preference.
  */
-export function interviewProvider() {
-  const forced = String(process.env.BO_INTERVIEW_PROVIDER || '').toLowerCase()
-  if (forced === 'gemini') return geminiAvailable() ? 'gemini' : null
-  if (forced === 'anthropic') return reasoningAvailable() ? 'anthropic' : null
-  if (reasoningAvailable()) return 'anthropic'
-  return geminiAvailable() ? 'gemini' : null
+/**
+ * A key that cannot be used, remembered so the next question does not wait on it too.
+ *
+ * "Your credit balance is too low to access the Anthropic API" arrives as a 400, and it is not a
+ * request BO can repair by asking differently: the account is out of credit until somebody pays. A
+ * revoked or mistyped key is the same shape. Parked for half an hour rather than for the life of the
+ * process, because topping up an account is exactly the sort of thing that happens while BO is
+ * running, and a deployment that had to be restarted to notice would be its own small trap.
+ */
+const parkedProviders = new Map()
+const providerUsable = name => (parkedProviders.get(name) ?? 0) < Date.now()
+
+export function parkProvider(name, reason, milliseconds = 30 * 60 * 1000) {
+  parkedProviders.set(name, Date.now() + milliseconds)
+  console.warn(`BO parked the ${name} interview provider for ${Math.round(milliseconds / 60000)} minutes: ${reason}`)
 }
 
-export function interviewAvailable() { return interviewProvider() !== null }
+/**
+ * Whether a failure means the key itself is unusable, rather than this one request being wrong.
+ *
+ * The two need opposite responses: a bad schema should surface as a bug to fix, while an exhausted
+ * account should quietly move to the other provider. Matched on what the provider actually says — a
+ * 401 or 403 is unambiguous, and a 400 counts only when it talks about credit or billing, so a
+ * genuine 400 about the request is never swallowed as a billing problem.
+ */
+export function unusableKey(error) {
+  const status = Number(error?.status)
+  if (status === 401 || status === 403) return true
+  const said = String(error?.message ?? '').toLowerCase()
+  return status === 400 && /credit balance|billing|insufficient|payment required|quota/.test(said)
+}
+
+/**
+ * Every provider this deployment could use, best first.
+ *
+ * Anthropic leads when both are configured — it is the one BO's research pass also uses, so a
+ * deployment paying for a key gets one model's judgement rather than two. Gemini is what makes the
+ * intelligent interview the default rather than a paid upgrade: its free tier costs nothing and
+ * needs no card.
+ *
+ * A list rather than a single answer, because holding two keys and stopping at the first is the
+ * whole problem this exists to prevent: an operator with a working free Gemini key and an Anthropic
+ * account out of credit was told the interview could not continue, while the key that would have
+ * answered sat unused. BO already moves between Gemini models when one runs dry; this is the same
+ * idea one level up.
+ *
+ * `BO_INTERVIEW_PROVIDER` still forces one, for a deployment that holds both and has a preference.
+ */
+export function interviewProviders({ includeParked = false } = {}) {
+  const forced = String(process.env.BO_INTERVIEW_PROVIDER || '').toLowerCase()
+  const configured = [
+    ...(reasoningAvailable() ? ['anthropic'] : []),
+    ...(geminiAvailable() ? ['gemini'] : []),
+  ]
+  const preferred = forced === 'gemini' || forced === 'anthropic'
+    ? configured.filter(name => name === forced)
+    : configured
+  if (includeParked) return preferred
+  const live = preferred.filter(providerUsable)
+  // Everything parked means trying the whole list again rather than refusing on a note BO wrote to
+  // itself half an hour ago: a slow interview beats an interview that will not run.
+  return live.length ? live : preferred
+}
+
+export function interviewProvider() { return interviewProviders()[0] ?? null }
+
+export function interviewAvailable() { return interviewProviders({ includeParked: true }).length > 0 }
 
 export function interviewModel() {
   const provider = interviewProvider()
@@ -234,30 +292,28 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
 
   const schema = discoverySchema(capabilityIds, modules, { architecting })
   const system = architecting ? architectSystem : consultantSystem
-  const provider = interviewProvider()
-  if (!provider) throw Object.assign(new Error('BO has no interview model configured. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.'), { status: 503 })
+  const providers = interviewProviders()
+  if (!providers.length) throw Object.assign(new Error('BO has no interview model configured. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.'), { status: 503 })
 
-  let raw
-  let usedModel
-  if (provider === 'gemini') {
-    // The architecture pass is worth thinking about; a question the operator is sitting and waiting
-    // for is not. The interview also runs warmer than the architect: two operators who describe the
-    // same trade differently should not be asked the same twelve questions in the same order.
-    const result = await runGeminiJson({
-      system,
-      prompt: instruction,
-      schema,
-      maxTokens: architecting ? 8000 : 3000,
-      thinkingBudget: architecting ? 2048 : 0,
-      temperature: architecting ? 0.2 : 0.6,
-      // A question is something a person is sitting and waiting for, so BO gives up on a slow model
-      // quickly and asks a faster one. The architecture pass is the one long wait BO is allowed, and
-      // it produces far more text, so it gets real patience instead.
-      timeoutMs: architecting ? 40000 : 9000,
-    })
-    raw = result.text
-    usedModel = result.model
-  } else {
+  const askProvider = async provider => {
+    if (provider === 'gemini') {
+      // The architecture pass is worth thinking about; a question the operator is sitting and waiting
+      // for is not. The interview also runs warmer than the architect: two operators who describe the
+      // same trade differently should not be asked the same twelve questions in the same order.
+      const result = await runGeminiJson({
+        system,
+        prompt: instruction,
+        schema,
+        maxTokens: architecting ? 8000 : 3000,
+        thinkingBudget: architecting ? 2048 : 0,
+        temperature: architecting ? 0.2 : 0.6,
+        // A question is something a person is sitting and waiting for, so BO gives up on a slow model
+        // quickly and asks a faster one. The architecture pass is the one long wait BO is allowed, and
+        // it produces far more text, so it gets real patience instead.
+        timeoutMs: architecting ? 40000 : 9000,
+      })
+      return { raw: result.text, usedModel: result.model }
+    }
     const { message } = await withFallbacks(
       {
         model: MODEL,
@@ -269,9 +325,31 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
     )
     const declined = refusal(message, 'BO continued the interview with its built-in questions.')
     if (declined) throw declined
-    raw = textOf(message)
-    usedModel = message.model ?? MODEL
+    return { raw: textOf(message), usedModel: message.model ?? MODEL }
   }
+
+  /**
+   * Asked of each configured provider in turn, but only moved on for the right reason.
+   *
+   * A key that cannot be used at all — out of credit, revoked, mistyped — is not a reason to stop
+   * when another key is configured and working. Anything else is: a schema the model rejected or a
+   * safety refusal will fail identically on the second provider, and trying it again only doubles
+   * the wait before telling the operator the same thing.
+   */
+  let raw
+  let usedModel
+  let lastError
+  for (const provider of providers) {
+    try {
+      ({ raw, usedModel } = await askProvider(provider))
+      break
+    } catch (error) {
+      lastError = error
+      if (!unusableKey(error) || provider === providers.at(-1)) throw error
+      parkProvider(provider, error?.message ?? 'the key was refused')
+    }
+  }
+  if (raw === undefined) throw lastError ?? Object.assign(new Error('No interview provider answered.'), { status: 502 })
 
   let parsed
   try { parsed = JSON.parse(raw) }

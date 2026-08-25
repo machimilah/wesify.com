@@ -1,4 +1,4 @@
-import { interviewProvider } from './discoveryAgent.mjs'
+import { interviewProviders, parkProvider, unusableKey } from './discoveryAgent.mjs'
 import { MODEL, conversationText, refusal, textOf, wireSchema, withFallbacks } from './anthropic.mjs'
 import { runGeminiJson } from './gemini.mjs'
 
@@ -85,16 +85,16 @@ function entityBrief(entities) {
 
 export async function proposeOpeningRecords({ conversation = [], businessState = null, entities = [] }) {
   if (!entities.length) return { summary: '', records: [] }
-  const provider = interviewProvider()
-  if (!provider) return { summary: '', records: [] }
+  const providers = interviewProviders()
+  if (!providers.length) return { summary: '', records: [] }
 
   const known = businessState ? `What BO recorded during the interview:\n${JSON.stringify(businessState)}` : 'BO recorded nothing structured during the interview.'
   const prompt = `${known}\n\nThe conversation:\n${conversationText(conversation) || '(nothing)'}\n\nThe workspace BO just built for them holds:\n${entityBrief(entities)}\n\nWrite down what they already told you.`
 
-  let raw
-  if (provider === 'gemini') {
-    raw = (await runGeminiJson({ system, prompt, schema: seedSchema(), maxTokens: 4000, thinkingBudget: 0, temperature: 0.2 })).text
-  } else {
+  const askProvider = async provider => {
+    if (provider === 'gemini') {
+      return (await runGeminiJson({ system, prompt, schema: seedSchema(), maxTokens: 4000, thinkingBudget: 0, temperature: 0.2 })).text
+    }
     const { message } = await withFallbacks(
       {
         model: MODEL,
@@ -106,8 +106,27 @@ export async function proposeOpeningRecords({ conversation = [], businessState =
     )
     const declined = refusal(message, 'BO opened the workspace empty instead.')
     if (declined) throw declined
-    raw = textOf(message)
+    return textOf(message)
   }
+
+  /**
+   * The same cascade the interview uses: a key that cannot be used is not a reason to stop when
+   * another one is configured. Opening a workspace empty is a worse outcome here than elsewhere,
+   * because the operator has already told BO everything the records would have been written from.
+   */
+  let raw
+  let lastError
+  for (const provider of providers) {
+    try {
+      raw = await askProvider(provider)
+      break
+    } catch (error) {
+      lastError = error
+      if (!unusableKey(error) || provider === providers.at(-1)) throw error
+      parkProvider(provider, error?.message ?? 'the key was refused')
+    }
+  }
+  if (raw === undefined) throw lastError ?? Object.assign(new Error('No provider answered.'), { status: 502 })
 
   try { return JSON.parse(raw) } catch { throw Object.assign(new Error('The recorder returned output BO could not read.'), { status: 502 }) }
 }
