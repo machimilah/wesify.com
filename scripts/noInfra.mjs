@@ -33,3 +33,13 @@ process.env.DATABASE_URL = ''
  */
 process.env.CLERK_SECRET_KEY = ''
 process.env.VITE_CLERK_PUBLISHABLE_KEY = ''
+
+/**
+ * And the flag that actually stops the browser loading Clerk.
+ *
+ * Blanking the variable above is not enough on its own: Vite reads `.env.local` from disk itself,
+ * whatever this process says, so the page under test would still be handed the developer's key —
+ * mount Clerk, be told by it that nobody is signed in, and discard the session the suite had just
+ * given it. vite.config.ts watches for this flag and defines the key as empty, which beats the file.
+ */
+process.env.BO_DISABLE_CLERK = '1'

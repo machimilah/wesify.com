@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Builder } from './components/Builder'
 import { Dashboard } from './components/Dashboard'
 import { Home } from './components/Home'
@@ -7,6 +7,7 @@ import { isWorkspaceConfiguration } from './engine/workspaceSchema'
 import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account, type AccountWorkspace } from './engine/authClient'
+import { AccountWatch, type SignedInAccount } from './components/AccountWatch'
 import { SignIn } from './components/SignIn'
 import { Billing } from './components/Billing'
 
@@ -34,6 +35,9 @@ export default function App() {
   // What a stranger typed on the public page, held across the sign-in screen so it is not asked for
   // twice. Deliberately not persisted: a sentence typed and abandoned is not something to keep.
   const [pendingBrief, setPendingBrief] = useState('')
+  // Signed in with Clerk, but the server would not say who: a key from another Clerk instance, or a
+  // database that is down. The sign-in screen says so rather than sitting on 'one moment' forever.
+  const [unreachable, setUnreachable] = useState(false)
 
   const navigate = (nextPath: string) => { window.history.pushState({}, '', nextPath); setPath(nextPath) }
 
@@ -45,37 +49,70 @@ export default function App() {
    */
   const homeFor = (list: AccountWorkspace[]) => list[0] ? `/workspace/${list[0].id}/home` : '/'
 
+  /**
+   * What the interface does when it learns who is signed in — whichever of the two ways told it.
+   *
+   * `AccountWatch` is one, and is authoritative wherever Clerk is present: it reports every change
+   * Clerk makes, at the moment Clerk makes it. The boot fetch below is the other, and covers the
+   * build that has no Clerk at all.
+   *
+   * It only records what it was told. Where that sends somebody is the effect below, which reads
+   * the account and the typed-but-unsent brief together — those arrive from different places at
+   * times neither controls, and deciding inside this callback meant deciding with a stale copy of
+   * one of them.
+   */
+  const landed = useRef(false)
+  const handleAccount = useCallback((found: SignedInAccount | null, signedInWithClerk: boolean) => {
+    setAccount(found?.user ?? null)
+    setWorkspaces(found?.workspaces ?? [])
+    setUnreachable(signedInWithClerk && !found)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
       /**
-       * Both questions at once, because the answers do not depend on each other.
+       * Both questions at once, because the answers do not depend on each other: whether this server
+       * has accounts, and who is holding this browser. Asked in sequence, every load cost two round
+       * trips end to end before Wesify drew anything.
        *
-       * "Does this server have accounts" and "who is holding this browser" used to be asked in
-       * sequence, so every load — signed in or not — cost two round trips end to end before Wesify
-       * would draw anything. They are asked together now and the second is simply discarded if the
-       * first says there are no accounts to have; with none configured it costs nothing anyway,
-       * because there is no session to ask Clerk about and it never reaches the network.
-       *
-       * The session is checked against the server rather than trusted either way: it may have
-       * expired, been signed out from another device, or belong to a database since replaced.
+       * The second answer is provisional wherever Clerk is present — at this instant Clerk has
+       * usually not restored the session yet, so it comes back "nobody", and `AccountWatch` corrects
+       * it a moment later. It is the whole answer only where there is no Clerk to ask.
        */
       const [enabled, found] = await Promise.all([accountsEnabled(), currentAccount()])
-      const existing = enabled ? found : null
       if (cancelled) return
-      setAccount(existing?.user ?? null)
       setAccounts(enabled)
-      setWorkspaces(existing?.workspaces ?? [])
-      // Only a hard load of "/" redirects — a returning signed-in operator should not land back on
-      // the empty prompt they have already answered once. This runs exactly once, at mount, so it
-      // can never fire again later from something in-app navigating back to "/" on purpose.
-      if (existing?.workspaces.length && window.location.pathname === '/') {
-        window.history.replaceState({}, '', homeFor(existing.workspaces))
-        setPath(homeFor(existing.workspaces))
-      }
+      if (enabled && found) handleAccount(found, false)
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [handleAccount])
+
+  /**
+   * Where somebody goes the first time Wesify learns who they are, and only that first time.
+   *
+   * An effect rather than something done inside the callback above, because the two facts it needs —
+   * the account, and the sentence typed before signing in — arrive from different places at times
+   * neither controls. Reading them from state at the moment both exist is the only version of this
+   * that cannot be handed a stale copy of one while holding the other.
+   *
+   * `landed` is what makes it "the first time". Clerk renews tokens, other tabs sign out, and every
+   * one of those is a change here; none of them is an arrival, and hijacking navigation on each
+   * would take somebody off the page they had chosen for themselves.
+   */
+  useEffect(() => {
+    if (!account || landed.current) return
+    landed.current = true
+    // Somebody who described their company before being asked to sign in has already done the one
+    // thing Wesify needs from them; they go straight on with it rather than back to an empty box.
+    if (pendingBrief) return build(pendingBrief)
+    // A returning operator should not land on the prompt they have already answered. Only on a bare
+    // "/", so this cannot fight an in-app navigation that meant to go there.
+    if (workspaces.length && window.location.pathname === '/') {
+      window.history.replaceState({}, '', homeFor(workspaces))
+      setPath(homeFor(workspaces))
+    }
+  }, [account, workspaces, pendingBrief])
 
   useEffect(() => {
     const handleHistory = () => setPath(window.location.pathname)
@@ -124,24 +161,14 @@ export default function App() {
   }
 
   /**
-   * What happens the moment somebody proves who they are.
+   * Which page this is, given the path and who is signed in.
    *
-   * A typed-but-unsent brief wins outright: someone who described their company before being asked
-   * to sign in has already done the one thing this product needs from them, and asking again to
-   * prove they now have an account is how they get lost between the two screens.
-   *
-   * Otherwise they go to the workspace they already have, and the list arrives with them. The
-   * sign-in screen asks the server who this is — that call is also what creates the account — and it
-   * comes back with the workspaces attached, so asking again here would be a second round trip for
-   * something already in hand, paid for by the person waiting on the screen.
+   * A function rather than a chain of early returns straight out of the component, so that one thing
+   * can be rendered alongside whatever it produces: the watcher below, which has to stay mounted on
+   * every page. Unmounting it on navigation would mean losing track of the session on exactly the
+   * screens where somebody is using it.
    */
-  const afterSignedIn = (signedIn: Account, signedInWorkspaces: AccountWorkspace[]) => {
-    setAccount(signedIn)
-    if (pendingBrief) return build(pendingBrief)
-    setWorkspaces(signedInWorkspaces)
-    navigate(homeFor(signedInWorkspaces))
-  }
-
+  const renderPage = () => {
   if (path === '/') return <Home
     initialValue={String(answers.companyDescription ?? '')}
     onSubmit={startBuild}
@@ -169,7 +196,7 @@ export default function App() {
     return <main className="bo-home"/>
   }
 
-  if (accounts && !account) return <SignIn onSignedIn={afterSignedIn}/>
+  if (accounts && !account) return <SignIn unreachable={unreachable}/>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.
@@ -225,4 +252,15 @@ export default function App() {
 
   // Anything else is the home page, which by this point is reached signed in.
   return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={build} signedIn={Boolean(account)} accounts={accounts === true}/>
+  }
+
+  /**
+   * The watcher is mounted only where Clerk is, because it holds a Clerk hook and those need the
+   * provider — which main.tsx mounts only when this build has a publishable key. Without one there is
+   * nothing to watch, and the boot fetch above is the whole answer.
+   */
+  return <>
+    {Boolean(String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '').trim()) && <AccountWatch onChange={handleAccount}/>}
+    {renderPage()}
+  </>
 }
