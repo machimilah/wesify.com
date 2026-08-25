@@ -57,7 +57,7 @@ export async function recordIndustryObservations(subsector: string | undefined, 
   try {
     await fetch(apiUrl(`/api/industries/${subsector}/observations`), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
+      headers: { 'content-type': 'application/json', ...(await workspaceAccessHeaders(workspaceId)) },
       body: JSON.stringify({ ...observations, workspaceId }),
     })
   } catch { /* Losing one observation is not worth interrupting anyone's work. */ }

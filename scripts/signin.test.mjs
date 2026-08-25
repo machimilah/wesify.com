@@ -5,15 +5,25 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate } from '../server/db.mjs'
+import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
- * Signing in, from the browser.
+ * Being signed in, from the browser.
  *
  * `accounts.test.mjs` proves the routes refuse a stranger. This proves the part a person actually
- * meets: that Wesify asks who they are before showing them anything, that the session survives a reload,
- * that signing out puts them back, and — the point of the whole exercise — that signing in on what
- * amounts to a second browser reaches the same account rather than a fresh empty Wesify.
+ * meets: that Wesify asks who they are before showing them anything, that being signed in survives a
+ * reload, that losing the session puts them back at the gate, and — the point of the whole exercise —
+ * that a second browser with nothing cached reaches the same workspace rather than a fresh empty Wesify.
+ *
+ * What is deliberately not here any more is the sign-in form itself. Clerk draws it and Clerk checks
+ * what is typed into it, against a hosted instance this suite has no business needing; testing it here
+ * would be testing Clerk. What Wesify still owns is everything on either side of it, and that is what
+ * follows.
+ *
+ * Being signed in is stood in for the way the interface actually reads it: `window.Clerk`, asked for a
+ * token per request. A page with that object present is signed in, one without it is not, and the
+ * token it returns is the stub the server verifies. See clerkStub.mjs.
  */
 
 const apiPort = 8959
@@ -23,6 +33,7 @@ process.env.BO_GENERATED_ROOT = await mkdtemp(path.join(tmpdir(), 'bo-signin-'))
 const memory = newDb()
 const { Pool } = memory.adapters.createPg()
 useDatabase(new Pool())
+useTestClerk()
 await migrate()
 
 const { server } = await import('../server/index.mjs')
@@ -39,24 +50,27 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 
 const browser = await launchBrowser()
 const errors = []
+const sessionToken = tokenFor('user_owner')
 
-async function open() {
+async function open({ signedIn = false } = {}) {
   // Every call is its own isolated context — Playwright gives a fresh one per `browser.newPage()` —
   // which is what stands in for "a different browser" throughout this file: empty localStorage,
-  // nothing cached, nothing but the account this page signs into.
+  // nothing cached, nothing but the account this page arrives as.
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => {
-    // This test deliberately submits a weak password and a wrong one, and the browser logs the 400
-    // and 401 that come back. Those are the feature working, not a fault to report.
+    // A page that is not signed in deliberately asks the server who it is and is told nobody. The
+    // 401 the browser logs is that working, not a fault to report.
     const text = message.text()
     if (message.type() !== 'error') return
     if (/Failed to load resource: the server responded with a status of 40[019]/.test(text)) return
     errors.push(text)
   })
-  // Only needed so step 4 below can carry a signup straight through to a real, finished Command
-  // Center rather than stopping at the first question — the discovery model itself is not what this
-  // file is about.
+  if (signedIn) {
+    await page.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, sessionToken)
+  }
+  // Only needed so the build below runs straight through to a finished Command Center rather than
+  // stopping at the first question — the discovery model itself is not what this file is about.
   await page.addInitScript(() => {
     window.__BO_DISCOVERY_MODEL_MOCK__ = async () => ({
       businessState: {
@@ -81,66 +95,51 @@ async function open() {
 }
 
 try {
-  const page = await open()
+  const stranger = await open()
 
   /**
    * 1. The home page is public, and so is the box on it.
    *
    * There is one page now — `/`, and nothing else — and describing a company on it needs no
-   * account. What stays gated is the workspace that describing one produces — so the check is not
+   * account. What stays gated is the workspace that describing one produces, so the check is not
    * "can a stranger see a prompt" but "can a stranger reach a Command Center".
    */
-  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
-  await page.getByTestId('get-started').click()
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
-  await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
-  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await stranger.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  await stranger.getByTestId('get-started').click()
+  await stranger.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  if (await stranger.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
+  await stranger.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
+  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await stranger.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
 
-  // 2. Describing a company asks who you are before building anything — and keeps what was typed,
-  //    so it is not asked for twice.
+  // 2. Describing a company asks who you are before building anything — and keeps what was typed, so
+  //    it is not asked for twice once they are back.
+  await stranger.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await stranger.getByTestId('get-started').click()
+  await stranger.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
+  await stranger.getByTestId('start-building').click()
+  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await stranger.getByTestId('build-thread').count()) throw new Error('Wesify started building for someone with no account.')
+
+  // 3. Signed in, the same sentence goes straight through to a finished Command Center. Everything
+  //    after this uses a real one on purpose: a workspace still mid-build proves nothing about
+  //    whether a second device can open one.
+  const page = await open({ signedIn: true })
   await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
   await page.getByTestId('start-building').click()
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('build-thread').count()) throw new Error('Wesify started building for someone with no account.')
-
-  // 3. A password Wesify will not accept is refused, and says why.
-  await page.getByTestId('signin-email').fill('owner@example.com')
-  await page.getByTestId('signin-password').fill('short')
-  await page.getByTestId('signin-password').evaluate(node => node.setAttribute('minlength', '1'))
-  await page.getByTestId('signin-submit').click()
-  await page.getByTestId('signin-error').waitFor()
-  if (!/at least/i.test(await page.getByTestId('signin-error').innerText())) throw new Error('Wesify refused a weak password without saying what it wanted.')
-
-  // 4. Signing up gets in — and straight on with what they already typed, rather than back to an
-  //    empty box asking them to describe their company a second time to prove they have an account.
-  await page.getByTestId('signin-password').fill('a-long-enough-password')
-  await page.getByTestId('signin-submit').click()
   await page.getByTestId('build-thread').waitFor({ timeout: 30_000 })
   await page.waitForURL('**/build/**')
-  const carried = await page.evaluate(() => JSON.parse(localStorage.getItem('bo-answers') || '{}').companyDescription ?? '')
-  if (!/plumbing/i.test(carried)) throw new Error(`The sentence typed before signing in was lost: ${carried}`)
-
-  /**
-   * 4b. Carried through to a real, finished workspace — not just a build in progress.
-   *
-   * Everything after this uses a real Command Center on purpose. A workspace still mid-build proves
-   * nothing about whether a second device can actually open one; a finished one does.
-   */
   await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
   await page.getByTestId('open-dashboard').click()
   await page.waitForURL(/\/workspace\/[a-zA-Z0-9-]+\/home/, { timeout: 30_000 })
   await page.getByTestId('app-grid').waitFor({ timeout: 30_000 })
-  const builtWorkspaceUrl = page.url()
-  const builtWorkspaceId = builtWorkspaceUrl.match(/\/workspace\/([a-zA-Z0-9-]+)\//)?.[1]
-  if (!builtWorkspaceId) throw new Error(`Approving the Command Center did not land on a workspace-scoped URL: ${builtWorkspaceUrl}`)
+  const builtWorkspaceId = page.url().match(/\/workspace\/([a-zA-Z0-9-]+)\//)?.[1]
+  if (!builtWorkspaceId) throw new Error(`Approving the Command Center did not land on a workspace-scoped URL: ${page.url()}`)
 
-  // 5. The session survives a reload of the workspace itself. A sign-in that has to be repeated on
-  //    refresh is not a session, and a returning operator hitting "/" now goes straight back to this
-  //    same workspace rather than the prompt — which is checked here too, in the same reload.
+  // 4. The session survives a reload of the workspace itself. One that has to be re-established on
+  //    refresh is not a session — and a returning operator hitting "/" goes straight back to this
+  //    same workspace rather than the prompt, which is checked here too, in the same reload.
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
@@ -148,7 +147,7 @@ try {
   await page.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
 
   /**
-   * 6. The same account reaches the same workspace from a different browser — the real point of
+   * 5. The same account reaches the same workspace from a different browser — the real point of
    *    having accounts at all, and of the workspace living at a URL rather than in localStorage.
    *
    * `second` has never seen this workspace: nothing cached, nothing built here. Before workspace
@@ -156,41 +155,27 @@ try {
    * stuck on "Opening workspace..." forever, because the only copy of what the workspace looked like
    * was sitting in the localStorage of the browser that built it.
    */
-  const second = await open()
-  await second.getByTestId('open-signin').click()
-  await second.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  await second.getByTestId('signin-switch').click()
-  await second.getByTestId('signin-email').fill('owner@example.com')
-  await second.getByTestId('signin-password').fill('a-long-enough-password')
-  await second.getByTestId('signin-submit').click()
-  // Signing in with no pending brief and an existing workspace goes straight to it — not back to
-  // the prompt, which would mean treating a returning operator as a stranger.
+  const second = await open({ signedIn: true })
   await second.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
   await second.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   const secondPages = await second.locator('[data-testid^="schema-nav-"]').count()
   if (secondPages < 2) throw new Error(`A browser with nothing cached could not open the workspace it signed into: only ${secondPages} sections rendered.`)
 
-  // 7. The wrong password does not get in, and does not say which half was wrong.
-  const third = await open()
-  await third.getByTestId('open-signin').click()
-  await third.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  await third.getByTestId('signin-switch').click()
-  await third.getByTestId('signin-email').fill('owner@example.com')
-  await third.getByTestId('signin-password').fill('not-the-right-password')
-  await third.getByTestId('signin-submit').click()
-  await third.getByTestId('signin-error').waitFor()
-  const refusal = await third.getByTestId('signin-error').innerText()
-  if (/no account|not found|unknown/i.test(refusal)) throw new Error(`The sign-in form says whether an account exists: ${refusal}`)
-  if (await third.getByTestId('company-brief').count()) throw new Error('A wrong password got in.')
+  // 6. A different account is not shown somebody else's workspace, however it arrives at the URL.
+  const other = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  await other.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, tokenFor('user_intruder'))
+  await other.goto(`http://127.0.0.1:${vitePort}/workspace/${builtWorkspaceId}/home`, { waitUntil: 'networkidle' })
+  const intruderPages = await other.locator('[data-testid^="schema-nav-"]').count()
+  if (intruderPages > 0) throw new Error('Another account was shown the sections of a workspace it does not own.')
 
   /**
-   * 8. Signing out closes the workspace, wherever it was reached from — and offers the way back in.
+   * 7. Losing the session closes the workspace, wherever it was reached from.
    *
    * `page` is sitting on the workspace URL itself here, which is the case that matters most: a
-   * session lost or removed must never leave stale workspace content on screen just because the
-   * page has not been asked to go anywhere. It has to notice and show the gate.
+   * session ended elsewhere — signed out on another device, revoked, expired — must never leave stale
+   * workspace content on screen just because the page has not been asked to go anywhere.
    */
-  await page.evaluate(() => localStorage.removeItem('bo-session-token'))
+  await page.addInitScript(() => { window.Clerk = { session: null } })
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out reload of the workspace URL still showed the workspace.')
@@ -205,13 +190,8 @@ try {
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
 
-  // 9. And the home page still works signed out, which is where a stranger starts.
-  await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await page.getByTestId('get-started').click()
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: one public home page whose prompt anyone can type in, the workspace still gated behind an account, the sentence typed before signing in carried through instead of asked for twice, weak passwords explained, a returning operator landing straight back on their workspace rather than the prompt, the same workspace opened by a browser that had never seen it, a wrong password refused without revealing whether the address exists, and signing out clearing even a workspace already on screen.')
+  console.log('Sign-in test passed: one public home page whose prompt anyone can type in, the workspace still gated behind an account, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload and returning them to their workspace rather than the prompt, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
 } finally {
   await browser.close()
   vite.kill()

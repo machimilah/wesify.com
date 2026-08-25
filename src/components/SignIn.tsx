@@ -1,80 +1,73 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
-import { ArrowRight } from 'lucide-react'
-import { registerAccount, requestPasswordReset, signIn, type Account } from '../engine/authClient'
+import { useEffect, useState } from 'react'
+import { SignIn as ClerkSignIn, useAuth } from '@clerk/clerk-react'
+import { currentAccount, type Account } from '../engine/authClient'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 
 /**
  * The way in, when Wesify has accounts.
  *
- * One screen for both signing up and signing in, because at this stage almost everybody arriving is
- * new and asking them to pick first is a decision about Wesify rather than about their business. The
- * server's messages are shown as they are: it already distinguishes "that email has an account" from
- * "that password is wrong", and rewriting them here would only make the screen less helpful.
+ * The form used to be Wesify's own — two fields, a third mode for forgotten passwords, and a server that
+ * hashed and mailed. Clerk owns all of that now, including the parts Wesify never built: verification
+ * codes, social sign-in, and whatever a Clerk instance is configured to offer next week. What is left
+ * here is the page around it, and the one step Clerk cannot take.
  *
- * Forgetting a password is the third mode of the same screen rather than a page of its own. It needs
- * the address and nothing else, and it is reached from the moment the person discovers they need it.
+ * That step is the handoff. Clerk signing somebody in proves who they are; it does not tell Wesify
+ * anything, because Wesify's own account row and the workspaces attached to it live in Wesify's database.
+ * So the moment Clerk reports a session, this asks the server who that is — which is also what creates
+ * the local row the first time — and hands the answer up.
+ *
+ * `routing="virtual"` because Wesify routes by reading `window.location` itself rather than through a
+ * router Clerk could hook into: the sign-in flow stays on this screen instead of pushing paths that
+ * App.tsx would then have to know about.
  */
-type Mode = 'create' | 'signin' | 'forgot'
-
 export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
-  const [mode, setMode] = useState<Mode>('create')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [working, setWorking] = useState(false)
-
-  const creating = mode === 'create'
-  const forgot = mode === 'forgot'
-
-  const go = (next: Mode) => { setMode(next); setError(''); setNotice('') }
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (working || !email.trim() || (!forgot && !password)) return
-    setWorking(true); setError(''); setNotice('')
-    try {
-      if (forgot) {
-        // The server answers the same way for an address it has never seen, and so does this screen.
-        setNotice(await requestPasswordReset(email.trim()))
-      } else {
-        onSignedIn(await (creating ? registerAccount(email.trim(), password) : signIn(email.trim(), password)))
-      }
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Wesify could not sign you in.'
-      setError(message)
-      // The server says so plainly when an address is taken, so move them to the right form instead
-      // of leaving them to work out that they already have an account.
-      if (/already has an account/i.test(message)) setMode('signin')
-    } finally {
-      setWorking(false)
-    }
+  /**
+   * A server with accounts and an interface built without a Clerk key is a real deployment mistake —
+   * the two are configured in different places, by different people, at different times. Saying so is
+   * the whole of what can be done about it here, and it must be said without touching a Clerk hook:
+   * those need the provider, which is exactly what is missing.
+   */
+  if (!String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '').trim()) {
+    return <main className="bo-signin">
+      <ThemeToggle className="bo-signin__theme-toggle"/>
+      <div className="bo-signin__panel" data-testid="signin-form">
+        <Brand/>
+        <div className="bo-signin-error" role="alert" data-testid="signin-error">
+          This copy of Wesify was built without a sign-in key, so nobody can sign in. Set VITE_CLERK_PUBLISHABLE_KEY and build it again.
+        </div>
+      </div>
+    </main>
   }
+  return <ClerkGate onSignedIn={onSignedIn}/>
+}
+
+function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
+  const { isLoaded, isSignedIn } = useAuth()
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return
+    let cancelled = false
+    void (async () => {
+      const found = await currentAccount()
+      if (cancelled) return
+      // Signed in with Clerk but unknown to Wesify means the server refused the token — a key from a
+      // different Clerk instance, or a database that is down. Saying so beats a screen that sits on
+      // "one moment" forever.
+      if (!found) return setError('You are signed in, but Wesify could not open your account. Try again in a moment.')
+      onSignedIn(found.user)
+    })()
+    return () => { cancelled = true }
+  }, [isLoaded, isSignedIn, onSignedIn])
 
   return <main className="bo-signin">
     <ThemeToggle className="bo-signin__theme-toggle"/>
-    <form onSubmit={submit} data-testid="signin-form">
+    <div className="bo-signin__panel" data-testid="signin-form">
       <Brand/>
-      <h1>{forgot ? 'Reset your password' : creating ? 'Create your Wesify account' : 'Welcome back'}</h1>
-      {forgot && null}
-      <label>
-        <span>Email</span>
-        <input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" required autoFocus data-testid="signin-email"/>
-      </label>
-      {!forgot && <label>
-        <span>Password</span>
-        <input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete={creating ? 'new-password' : 'current-password'} required minLength={creating ? 10 : undefined} data-testid="signin-password"/>
-        {creating && <em>At least 10 characters.</em>}
-      </label>}
-      {error && <div className="bo-signin-error" role="alert" data-testid="signin-error">{error}</div>}
-      {notice && <div className="bo-signin-notice" role="status" data-testid="signin-notice">{notice}</div>}
-      <button disabled={working} data-testid="signin-submit">{working ? 'One moment…' : forgot ? 'Send reset link' : creating ? 'Create account' : 'Sign in'} <ArrowRight size={15}/></button>
-      {!creating && !forgot && <button type="button" className="bo-signin-switch" onClick={() => go('forgot')} data-testid="signin-forgot">I forgot my password</button>}
-      <button type="button" className="bo-signin-switch" onClick={() => go(creating ? 'signin' : 'create')} data-testid="signin-switch">
-        {creating ? 'I already have an account' : 'Create an account instead'}
-      </button>
-    </form>
+      {error
+        ? <div className="bo-signin-error" role="alert" data-testid="signin-error">{error}</div>
+        : <ClerkSignIn routing="virtual" signUpUrl={undefined} appearance={{ variables: { colorBackground: 'transparent' } }}/>}
+    </div>
   </main>
 }

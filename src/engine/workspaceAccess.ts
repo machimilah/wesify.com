@@ -18,6 +18,11 @@ export function workspaceAccessToken(workspaceId: string) {
   return token
 }
 
-export function workspaceAccessHeaders(workspaceId: string): Record<string, string> {
-  return { 'x-bo-workspace-id': workspaceId, 'x-bo-access-token': workspaceAccessToken(workspaceId), ...sessionHeaders() }
+/**
+ * Async because the session half is: Clerk mints a short-lived token per request rather than handing
+ * out one that sits in storage. The self-issued workspace token is still read synchronously — it is
+ * this browser's own, and it never expires.
+ */
+export async function workspaceAccessHeaders(workspaceId: string): Promise<Record<string, string>> {
+  return { 'x-bo-workspace-id': workspaceId, 'x-bo-access-token': workspaceAccessToken(workspaceId), ...(await sessionHeaders()) }
 }

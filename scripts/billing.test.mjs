@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { launchBrowser } from './browser.mjs'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
@@ -54,6 +55,7 @@ await new Promise(resolve => stripe.listen(stripePort, '127.0.0.1', resolve))
 const memory = newDb()
 const { Pool } = memory.adapters.createPg()
 useDatabase(new Pool())
+useTestClerk()
 await migrate()
 
 const { server } = await import('../server/index.mjs')
@@ -130,8 +132,8 @@ const specification = {
 }
 
 try {
-  const registered = await post('/api/auth/register', { email: 'payer@example.com', password: 'a-long-enough-password' })
-  const token = registered.payload.token
+  // Clerk signs the payer in; what is tested here is the plan Wesify puts them on.
+  const token = tokenFor('user_payer')
   const auth = workspaceId => ({ authorization: `Bearer ${token}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' })
 
   // 1. A new account is on the free plan, and is told what every plan costs without having to ask
@@ -186,8 +188,8 @@ try {
   assert.equal(request.path, '/v1/checkout/sessions')
   assert.equal(request.form['line_items[0][price]'], 'price_pro')
   assert.equal(request.form.mode, 'subscription')
-  assert.equal(request.form.client_reference_id, registered.payload.user.id)
-  assert.equal(request.form['subscription_data[metadata][bo_user_id]'], registered.payload.user.id)
+  assert.equal(request.form.client_reference_id, 'user_payer')
+  assert.equal(request.form['subscription_data[metadata][bo_user_id]'], 'user_payer')
   assert.equal(request.authorization, 'Bearer sk_test_pretend')
 
   // 7. An unsigned, wrongly signed, or stale webhook changes nothing. Without this check, upgrading
@@ -196,20 +198,20 @@ try {
     id: 'evt_1', type: 'checkout.session.completed',
     data: { object: { id: 'cs_test_1', customer: 'cus_1', subscription: 'sub_1', client_reference_id: userId, metadata: { bo_user_id: userId, bo_plan: 'business' } } },
   })
-  const unsigned = await fetch(`${base}/api/billing/webhook`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(upgrade(registered.payload.user.id)) })
+  const unsigned = await fetch(`${base}/api/billing/webhook`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(upgrade('user_payer')) })
   assert.equal(unsigned.status, 400, 'an unsigned webhook was accepted')
-  const forged = await signed(upgrade(registered.payload.user.id), { secret: 'whsec_guessed' })
+  const forged = await signed(upgrade('user_payer'), { secret: 'whsec_guessed' })
   assert.equal(forged.status, 400, 'a webhook signed with the wrong secret was accepted')
-  const stale = await signed(upgrade(registered.payload.user.id), { at: Math.floor(Date.now() / 1000) - 4000 })
+  const stale = await signed(upgrade('user_payer'), { at: Math.floor(Date.now() / 1000) - 4000 })
   assert.equal(stale.status, 400, 'a captured webhook could be replayed later')
   assert.equal((await json('/api/billing', { headers: { authorization: `Bearer ${token}` } })).payload.plan, 'free', 'a rejected webhook still changed the plan')
 
   // 8. A properly signed one upgrades the account, and the same event again does not do the work
   //    twice. Stripe delivers at least once, so a retry after a timeout is ordinary.
-  const accepted = await signed(upgrade(registered.payload.user.id))
+  const accepted = await signed(upgrade('user_payer'))
   assert.equal(accepted.status, 200)
   assert.equal(accepted.payload.applied, true)
-  const repeated = await signed(upgrade(registered.payload.user.id))
+  const repeated = await signed(upgrade('user_payer'))
   assert.equal(repeated.status, 200, 'a duplicate webhook was answered with an error, which asks Stripe to retry forever')
   assert.equal(repeated.payload.applied, false)
   assert.equal(repeated.payload.reason, 'duplicate')
@@ -239,9 +241,9 @@ try {
 
   // 12. Cancelling keeps what was already paid for until the period it was paid for ends.
   const stillPaidUntil = Math.floor(Date.now() / 1000) + 7 * 24 * 3600
-  await signed({ id: 'evt_3', type: 'customer.subscription.updated', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'active', current_period_end: stillPaidUntil, metadata: { bo_user_id: registered.payload.user.id, bo_plan: 'business' } } } })
+  await signed({ id: 'evt_3', type: 'customer.subscription.updated', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'active', current_period_end: stillPaidUntil, metadata: { bo_user_id: 'user_payer', bo_plan: 'business' } } } })
   assert.equal((await json('/api/billing', { headers: { authorization: `Bearer ${token}` } })).payload.plan, 'business')
-  await signed({ id: 'evt_4', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'canceled', current_period_end: Math.floor(Date.now() / 1000) - 60, metadata: { bo_user_id: registered.payload.user.id, bo_plan: 'business' } } } })
+  await signed({ id: 'evt_4', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'canceled', current_period_end: Math.floor(Date.now() / 1000) - 60, metadata: { bo_user_id: 'user_payer', bo_plan: 'business' } } } })
 
   // 13. And once it has lapsed, the free limits are back — with every record still there. Losing a
   //     subscription must never mean losing what you typed.
@@ -258,7 +260,15 @@ try {
   // 14. The plan screen, in a browser. Every number on it must come from the server: a price written
   //     down in the interface as well is one that will eventually disagree with what is charged.
   const page = await openPage()
-  await page.evaluate(value => localStorage.setItem('bo-session-token', value), token)
+  /**
+   * A signed-in browser, without a Clerk instance to sign in against.
+   *
+   * The interface asks `window.Clerk` for a token on every request — that is the whole of what it
+   * knows about Clerk outside the sign-in screen — so standing in for that object is standing in for
+   * being signed in. `addInitScript` puts it there before the app's own scripts run, on this
+   * navigation and every one after it.
+   */
+  await page.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, token)
   await page.goto(`http://127.0.0.1:${vitePort}/billing`, { waitUntil: 'networkidle' })
   await page.getByTestId('billing-current').waitFor({ timeout: 15_000 })
 
@@ -282,7 +292,7 @@ try {
   assert.deepEqual(errors, [], `the browser reported errors: ${errors.join(' | ')}`)
 
   // 15. Deleting the account takes its subscription and its rebuild history with it.
-  await query('delete from users where email = $1', ['payer@example.com'])
+  await query('delete from users where id = $1', ['user_payer'])
   assert.equal((await query('select * from subscriptions')).rows.length, 0)
   assert.equal((await query('select * from rebuilds')).rows.length, 0)
 

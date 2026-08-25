@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
@@ -27,6 +28,7 @@ process.env.BO_GENERATED_ROOT = generatedRoot
 const memory = newDb()
 const { Pool } = memory.adapters.createPg()
 useDatabase(new Pool())
+useTestClerk()
 await migrate()
 
 const { server } = await import('../server/index.mjs')
@@ -68,8 +70,7 @@ const specification = {
 
 try {
   // An account, and the workspace headers every workspace-scoped call needs.
-  const registered = await json('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: 'owner@example.com', password: 'a-long-enough-password' }) })
-  const auth = { authorization: `Bearer ${registered.payload.token}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' }
+  const auth = { authorization: `Bearer ${tokenFor('user_owner')}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' }
 
   const built = await json('/api/builds', { method: 'POST', body: JSON.stringify({ workspaceId, specification }), headers: auth })
   assert.equal(built.status, 201)
@@ -161,7 +162,7 @@ try {
   assert.equal(viewerExport.status, 403, 'a role that cannot even view the workspace could still export it')
 
   // 9. Deleting the account cascades all the way down: workspace, then every record it held.
-  await query('delete from users where email = $1', ['owner@example.com'])
+  await query('delete from users where id = $1', ['user_owner'])
   const survivingRecords = (await query('select * from records where workspace_id = $1', [workspaceId])).rows
   assert.equal(survivingRecords.length, 0, 'records outlived the workspace and the account that owned it')
   const survivingWorkspace = (await query('select * from workspaces where id = $1', [workspaceId])).rows

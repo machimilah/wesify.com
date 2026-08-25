@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
@@ -48,6 +49,7 @@ const lastEvent = () => JSON.parse(received.at(-1).body.split('\n')[2])
 const memory = newDb()
 const { Pool } = memory.adapters.createPg()
 useDatabase(new Pool())
+useTestClerk()
 await migrate()
 
 const logs = []
@@ -58,8 +60,17 @@ const { server } = await import('../server/index.mjs')
 await new Promise(resolve => server.listen(port, '127.0.0.1', resolve))
 
 const base = `http://127.0.0.1:${port}`
-const password = 'a-password-worth-hiding'
-const secretHeaderValue = 'Bearer a-session-token-worth-hiding'
+const secretInABody = 'a-value-worth-hiding'
+/**
+ * A live session, and the value that must never appear in a report.
+ *
+ * The trailing part is the secret being searched for, and it is deliberately not the account id: a
+ * real session token is opaque and says nothing about who holds it, while the id it resolves to is an
+ * ordinary identifier that may perfectly well appear in an error message. Searching for the id would
+ * therefore fail on a report that leaked nothing.
+ */
+const sessionSecret = 'an-opaque-session-value-worth-hiding'
+const secretHeaderValue = `Bearer ${tokenFor('user_watched')}:${sessionSecret}`
 
 async function call(pathname, init = {}) {
   const response = await fetch(`${base}${pathname}`, { ...init, headers: { 'content-type': 'application/json', ...(init.headers ?? {}) } })
@@ -94,15 +105,16 @@ try {
   const before = received.length
   const unauthorized = await call('/api/auth/me', { headers: { authorization: 'Bearer nonsense' } })
   assert.equal(unauthorized.status, 401)
-  await call('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: 'not-an-email', password: 'short' }) })
+  await call('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: 'not-an-email' }) })
   assert.equal(received.length, before, 'a 4xx was reported as an error')
 
   // 3. A real 500. The table is dropped underneath a live insert, so the failure comes from where
   //    failures actually come from: a query that stops working after the code shipped.
-  const registered = await call('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: 'watched@example.com', password }) })
-  assert.equal(registered.status, 200)
-  await call('/api/builds', { method: 'POST', body: JSON.stringify({ workspaceId: 'ws-observability' }), headers: { authorization: `Bearer ${registered.payload.token}` } }).catch(() => undefined)
-  await query('drop table sessions')
+  const token = tokenFor('user_watched')
+  await call('/api/builds', { method: 'POST', body: JSON.stringify({ workspaceId: 'ws-observability', note: secretInABody }), headers: { authorization: `Bearer ${token}` } }).catch(() => undefined)
+  // The table is dropped underneath a live query, so the failure comes from where failures actually
+  // come from: SQL that stops working after the code shipped.
+  await query('drop table users cascade')
 
   const broken = await call('/api/auth/me', { headers: { authorization: secretHeaderValue } })
   assert.equal(broken.status, 500)
@@ -129,8 +141,8 @@ try {
 
   // 6. And it carries none of the things that would make reporting it worse than the bug.
   const reported = received.at(-1).body
-  assert.equal(reported.includes(password), false, 'a password reached the error monitor')
-  assert.equal(reported.includes('a-session-token-worth-hiding'), false, 'a session token reached the error monitor')
+  assert.equal(reported.includes(secretInABody), false, 'a request body reached the error monitor')
+  assert.equal(reported.includes(sessionSecret), false, 'a session token reached the error monitor')
   assert.equal(/authorization/i.test(reported), false, 'a request header reached the error monitor')
 
   // 7. The same failure is on stdout too, so a deployment with no Sentry account still has a record.
@@ -138,14 +150,14 @@ try {
   const errorLog = structured().find(entry => entry.event === 'error' && entry.requestId === reference)
   assert.ok(errorLog, 'the failure was reported to Sentry but not logged')
   assert.ok(errorLog.stack, 'the logged failure has no stack trace')
-  assert.equal(JSON.stringify(errorLog).includes(password), false, 'a password was written to the log')
+  assert.equal(JSON.stringify(errorLog).includes(secretInABody), false, 'a request body was written to the log')
 
   // 8. A monitor that is down cannot take Wesify with it, and must not make Wesify slow either. Reporting
   //    happens after the answer, so an unreachable monitor costs the caller nothing — which is the
   //    whole point, because the monitor is unreachable exactly when something is already wrong.
   await new Promise(resolve => sentry.close(resolve))
   const startedAt = Date.now()
-  const stillBroken = await call('/api/auth/me', { headers: { authorization: 'Bearer anything' } })
+  const stillBroken = await call('/api/auth/me', { headers: { authorization: secretHeaderValue } })
   const took = Date.now() - startedAt
   assert.equal(stillBroken.status, 500, 'Wesify stopped answering when its error monitor went down')
   assert.ok(stillBroken.payload.reference)
@@ -153,7 +165,7 @@ try {
   await waitFor(() => structured().some(entry => entry.event === 'error-reporting-failed'), 'the failed report to be logged')
 
   console.log = realLog
-  console.log('Observability test passed: every response carries a traceable id, every request is logged as structured JSON with its duration, 4xx answers are not reported as failures, a 500 reaches the monitor with its stack and enough context to find it, the caller gets a reference and nothing else, no password or session token or header ever reaches the monitor or the log, and a monitor that is down neither hides the failure nor takes Wesify with it.')
+  console.log('Observability test passed: every response carries a traceable id, every request is logged as structured JSON with its duration, 4xx answers are not reported as failures, a 500 reaches the monitor with its stack and enough context to find it, the caller gets a reference and nothing else, no request body or session token or header ever reaches the monitor or the log, and a monitor that is down neither hides the failure nor takes Wesify with it.')
 } finally {
   console.log = realLog
   await new Promise(resolve => server.close(resolve))

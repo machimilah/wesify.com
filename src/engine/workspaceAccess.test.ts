@@ -28,18 +28,29 @@ describe('workspace access', () => {
     expect(localStorage.getItem('bo-workspace:ws-1:access-token')).toBe(token)
   })
 
-  it('sends the workspace id alongside the token, which is what the server checks them against', () => {
-    const headers = workspaceAccessHeaders('ws-1')
+  it('sends the workspace id alongside the token, which is what the server checks them against', async () => {
+    const headers = await workspaceAccessHeaders('ws-1')
     expect(headers['x-bo-workspace-id']).toBe('ws-1')
     expect(headers['x-bo-access-token']).toBe(workspaceAccessToken('ws-1'))
-    // No session yet: the account headers are simply absent rather than sent empty, which the
+    // Nobody signed in: the account header is simply absent rather than sent empty, which the
     // server would read as a token that failed rather than as no token at all.
     expect(headers.authorization).toBeUndefined()
   })
 
-  it('adds the account session when there is one, so the server can prefer it', () => {
-    localStorage.setItem('bo-session-token', 'a-real-session')
-    expect(workspaceAccessHeaders('ws-1').authorization).toBe('Bearer a-real-session')
+  /**
+   * The session half comes from Clerk, which mints a short-lived token per request rather than
+   * leaving one in storage — so this asks Clerk the way the app does, through `window.Clerk`.
+   */
+  it('adds the account session when there is one, so the server can prefer it', async () => {
+    window.Clerk = { session: { getToken: async () => 'a-real-session' } }
+    expect((await workspaceAccessHeaders('ws-1')).authorization).toBe('Bearer a-real-session')
+    window.Clerk = undefined
+  })
+
+  it('sends no session when Clerk cannot mint one, rather than an empty bearer', async () => {
+    window.Clerk = { session: { getToken: async () => { throw new Error('offline') } } }
+    expect((await workspaceAccessHeaders('ws-1')).authorization).toBeUndefined()
+    window.Clerk = undefined
   })
 
   it('contains no separators, so it cannot be confused for two values', () => {

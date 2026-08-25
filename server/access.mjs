@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { projectPaths } from './project-builder.mjs'
 import { databaseAvailable } from './db.mjs'
+import { clerkConfigured } from './clerk.mjs'
 import { claimWorkspace, membership, sessionUser, workspacesFor } from './auth.mjs'
 import { requireWorkspaceRoom } from './billing.mjs'
 import { callerOf, rateLimit, spendModelCall } from './limits.mjs'
@@ -25,15 +26,16 @@ const accessRoot = () => path.resolve(process.env.BO_GENERATED_ROOT || path.join
  * caller has not claimed yet is claimed for them here, which is what makes the first build after
  * signing in belong to somebody.
  *
- * Without a database, Wesify keeps its previous behaviour: the first caller to present a token for a
- * workspace id owns it from then on. That is trust-on-first-use, it is not real security, and it
- * exists so the prototype still runs with no infrastructure. `databaseAvailable()` is the switch.
+ * Without accounts — no database to own a workspace, or no Clerk instance to say who is asking —
+ * Wesify keeps its previous behaviour: the first caller to present a token for a workspace id owns it
+ * from then on. That is trust-on-first-use, it is not real security, and it exists so the prototype
+ * still runs with no infrastructure. Both switches have to be on for the account path to be taken.
  */
 export async function tenant(request, workspaceId) {
   const header = String(request.headers['x-bo-workspace-id'] ?? '').toLowerCase()
   if (!header || header !== String(workspaceId).toLowerCase()) throw Object.assign(new Error('Workspace access denied.'), { status: 403 })
 
-  if (databaseAvailable()) {
+  if (databaseAvailable() && clerkConfigured()) {
     const user = await sessionUser(bearer(request))
     if (!user) throw Object.assign(new Error('Sign in to use this workspace.'), { status: 401 })
     const existing = await membership(workspaceId, user.id)

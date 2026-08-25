@@ -8,7 +8,7 @@ export interface AutomationRun { id: string; automationId: string; automationNam
 export interface AutomationWorkspace { connectors: AutomationConnector[]; automations: ManagedAutomation[]; runs: AutomationRun[] }
 
 async function request<T>(workspaceId: string, path: string, init: RequestInit = {}) {
-  const response = await fetch(path, { ...init, headers: { ...workspaceAccessHeaders(workspaceId), 'x-bo-role': 'owner', ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers } })
+  const response = await fetch(path, { ...init, headers: { ...(await workspaceAccessHeaders(workspaceId)), 'x-bo-role': 'owner', ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers } })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error ?? 'Automation service is unavailable.')
   return payload as T

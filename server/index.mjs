@@ -9,7 +9,7 @@ import { billingAvailable } from './billing.mjs'
 import { databaseAvailable, migrate } from './db.mjs'
 import { durabilityWarnings } from './durability.mjs'
 import { send } from './http.mjs'
-import { mailAvailable } from './mail.mjs'
+import { clerkConfigured } from './clerk.mjs'
 import { captureError, logRequest, monitoringAvailable, newRequestId, watchProcess } from './observability.mjs'
 import { authRoutes } from './routes/auth.mjs'
 import { billingRoutes } from './routes/billing.mjs'
@@ -57,13 +57,15 @@ async function api(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/health') {
     return send(response, 200, {
       status: 'healthy',
-      accounts: databaseAvailable(),
+      // Both halves, because either one missing means nobody can sign in: the database is where a
+      // workspace's owner is written, and Clerk is what says who the owner is.
+      accounts: databaseAvailable() && clerkConfigured(),
       configured: {
         database: databaseAvailable(),
+        signIn: clerkConfigured(),
         interview: interviewAvailable(),
         research: reasoningAvailable(),
         billing: billingAvailable(),
-        mail: mailAvailable(),
         monitoring: monitoringAvailable(),
         connections: Boolean(process.env.BO_CONNECTION_SECRET),
       },
@@ -199,11 +201,11 @@ if (startedDirectly) {
       process.exit(1)
     }
   }
-  // Said at start rather than left to be discovered from a customer who never got their reset link.
-  if (databaseAvailable() && !mailAvailable()) console.warn('Wesify has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
+  // Said at start rather than left to be discovered by the first person who tries to sign in.
+  if (databaseAvailable() && !clerkConfigured()) console.warn('Wesify has a database but no sign-in configured (CLERK_SECRET_KEY), so nobody can sign in and no workspace can belong to anybody.')
   if (!monitoringAvailable()) console.warn('Wesify has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when Wesify breaks.')
   if (databaseAvailable() && !billingAvailable()) console.warn('Wesify has no billing configured (STRIPE_SECRET_KEY and BO_STRIPE_PRICE_PRO), so every account stays on the free plan and nobody can pay.')
-  server.listen(port, host, () => console.log(`Wesify project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
+  server.listen(port, host, () => console.log(`Wesify project service listening on ${host}:${port}${databaseAvailable() && clerkConfigured() ? ' with accounts' : ` without accounts (no ${databaseAvailable() ? 'CLERK_SECRET_KEY' : 'DATABASE_URL'})`}`))
 }
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))

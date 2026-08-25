@@ -54,7 +54,7 @@ export async function requestFrontierResearch(workspaceId: string, description: 
   if (!(status.research ?? status.available)) return null
   const response = await fetch(apiUrl('/api/research'), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
+    headers: { 'content-type': 'application/json', ...(await workspaceAccessHeaders(workspaceId)) },
     body: JSON.stringify({ workspaceId, description, conversation, catalog: capabilityCatalogPrompt(), capabilityIds }),
   })
   if (!response.ok) {

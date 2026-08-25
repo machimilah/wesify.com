@@ -35,16 +35,16 @@ La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https:/
 | `BO_ALLOWED_ORIGINS` | Qué orígenes de navegador pueden llamar a la API. Sin ella, ninguno |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, Wesify se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
-| `DATABASE_URL` | Cadena de conexión de Supabase. Con ella Wesify tiene cuentas; sin ella, funciona como antes y sin cuentas |
+| `DATABASE_URL` | Cadena de conexión de Supabase. Es la mitad de las cuentas: dónde vive lo que una cuenta posee |
+| `CLERK_SECRET_KEY` | La otra mitad: con qué verifica el servidor la sesión de Clerk. Sin ella nadie puede iniciar sesión, aunque haya base de datos |
+| `VITE_CLERK_PUBLISHABLE_KEY` | La clave pública de Clerk, compilada en el bundle. Es una dirección, nunca un secreto |
 | `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
 | `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
 | `BO_HOST` | Interfaz donde escucha el servidor (por defecto `127.0.0.1`; el contenedor usa `0.0.0.0`) |
 | `PORT` / `BO_API_PORT` | Puerto (por defecto 8787). `PORT` es el que inyectan las plataformas de despliegue |
 | `BO_GENERATED_ROOT` | Dónde guarda Wesify lo que sigue en disco (por defecto `generated-projects/`; el contenedor usa `/data`) |
 | `BO_BROWSER` | Ejecutable del navegador para las pruebas end-to-end. Sin ella se busca Chrome o Edge en las rutas habituales |
-| `RESEND_API_KEY` + `BO_MAIL_FROM` | Envío de correo. Sin ambas, los enlaces de recuperación se escriben en el log del servidor en vez de enviarse |
-| `BO_PUBLIC_URL` | La dirección pública de Wesify, para construir los enlaces del correo. Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
-| `BO_RESET_RATE_LIMIT` | Intentos de recuperación por IP y minuto (por defecto 5) |
+| `BO_PUBLIC_URL` | La dirección pública de Wesify, para construir los enlaces que salen del servidor (por ejemplo el retorno de Stripe). Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
 | `SENTRY_DSN` | Monitorización de errores. Sin ella, los fallos solo quedan en el log |
 | `BO_ENVIRONMENT` / `BO_RELEASE` | Etiquetas del despliegue en los informes de error |
 | `STRIPE_SECRET_KEY` | Cobros. Sin ella, todas las cuentas se quedan en el plan gratuito |
@@ -65,9 +65,9 @@ Sin `vercel.json` y sin `api/`, Vercel detecta Vite, compila y sirve `dist` como
 
 ## Base de datos (Supabase)
 
-Para activar las cuentas hacen falta dos cosas:
+Para activar las cuentas hacen falta dos cosas (además de Clerk, más abajo):
 
-1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer los hashes de contraseña y de sesión. Es idempotente: volver a ejecutarlo no rompe nada.
+1. Pegar [`supabase/schema.sql`](supabase/schema.sql) entero en el editor SQL de Supabase y ejecutarlo una vez. Crea las tablas, los índices y —lo más importante— cierra el acceso desde la API pública: Supabase expone el esquema `public` por PostgREST y concede permiso a `anon` por defecto, así que sin ese paso cualquiera con la clave publicable podría leer quién tiene cuenta y todos los registros de todos los workspaces. Es idempotente: volver a ejecutarlo no rompe nada.
 2. Poner la cadena de conexión (**Connect → Session pooler**, puerto `5432`) en `.env.local` como `DATABASE_URL`.
 
 Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. El fichero deja registradas todas las migraciones de `server/migrations/`, así que el servidor no repite el trabajo ya hecho a mano; las que se añadan después se aplican solas al arrancar.
@@ -108,13 +108,21 @@ Con `SENTRY_DSN` configurada, los 500 se envían además a Sentry con su traza y
 
 Lo que nunca sale de aquí: cuerpos de petición, cabeceras y query strings. Un cuerpo lleva contraseñas y claves de API, una cabecera `Authorization` lleva una sesión viva, y un enlace de recuperación vive en un query string. El informe se envía después de responder y con timeout, así que un monitor caído ni retrasa ni tumba a Wesify.
 
-## Contraseñas olvidadas
+## Identidad (Clerk)
 
-Desde la pantalla de acceso, **I forgot my password** pide la dirección y Wesify envía un enlace. El enlace vale una hora, funciona una sola vez, y al usarlo cierra todas las sesiones abiertas de esa cuenta —porque el motivo para recuperarla puede ser precisamente que otra persona la tenga abierta.
+Clerk es quien guarda la credencial. Wesify no almacena contraseñas, no emite tokens de sesión y no envía correos de recuperación: registrarse, iniciar sesión, verificar el correo, recuperar la contraseña y cerrar sesión en todos los dispositivos ocurren en Clerk, en su pantalla, contra su instancia.
 
-Wesify responde lo mismo exista o no la cuenta: un endpoint que distinga las dos cosas es la forma de averiguar quién es cliente. El enlace nunca vuelve en la respuesta HTTP, solo por correo.
+Lo que Wesify sí guarda es una fila por persona en `users`, cuya clave primaria **es** el id de usuario de Clerk. Todo lo que Wesify posee —workspaces, membresías, suscripciones, rebuilds— cuelga de esa fila, así que cambiar de proveedor de identidad no obliga a mover ni una tabla más. La fila se crea sola la primera vez que esa persona llega al servidor con una sesión válida.
 
-Sin `RESEND_API_KEY` y `BO_MAIL_FROM`, el enlace se escribe en el log del servidor en vez de enviarse, y el servidor lo avisa al arrancar. Sirve para desarrollo; en producción es que nadie recibe nada.
+Cómo se conecta:
+
+1. Crear una aplicación en [clerk.com](https://clerk.com).
+2. Poner `CLERK_SECRET_KEY` (empieza por `sk_`) en `.env.local`: es con lo que el servidor verifica cada token.
+3. Poner `VITE_CLERK_PUBLISHABLE_KEY` (empieza por `pk_`) en `.env.local`: Vite la compila en el bundle. Es pública por diseño.
+
+Al arrancar, el servidor debe decir `listening on 127.0.0.1:8787 with accounts`. Con base de datos pero sin `CLERK_SECRET_KEY` avisa por el log y nadie puede entrar; sin ninguna de las dos, Wesify funciona como el prototipo de un solo navegador que siempre fue.
+
+El navegador nunca guarda una credencial de Wesify: pide un token a Clerk en cada petición —duran alrededor de un minuto— y lo manda en la cabecera `Authorization`. Por eso `sessionHeaders()` es asíncrona.
 
 ## Desplegar
 
@@ -175,7 +183,8 @@ smoke end-to-end en navegador. Cada bloque se puede lanzar por separado:
 | `npm run test:interview` | La entrevista en el servidor, la respuesta que vuelve, y que no se descargue el modelo del navegador |
 | `npm run test:stripe` | Conector Stripe: claves rechazadas, credencial cifrada, sincronización que no destruye datos |
 | `npm run test:limits` | Límite por IP, techo diario de llamadas al modelo, y que los endpoints gratuitos no se vean afectados |
-| `npm run test:auth` | Contraseñas con scrypt, sesiones sólo como hash, caducidad, y borrar una cuenta se lleva sus workspaces |
+| `npm run test:auth` | Un workspace pertenece a una cuenta, un extraño no es miembro, y borrar una cuenta se lleva sus workspaces |
+| `npm run test:clerk` | El punto donde una identidad de Clerk se convierte en cuenta de Wesify: token falso no crea nada, el primero crea una fila, el segundo no vuelve a llamar a Clerk |
 | `npm run test:accounts` | Las rutas reales: un workspace pertenece a una cuenta y un extraño no llega a él |
 | `npm run test:research-ui` | Diario de razonamiento, fuentes citadas y capacidades investigadas en el workspace |
 | `npm run test:launch` | Abrir un Command Center terminado: sin overlay de construcción |
@@ -207,7 +216,7 @@ El contrato de escritura existe y está probado, pero deliberadamente no está c
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` configurada, las cuentas, las sesiones, la propiedad de los workspaces y los registros que contienen viven en Postgres, y la interfaz ya tiene pantalla de acceso que arrastra la sesión. Se empaqueta como imagen, cada push pasa por CI, los fallos en producción se reportan con contexto suficiente para diagnosticarlos, y hay planes de pago con Stripe. Lo que falta ya no es infraestructura sino producto: más conectores —hoy solo Stripe, en modo lectura— y clientes de verdad usándolo.
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` y las claves de Clerk configuradas, la identidad la lleva Clerk y la propiedad de los workspaces y los registros que contienen viven en Postgres, con pantalla de acceso y sesión que sobrevive al recargar. Se empaqueta como imagen, cada push pasa por CI, los fallos en producción se reportan con contexto suficiente para diagnosticarlos, y hay planes de pago con Stripe. Lo que falta ya no es infraestructura sino producto: más conectores —hoy solo Stripe, en modo lectura— y clientes de verdad usándolo.
 
 Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
 

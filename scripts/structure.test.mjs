@@ -80,7 +80,9 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
  * (ANTHROPIC_BASE_URL, GEMINI_BASE_URL). One of the two, never neither. A suite that stubs one
  * provider and holds its key configures the provider Wesify prefers, so the other is never reached.
  */
-const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !item.file.endsWith('/browser.mjs') && !item.file.endsWith('/noSpend.mjs'))
+// Helpers rather than suites: they are imported *by* the suites, which is where the rule belongs.
+const helpers = ['/browser.mjs', '/noSpend.mjs', '/clerkStub.mjs']
+const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !helpers.some(helper => item.file.endsWith(helper)))
 const spenders = suites
   .filter(item => /server\/index\.mjs|\.\.\/server\//.test(item.text))
   .filter(item => !item.text.includes('noSpend.mjs') && !item.text.includes('ANTHROPIC_BASE_URL') && !item.text.includes('GEMINI_BASE_URL'))

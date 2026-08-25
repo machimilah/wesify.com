@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { useDatabase, migrate, query } from '../server/db.mjs'
+import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
@@ -25,6 +26,7 @@ process.env.BO_GENERATED_ROOT = generatedRoot
 const memory = newDb()
 const { Pool } = memory.adapters.createPg()
 useDatabase(new Pool())
+useTestClerk()
 await migrate()
 
 const { server } = await import('../server/index.mjs')
@@ -33,15 +35,10 @@ await new Promise(resolve => server.listen(port, '127.0.0.1', resolve))
 const base = `http://127.0.0.1:${port}`
 const workspaceId = 'ws-durability-test'
 
-// With a database configured, Wesify requires an account for every workspace route — the token-only path
-// is the no-infrastructure fallback, not a second way in. So this signs up the way an operator does.
-const registered = await fetch(`${base}/api/auth/register`, {
-  method: 'POST', headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email: 'durable@example.com', password: 'a-long-enough-password' }),
-})
-const owner = await registered.json()
-if (!owner.token) throw new Error(`Could not create an account: ${JSON.stringify(owner)}`)
-const access = { 'x-bo-workspace-id': workspaceId, authorization: `Bearer ${owner.token}`, 'x-bo-role': 'owner', 'content-type': 'application/json' }
+// With accounts configured, Wesify requires one for every workspace route — the token-only path is the
+// no-infrastructure fallback, not a second way in. So this arrives signed in, the way an operator does.
+const ownerToken = tokenFor('user_durable')
+const access = { 'x-bo-workspace-id': workspaceId, authorization: `Bearer ${ownerToken}`, 'x-bo-role': 'owner', 'content-type': 'application/json' }
 
 const entities = [{
   id: 'customers', label: 'Client', pluralLabel: 'Clients', module: 'customers', primaryField: 'name',
@@ -92,7 +89,7 @@ try {
   const created = await fetch(`${base}/api/projects/${workspaceId}/records/customers`, { method: 'POST', headers: access, body: JSON.stringify({ name: 'First client' }) })
   assert.equal(created.status, 201, `The workspace could not hold a record: ${await created.text()}`)
   const stored = await query('select owner_id from workspaces where id = $1', [workspaceId])
-  assert.equal(stored.rows[0].owner_id, owner.user.id, 'The workspace is not owned by the account that built it.')
+  assert.equal(stored.rows[0].owner_id, 'user_durable', 'The workspace is not owned by the account that built it.')
 
   // 4. And the disk holds nothing that only the disk holds. Generated code stays — it is regenerable
   //    output — but the interview must not be sitting in a file that a redeploy deletes.

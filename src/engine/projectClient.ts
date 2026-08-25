@@ -55,10 +55,10 @@ function workspaceRole(workspaceId: string) {
   catch { return 'owner' }
 }
 
-const headers = (workspaceId: string, json = false) => ({ ...workspaceAccessHeaders(workspaceId), 'x-bo-role': workspaceRole(workspaceId), ...(json ? { 'content-type': 'application/json' } : {}) })
+const headers = async (workspaceId: string, json = false) => ({ ...(await workspaceAccessHeaders(workspaceId)), 'x-bo-role': workspaceRole(workspaceId), ...(json ? { 'content-type': 'application/json' } : {}) })
 
 async function request<T>(workspaceId: string, path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { ...headers(workspaceId, Boolean(init.body)), ...init.headers } })
+  const response = await fetch(path, { ...init, headers: { ...(await headers(workspaceId, Boolean(init.body))), ...init.headers } })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Wesify project service is unavailable.' }))
     throw new Error(error.error ?? 'Wesify project service is unavailable.')
@@ -146,7 +146,7 @@ export function queryGeneratedProject<T>(workspaceId: string, query: string) {
 }
 
 export async function loadGeneratedRuntime(manifest: GeneratedProjectManifest): Promise<GeneratedRuntime> {
-  const response = await fetch(apiUrl(`/api/projects/${manifest.workspaceId}/runtime.mjs?version=${manifest.version}`), { headers: headers(manifest.workspaceId) })
+  const response = await fetch(apiUrl(`/api/projects/${manifest.workspaceId}/runtime.mjs?version=${manifest.version}`), { headers: await headers(manifest.workspaceId) })
   if (!response.ok) throw new Error('Wesify could not mount the generated workspace runtime.')
   const source = await response.text()
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))

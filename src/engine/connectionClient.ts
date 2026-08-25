@@ -27,7 +27,7 @@ async function readOrThrow(response: Response) {
 
 export async function loadConnectedApps(workspaceId: string): Promise<ConnectedApp[]> {
   try {
-    const response = await fetch(apiUrl(`/api/connections/${workspaceId}`), { headers: workspaceAccessHeaders(workspaceId) })
+    const response = await fetch(apiUrl(`/api/connections/${workspaceId}`), { headers: await workspaceAccessHeaders(workspaceId) })
     return response.ok ? await response.json() : []
   } catch {
     return []
@@ -37,7 +37,7 @@ export async function loadConnectedApps(workspaceId: string): Promise<ConnectedA
 export async function connectStripe(workspaceId: string, apiKey: string): Promise<ConnectedApp> {
   return readOrThrow(await fetch(apiUrl(`/api/connections/${workspaceId}/stripe`), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
+    headers: { 'content-type': 'application/json', ...(await workspaceAccessHeaders(workspaceId)) },
     body: JSON.stringify({ apiKey }),
   }))
 }
@@ -45,14 +45,14 @@ export async function connectStripe(workspaceId: string, apiKey: string): Promis
 export async function syncConnectedApp(workspaceId: string, providerId: string) {
   return readOrThrow(await fetch(apiUrl(`/api/connections/${workspaceId}/${providerId}/sync`), {
     method: 'POST',
-    headers: workspaceAccessHeaders(workspaceId),
+    headers: await workspaceAccessHeaders(workspaceId),
   })) as Promise<{ connection: ConnectedApp; counts: Record<string, { added: number; updated: number; missing: number }> }>
 }
 
 export async function disconnectApp(workspaceId: string, providerId: string) {
   return readOrThrow(await fetch(apiUrl(`/api/connections/${workspaceId}/${providerId}`), {
     method: 'DELETE',
-    headers: workspaceAccessHeaders(workspaceId),
+    headers: await workspaceAccessHeaders(workspaceId),
   }))
 }
 

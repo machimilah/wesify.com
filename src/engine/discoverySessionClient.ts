@@ -2,12 +2,12 @@ import { apiUrl } from './apiBase'
 import { readLocalDiscoverySession, writeLocalDiscoverySession, type DiscoverySession } from './businessDiscovery'
 import { workspaceAccessHeaders } from './workspaceAccess'
 
-const headers = (workspaceId: string) => ({ 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) })
+const headers = async (workspaceId: string) => ({ 'content-type': 'application/json', ...(await workspaceAccessHeaders(workspaceId)) })
 
 export async function loadDiscoverySession(workspaceId: string) {
   const local = readLocalDiscoverySession(workspaceId)
   try {
-    const response = await fetch(apiUrl(`/api/discovery/sessions/${workspaceId}`), { headers: headers(workspaceId) })
+    const response = await fetch(apiUrl(`/api/discovery/sessions/${workspaceId}`), { headers: await headers(workspaceId) })
     if (!response.ok) return local
     const remote = await response.json() as DiscoverySession | null
     if (!remote) return local
@@ -24,7 +24,7 @@ export async function saveDiscoverySession(session: DiscoverySession) {
   try {
     await fetch(apiUrl(`/api/discovery/sessions/${session.workspaceId}`), {
       method: 'PUT',
-      headers: headers(session.workspaceId),
+      headers: await headers(session.workspaceId),
       body: JSON.stringify(session),
     })
   } catch { /* The next session update will retry; the local copy is already durable for this browser. */ }

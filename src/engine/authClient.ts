@@ -1,20 +1,28 @@
+import { apiUrl } from './apiBase'
+
 /**
  * The signed-in account, in the browser.
  *
- * Wesify runs in two modes and the interface must not guess which. With a database configured the server
- * has accounts and a workspace belongs to one; without, Wesify is the single-browser prototype it has
- * always been. `accountsEnabled()` asks once and the rest of the app follows the answer, so nobody
- * is shown a sign-in screen for a server that cannot sign them in.
+ * Wesify runs in two modes and the interface must not guess which. With a database and a Clerk instance
+ * the server has accounts and a workspace belongs to one; without either, Wesify is the single-browser
+ * prototype it has always been. `accountsEnabled()` asks once and the rest of the app follows the
+ * answer, so nobody is shown a sign-in screen for a server that cannot sign them in.
  *
- * The session token is the one secret the browser holds. It lives in localStorage because Wesify is a
- * single-page app talking to its own origin; moving it to an httpOnly cookie is worth doing and is a
- * change to the server, not to this file.
+ * Wesify holds no credential of its own any more. Clerk keeps the session, and what travels to the
+ * server is a short-lived token Clerk mints on request — which is why `sessionHeaders()` is async:
+ * these tokens expire in about a minute, so the right one is fetched per request rather than cached
+ * somewhere and hoped over.
+ *
+ * `window.Clerk` rather than a React hook, deliberately. These functions are called from plain
+ * modules — the project client, the billing client, the discovery client — and threading a hook's
+ * value through all of them would mean every one of those files knowing about React.
  */
 
-const TOKEN_KEY = 'bo-session-token'
-
-export interface Account { id: string; email: string }
-export interface AccountWorkspace { id: string; name: string; role: string; created_at: string }
+declare global {
+  interface Window {
+    Clerk?: { session?: { getToken: () => Promise<string | null> } | null; loaded?: boolean }
+  }
+}
 
 let accountsPromise: Promise<boolean> | null = null
 
@@ -27,77 +35,40 @@ export function accountsEnabled(): Promise<boolean> {
   return accountsPromise
 }
 
-export const sessionToken = () => localStorage.getItem(TOKEN_KEY) ?? ''
+/** Clerk's session token, or '' when nobody is signed in or Clerk has not loaded yet. */
+export async function sessionToken(): Promise<string> {
+  try {
+    return (await window.Clerk?.session?.getToken()) ?? ''
+  } catch {
+    // A token that cannot be minted — offline, a session revoked from another device — is the same
+    // as not being signed in, and the server will say so.
+    return ''
+  }
+}
 
 /** Present on every workspace request. Absent when signed out, which the server then refuses. */
-export function sessionHeaders(): Record<string, string> {
-  const token = sessionToken()
+export async function sessionHeaders(): Promise<Record<string, string>> {
+  const token = await sessionToken()
   return token ? { authorization: `Bearer ${token}` } : {}
 }
 
-async function readOrThrow(response: Response) {
-  const detail = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(detail.error || 'Wesify could not complete that.')
-  return detail
-}
-
-async function post(route: string, body?: unknown) {
-  return readOrThrow(await fetch(apiUrl(`/api/auth/${route}`), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...sessionHeaders() },
-    body: body ? JSON.stringify(body) : undefined,
-  }))
-}
-
-export async function registerAccount(email: string, password: string): Promise<Account> {
-  const result = await post('register', { email, password })
-  localStorage.setItem(TOKEN_KEY, result.token)
-  return result.user
-}
-
-export async function signIn(email: string, password: string): Promise<Account> {
-  const result = await post('login', { email, password })
-  localStorage.setItem(TOKEN_KEY, result.token)
-  return result.user
-}
+export interface Account { id: string; email: string }
+export interface AccountWorkspace { id: string; name: string; role: string; created_at: string }
 
 /**
- * Asks for a reset link. The answer is deliberately the same whether or not the address has an
- * account, so this returns the server's message rather than a yes or a no.
- */
-export async function requestPasswordReset(email: string): Promise<string> {
-  const result = await post('forgot', { email })
-  return result.message as string
-}
-
-/** Spends a reset link. The server signs them in on success, so the new token is stored here. */
-export async function resetPassword(token: string, password: string): Promise<Account> {
-  const result = await post('reset', { token, password })
-  localStorage.setItem(TOKEN_KEY, result.token)
-  return result.user
-}
-
-/**
- * Ends the session on the server, then locally whatever happened.
+ * Who is signed in, and what they have, according to Wesify rather than Clerk.
  *
- * A sign-out that fails because the network is down must still sign the person out of this browser —
- * that is the case they are most likely to care about.
+ * Clerk already knows the person; this is the call that turns them into a Wesify account — the server
+ * writes the local row the first time it sees them — and returns the workspaces that row owns.
  */
-export async function signOut() {
-  try { await post('logout') } catch { /* The local session goes either way. */ }
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-/** Who is signed in, or null. A rejected token is cleared so the app stops presenting it. */
 export async function currentAccount(): Promise<{ user: Account; workspaces: AccountWorkspace[] } | null> {
-  if (!sessionToken()) return null
+  const headers = await sessionHeaders()
+  if (!headers.authorization) return null
   try {
-    const response = await fetch(apiUrl('/api/auth/me'), { headers: sessionHeaders() })
-    if (response.status === 401) { localStorage.removeItem(TOKEN_KEY); return null }
+    const response = await fetch(apiUrl('/api/auth/me'), { headers })
     if (!response.ok) return null
     return await response.json()
   } catch {
     return null
   }
-}import { apiUrl } from './apiBase'
-
+}

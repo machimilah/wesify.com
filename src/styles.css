@@ -294,6 +294,9 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   --text: #e9ebe7; --text-2: #9aa199; --text-3: #7f877f; --accent: #d3d7d2; }
 .bo-dashboard__sidebar nav { min-height: 0; display: grid; gap: 5px; margin-top: 42px; overflow-y: auto; scrollbar-width: none; }.bo-dashboard__sidebar nav::-webkit-scrollbar { display: none; }.bo-dashboard__sidebar nav > small { margin: 14px 11px 4px; color: var(--text-2); font-size: 7px; font-weight: 800; letter-spacing: .16em; }.bo-dashboard__sidebar nav button { min-height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 9px; color: var(--text-3); background: transparent; font-size: 10px; text-align: left; }.bo-dashboard__sidebar nav button.active { color: white; background: var(--surface-hover); }
 .bo-dashboard__agent { margin-top: auto; padding: 12px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text-2); font-size: 9px; }.bo-dashboard__agent i { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--online); }
+/* Clerk's account menu, at the foot of the sidebar. Empty and invisible when this build has no Clerk
+   key, which is why it carries no border or padding of its own. */
+.bo-dashboard__account { margin-top: 10px; display: flex; align-items: center; }
 .bo-dashboard__main { min-width: 0; flex: 1; overflow-x: hidden; overflow-y: auto; }
 .bo-dashboard__topbar { height: 70px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: rgba(249,249,246,.9); }
 .bo-dashboard__topbar label { width: min(430px, 58%); height: 39px; padding: 0 11px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-3); background: var(--surface-2); font-size: 10px; }.bo-dashboard__topbar input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 10px; }.bo-dashboard__topbar kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); font-size: 8px; }
@@ -442,26 +445,14 @@ button:disabled { cursor: not-allowed; opacity: .38; }
    with the conversation on the whole page there is room to show somebody the shape of what is
    coming rather than only where they are. */
 
-/* The way in, when Wesify has accounts. */
+/* The way in, when Wesify has accounts. Clerk draws the form itself, so this is the page around it:
+   the panel, the brand above it, and nothing that reaches inside Clerk's own markup. Styling Clerk's
+   internals from here would break on their next release; its own "appearance" prop is the seam. */
 .bo-signin { min-height: 100vh; position: relative; display: grid; place-items: center; padding: 24px; background: var(--bg); }
-.bo-signin form { width: 100%; max-width: 360px; display: grid; gap: 14px; padding: 30px 28px 26px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-alt); }
-.bo-signin .brand { justify-self: start; color: var(--text); }
+.bo-signin__panel { width: 100%; max-width: 400px; display: grid; justify-items: center; gap: 18px; }
+.bo-signin .brand { color: var(--text); }
 .bo-signin .brand-mark { color: var(--text); background: var(--bg-alt); }
-.bo-signin h1 { margin: 2px 0 4px; font: 600 25px 'Ubuntu', sans-serif; letter-spacing: -.035em; color: var(--text); }
-.bo-signin label { display: grid; gap: 6px; }
-.bo-signin label > span { color: var(--text-2); font-size: 11px; }
-.bo-signin label > em { color: var(--text-3); font-size: 10px; font-style: normal; }
-.bo-signin input { min-height: 42px; padding: 0 13px; border: 1px solid var(--border-strong); border-radius: 11px; outline: 0; color: var(--text); background: var(--surface); font-size: 13px; }
-.bo-signin input:focus { border-color: var(--text-2); }
 .bo-signin-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--danger); background: var(--surface); font-size: 12px; line-height: 1.5; }
-/* Answering a reset request is not an error and must not look like one — it is the only outcome that
-   screen has, including for an address that has no account. */
-.bo-signin-notice { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--text-2); background: var(--surface); font-size: 12px; line-height: 1.5; }
-.bo-signin-hint { margin: -2px 0 2px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
-.bo-signin button { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px; color: white; background: var(--solid-fill); font-size: 12px; font-weight: 700; }
-.bo-signin button:disabled { color: var(--text-3); background: var(--border-strong); }
-.bo-signin-switch { min-height: 32px !important; color: var(--text-2) !important; background: transparent !important; font-weight: 500 !important; }
-.bo-signin-switch:hover { color: var(--border) !important; }
 
 
 /* The plan screen. Every number on it comes from the server; this only decides how it is arranged. */

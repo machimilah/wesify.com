@@ -92,10 +92,10 @@ try {
 
   // 3. A stranger cannot make Wesify hold as much memory as they feel like sending.
   // `connection: close` so the socket this deliberately breaks is not handed to the next request.
-  const oversized = await fetch(`${base}/api/auth/register`, {
+  const oversized = await fetch(`${base}/api/builds`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ email: 'big@example.com', password: 'a-long-enough-password', padding: 'x'.repeat(3_000_000) }),
+    body: JSON.stringify({ workspaceId: 'ws-oversized', padding: 'x'.repeat(3_000_000) }),
   }).catch(() => null)
   // Refused, or the connection dropped mid-upload. What must not happen is acceptance — and what
   // must not happen either is a 500, which would be Wesify calling the sender's fault its own and
@@ -105,7 +105,7 @@ try {
 
   // 4. A failure says nothing about how Wesify is built. A stack trace or a SQL error in a response is a
   //    map of the inside of the server, handed to whoever asked for it.
-  const broken = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{not json' })
+  const broken = await fetch(`${base}/api/builds`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{not json' })
   const detail = JSON.stringify(await broken.json())
   assert.equal(broken.status, 400)
   for (const leak of ['node_modules', 'at Object', '.mjs:', 'M:\\\\', 'select ', 'password_hash']) {

@@ -8,7 +8,6 @@ import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account, type AccountWorkspace } from './engine/authClient'
 import { SignIn } from './components/SignIn'
-import { ResetPassword } from './components/ResetPassword'
 import { Billing } from './components/Billing'
 
 function activeWorkspaceId() {
@@ -150,13 +149,14 @@ export default function App() {
 
   if (accounts === undefined) return <main className="bo-home"/>
 
-  // Before the gate, deliberately: whoever opens a reset link cannot get past a sign-in screen, which
-  // is the entire reason they are here.
-  if (path === '/reset') return <ResetPassword
-    token={new URLSearchParams(window.location.search).get('token') ?? ''}
-    onSignedIn={account => void afterSignedIn(account)}
-    onGiveUp={() => navigate('/signin')}
-  />
+  // Wesify had a /reset page of its own, for links its own server mailed. Clerk mails them now and
+  // handles the whole flow inside the sign-in screen, so an old link is answered by the screen that
+  // can actually help: sign-in, which is where forgetting a password is dealt with.
+  if (path === '/reset') {
+    window.history.replaceState({}, '', '/signin')
+    setTimeout(() => setPath('/signin'), 0)
+    return <main className="bo-home"/>
+  }
 
   if (accounts && !account) return <SignIn onSignedIn={account => void afterSignedIn(account)}/>
 

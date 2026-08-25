@@ -36,3 +36,23 @@ process.env.ANTHROPIC_AUTH_TOKEN = ''
  */
 process.env.GEMINI_API_KEY = ''
 process.env.GOOGLE_API_KEY = ''
+
+/**
+ * And the real database, for the same reason one step further on.
+ *
+ * A key spends money; a connection string writes to the place customers' work lives. The suites
+ * spawn or import the real server, which reads `DATABASE_URL` from `.env.local` exactly as it does
+ * in production — so the moment a working connection string appeared in that file, every suite that
+ * built a workspace was creating rows in the live Supabase project.
+ *
+ * A suite that wants a database says so explicitly, with `useDatabase(...)` and pg-mem. That sets
+ * the pool directly, so blanking the variable here takes nothing away from it — `databaseAvailable()`
+ * asks for either — while a suite that never mentions a database gets the file-backed prototype path
+ * it was written against.
+ *
+ * Clerk goes with it: with a database and no way to verify a token, the server would fall back to
+ * trust-on-first-use, which is not the mode any of these suites mean to exercise. `clerkStub.mjs` is
+ * how a suite says it wants accounts.
+ */
+process.env.DATABASE_URL = ''
+process.env.CLERK_SECRET_KEY = ''

@@ -7,13 +7,12 @@
 -- never destroys anything.
 --
 -- What this creates
---   users              accounts (email + scrypt password hash)
---   sessions           one row per signed-in browser, storing only a hash of the token
+--   users              one row per person, keyed by their Clerk user id. Clerk holds the
+--                      credential; this is what everything below points at
 --   workspaces         a Command Center, owned by one account
 --   workspace_members  who may open a workspace, and as what role
 --   records            every record a workspace holds — clients, invoices, work orders,
 --                      anything an operator creates — as one row per record
---   password_resets    one row per live reset link, storing only a hash of the token
 --   subscriptions      what plan an account is on, and what Stripe last said about it
 --   stripe_events      every webhook already handled, so a retry does not do the work twice
 --   rebuilds           one row per rebuild, because rebuilds are what the plans meter
@@ -40,21 +39,15 @@
 -- was a database at all. Keeping them text means existing workspaces keep working.
 -- -------------------------------------------------------------------------------------
 
+-- The id is the Clerk user id. Wesify stores no credential of any kind: Clerk authenticates
+-- people, and this row exists so that a workspace, a membership and a subscription have
+-- something stable to belong to. The email is a display detail, nullable because Clerk can
+-- produce an account before it produces an address, and deliberately not unique — Clerk
+-- decides who is who, and a second check here could only ever disagree with it.
 create table if not exists users (
-  id            text primary key,
-  email         text not null unique,
-  password_hash text not null,
-  created_at    timestamptz not null default now()
-);
-
--- Only the hash of a session token is stored. A stolen database therefore yields no
--- usable session, for the same reason it yields no usable password.
-create table if not exists sessions (
-  token_hash   text primary key,
-  user_id      text not null references users(id) on delete cascade,
-  created_at   timestamptz not null default now(),
-  expires_at   timestamptz not null,
-  last_seen_at timestamptz not null default now()
+  id         text primary key,
+  email      text,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists workspaces (
@@ -91,18 +84,6 @@ create table if not exists records (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (workspace_id, entity_id, id)
-);
-
--- Password reset links. Only the hash of the token is stored, exactly as for sessions:
--- a stolen database must not hand anyone a working link into every account. `used_at`
--- makes a link single-use, and `expires_at` makes an old one worthless even if it is
--- never used — a reset link sits in an inbox forever, so it has to stop working on its own.
-create table if not exists password_resets (
-  token_hash text        primary key,
-  user_id    text        not null references users(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null,
-  used_at    timestamptz
 );
 
 -- Billing. One row per account, not per workspace: a plan is something a person buys,
@@ -194,9 +175,6 @@ create table if not exists schema_migrations (
 -- in Postgres, so without them a cascade delete or a lookup by parent is a table scan.
 -- -------------------------------------------------------------------------------------
 
--- "sign out everywhere", and the cascade when an account is deleted.
-create index if not exists sessions_user_id_idx on sessions (user_id);
-
 -- Listing the workspaces an account owns.
 create index if not exists workspaces_owner_id_idx on workspaces (owner_id);
 
@@ -208,10 +186,6 @@ create index if not exists workspace_members_user_id_idx on workspace_members (u
 -- records needs no extra index: every query BO makes is "every record of this entity in
 -- this workspace" or "every record in this workspace", and the primary key above already
 -- leads with (workspace_id, entity_id) — exactly what both access patterns filter on.
-
--- Issuing a reset link invalidates the account's older ones, which is a lookup by user
--- rather than by token, and the primary key on password_resets cannot answer it.
-create index if not exists password_resets_user_id_idx on password_resets (user_id);
 
 -- Finding the account a Stripe webhook is about: its events name the customer, not BO's id.
 create index if not exists subscriptions_stripe_customer_id_idx on subscriptions (stripe_customer_id);
@@ -229,9 +203,8 @@ create index if not exists rebuilds_user_id_created_at_idx on rebuilds (user_id,
 -- roles. `anon` is reachable by anyone holding the publishable key — which is public by
 -- design and ships in the browser bundle.
 --
--- So without this section, a stranger could read every row of `users` (password hashes),
--- `sessions` (live session token hashes), `password_resets` (live reset links) and
--- `records` (every client and invoice every workspace holds) over HTTP. BO never uses
+-- So without this section, a stranger could read every row of `users` (who has an account)
+-- and `records` (every client and invoice every workspace holds) over HTTP. BO never uses
 -- PostgREST: it connects straight to Postgres as the table owner, and RLS does not apply
 -- to the owner, so locking these down costs the application nothing.
 --
@@ -241,11 +214,9 @@ create index if not exists rebuilds_user_id_created_at_idx on rebuilds (user_id,
 -- -------------------------------------------------------------------------------------
 
 alter table users             enable row level security;
-alter table sessions          enable row level security;
 alter table workspaces        enable row level security;
 alter table workspace_members enable row level security;
 alter table records           enable row level security;
-alter table password_resets   enable row level security;
 alter table subscriptions     enable row level security;
 alter table stripe_events     enable row level security;
 alter table rebuilds          enable row level security;
@@ -270,11 +241,9 @@ begin
   end if;
 
   execute 'revoke all on table users             from anon, authenticated';
-  execute 'revoke all on table sessions          from anon, authenticated';
   execute 'revoke all on table workspaces        from anon, authenticated';
   execute 'revoke all on table workspace_members from anon, authenticated';
   execute 'revoke all on table records           from anon, authenticated';
-  execute 'revoke all on table password_resets   from anon, authenticated';
   execute 'revoke all on table subscriptions     from anon, authenticated';
   execute 'revoke all on table stripe_events     from anon, authenticated';
   execute 'revoke all on table rebuilds          from anon, authenticated';
@@ -306,14 +275,14 @@ $$;
 insert into schema_migrations (name)
 values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'),
        ('004_billing.sql'), ('005_industry_knowledge.sql'), ('006_interview_and_builds.sql'),
-       ('007_platform_patterns.sql')
+       ('007_platform_patterns.sql'), ('008_clerk_identities.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
 -- 5. Verify
 --
--- Expect exactly eleven rows, and on every one of them:
+-- Expect exactly nine rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
@@ -336,8 +305,8 @@ from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relkind = 'r'
-  and c.relname in ('users', 'sessions', 'workspaces', 'workspace_members', 'records',
-                    'password_resets', 'subscriptions', 'stripe_events', 'rebuilds',
+  and c.relname in ('users', 'workspaces', 'workspace_members', 'records',
+                    'subscriptions', 'stripe_events', 'rebuilds',
                     'industry_knowledge', 'discovery_sessions', 'workspace_builds',
                     'schema_migrations')
 order by c.relname;
