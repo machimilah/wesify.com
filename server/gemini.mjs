@@ -129,7 +129,7 @@ function retryAfter(detail) {
  *
  * The whole point is that none of these reach the operator as BO reverting to a fixed questionnaire.
  */
-export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, thinkingBudget = 0, temperature = 0.4, timeoutMs = 12000 }) {
+export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, thinkingBudget = 0, temperature = 0.4, timeoutMs = 12000, budgetMs = timeoutMs * 3 }) {
   if (!geminiAvailable()) throw Object.assign(new Error('BO is not configured for Gemini. Set GEMINI_API_KEY to enable it.'), { status: 503 })
 
   const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS.filter(name => name !== GEMINI_MODEL)]
@@ -151,6 +151,21 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
   let model = queue[0]
   let busyAttempts = 0
   let lastError = null
+  /**
+   * A budget for the whole cascade, not just for each model in it.
+   *
+   * The per-model deadline is there so one slow model does not hold up a question another one would
+   * answer. It says nothing about how long the cascade itself may run, and five models at nine
+   * seconds each is forty-five seconds of somebody watching a spinner — after which they were handed
+   * the last model's complaint, which named a preview model they had never chosen and never asked
+   * for. The wait was the failure; the message made it look like a broken model.
+   *
+   * So the deadline is the smaller of the model's own and what is left overall, and running out is
+   * reported as what it is: nothing answered in time.
+   */
+  const startedAt = Date.now()
+  const tried = []
+  const spent = () => Date.now() - startedAt
 
   const moveOn = () => {
     const next = queue[queue.indexOf(model) + 1]
@@ -168,7 +183,10 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
      * somebody waiting for a question. Past the deadline BO stops listening and asks the next model,
      * which on the same key answers in about two seconds.
      */
-    const deadline = AbortSignal.timeout(timeoutMs)
+    const remaining = budgetMs - spent()
+    if (remaining <= 250) break
+    if (!tried.includes(model)) tried.push(model)
+    const deadline = AbortSignal.timeout(Math.min(timeoutMs, remaining))
     let response
     try {
       response = await fetch(`${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -182,7 +200,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
         }),
       })
     } catch (error) {
-      lastError = Object.assign(new Error(`${model} did not answer within ${Math.round(timeoutMs / 1000)}s.`), { status: 504 })
+      lastError = Object.assign(new Error(`${model} did not answer within ${Math.round(Math.min(timeoutMs, remaining) / 1000)}s.`), { status: 504 })
       parkModel(model, 60 * 1000)
       if (moveOn()) continue
       throw lastError
@@ -254,5 +272,19 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
     throw lastError
   }
 
+  /**
+   * What the operator is told when the whole list is exhausted.
+   *
+   * `lastError` is whichever model happened to be last, which is the least capable one in the
+   * cascade and the one they have least reason to have heard of. When more than one model was tried,
+   * the honest sentence is that none of them answered — naming what was tried, and how long BO spent
+   * before giving up.
+   */
+  if (tried.length > 1) {
+    throw Object.assign(
+      new Error(`No free model answered within ${Math.round(spent() / 1000)}s. BO tried ${tried.join(', ')}. ${lastError?.message ?? ''}`.trim()),
+      { status: lastError?.status === 429 ? 429 : 504 },
+    )
+  }
   throw lastError ?? Object.assign(new Error('Gemini declined the request.'), { status: 502 })
 }

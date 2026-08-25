@@ -9,6 +9,7 @@ import {
   type BusinessState,
   type DiscoveryAgentResponse,
   type DiscoverySession,
+  awaitingClarification,
 } from './businessDiscovery'
 import { capabilityCatalogPrompt, capabilityIds, planCapabilities } from './capabilityCatalog'
 import { researchBusiness, type BusinessResearch } from './businessResearch'
@@ -386,7 +387,8 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const result = await generateOnce({ ...request, repairInstruction }, stream)
-        if (request.mode === 'DISCOVER' && result.decision === 'ASK_QUESTION' && isDuplicateQuestion(result.nextQuestion.text, request.session)) {
+        // Unless BO was asked what it meant, in which case asking again is the whole point.
+        if (request.mode === 'DISCOVER' && result.decision === 'ASK_QUESTION' && !awaitingClarification(request.session) && isDuplicateQuestion(result.nextQuestion.text, request.session)) {
           throw new Error('The proposed question repeats information already resolved.')
         }
         if (request.mode === 'DISCOVER' && result.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture) {
@@ -485,7 +487,8 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
        * bank, so BO answers a repeated question by asking the same repeated question forever. The
        * second attempt is told what went wrong, and only then does the browser model take over.
        */
-      const repeats = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && isDuplicateQuestion(turn.nextQuestion.text, request.session))
+      // A repeat is a fault unless BO was asked to repeat itself, which is what a question back is.
+      const repeats = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && !awaitingClarification(request.session) && isDuplicateQuestion(turn.nextQuestion.text, request.session))
       const premature = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture && !assessDiscoveryReadiness(request.session, turn.businessState).ready)
       const usable = (turn: DiscoveryAgentResponse | null) => Boolean(turn && !repeats(turn) && !premature(turn) && (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)))
 

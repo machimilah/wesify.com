@@ -114,7 +114,9 @@ Behave like an experienced consultant who already knows this industry, not like 
 - Use what you know. If they say "plumbing company" you already know there are jobs, technicians, callouts, parts and invoices. Never ask them to confirm the obvious.
 - Ask only what changes the software. A question is worth asking when its answer adds or removes records, workflows, pages or permissions. Nothing else is.
 - Ask about their operation specifically, in their own words. "Do your technicians carry stock in their vans?" — not "What resources does your company use?"
-- One question at a time. Short. No preamble, no compliments, no advice about how to run their business.
+- One question at a time. Short. No compliments, and no advice about how to run their business.
+- Answer them when they ask you something. If they ask what you mean, why you need it, or say they do not understand, reply properly first — a plain sentence, an example from their own trade — and then ask the same thing again in easier words. Do not move on to a different subject. Being asked what you meant means the question was badly worded, not that the subject was wrong.
+- React to what they actually said before asking the next thing, in one short clause. "So the containers are the constraint." Not "Thank you for that information."
 
 Write the way a person talks. This is the rule that matters most, because an operator who does not understand a question gives a vague answer, and a vague answer builds the wrong software.
 - Everyday words only. "Who does the work?" not "What is your resourcing model?". "How do people pay you?" not "What is your revenue recognition cadence?".
@@ -310,13 +312,25 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
     'Questions you have already asked. Never ask any of these again, in any wording, and never ask for anything the operator has already answered:',
     ...asked.map(item => `- ${item}`),
   ].join('\n') : ''
+  /**
+   * Whether the last thing the operator said was an answer at all.
+   *
+   * A model reading a transcript will take "what do you mean?" as the answer to the question above it
+   * and carry on, because everything in a transcript looks like content. Named here, it is an
+   * instruction: reply to them, then ask the same thing again in easier words.
+   */
+  const lastSaid = [...conversation].reverse().find(item => item.role === 'user')?.content?.trim() ?? ''
+  const notAnswered = lastSaid && (/\b(what do you mean|i (do not|don't) (understand|know what)|not sure what you|can you (explain|clarify|rephrase)|explain that|no idea what|why (do|are) you (need|asking|ask))\b/i.test(lastSaid) || (lastSaid.endsWith('?') && lastSaid.split(/\s+/).length <= 10))
+  const clarifyLine = notAnswered
+    ? `\n\nThe operator did not answer your last question — they asked you something back: "${lastSaid}". Answer them first, in one or two plain sentences, using an example from their own trade. Then ask the same thing again in easier words. Do not change the subject, and do not count this as having been answered.`
+    : ''
   const repairLine = repair ? `\n\n${repair}` : ''
   const industryLine = industry ? `\n\nBO classified this company as: ${industry}. Treat that as a hint, not a fact.` : ''
   const knowledgeLine = knowledgeRequirements.length ? `\n\nUnresolved operating knowledge objectives, highest value first:\n${knowledgeRequirements.map(item => `- [${item.priority}] ${item.objective}${item.informationNeeded?.length ? ` Relevant information may include: ${item.informationNeeded.join(', ')}.` : ''}`).join('\n')}\nThese are decision objectives, not a questionnaire. Use only objectives relevant to this company, translate one into a short natural question only when its answer changes the software, and never ask for an objective already answered in the conversation.` : ''
   const gapLine = businessGaps.length ? `\n\nContextual operating-gap candidates:\n${businessGaps.map(item => `- [${item.classification}, confidence ${item.confidence}] ${item.title}: ${item.rationale} Candidate capabilities: ${item.capabilityIds.join(', ') || 'none'}.`).join('\n')}\nThese are advisory candidates, not automatic features. Reject candidates unsupported by the operator's evidence. During discovery, use a candidate only to choose a high-value question. During architecture, select its capability only when the conversation supports it.` : ''
   const instruction = architecting
     ? `${known}\n\nThe conversation:\n${said}${industryLine}${knowledgeLine}${gapLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
-    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${budgetLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
+    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${budgetLine}${clarifyLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
 
   const schema = discoverySchema(capabilityIds, modules, { architecting })
   const system = architecting ? architectSystem : consultantSystem
@@ -339,6 +353,11 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
         // quickly and asks a faster one. The architecture pass is the one long wait BO is allowed, and
         // it produces far more text, so it gets real patience instead.
         timeoutMs: architecting ? 40000 : 9000,
+        // And a budget for the cascade behind it. Without one, a bad minute on the free tier costs
+        // five models times the deadline before BO admits it — forty-five seconds of spinner for a
+        // question, and nearly four minutes for an architecture. Better a clear failure with the
+        // answers saved than a wait nobody would choose to sit through.
+        budgetMs: architecting ? 75000 : 25000,
       })
       return { raw: result.text, usedModel: result.model }
     }

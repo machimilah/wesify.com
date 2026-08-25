@@ -227,6 +227,40 @@ function normalizeWord(word: string) {
 
 const normalizedWords = (value: string) => new Set(value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 3 && !['what', 'when', 'where', 'which', 'your', 'does', 'normally', 'company', 'business', 'each'].includes(word)).map(normalizeWord))
 
+/**
+ * The operator did not answer — they asked BO something back.
+ *
+ * Every message was read as an answer, which is what a form does. Say "what do you mean?" and BO
+ * took it as the answer, could not re-ask (the question it wanted to repeat is by definition a
+ * duplicate of the one it just asked), and so changed the subject — leaving somebody who had said
+ * plainly that they did not understand with a different question and no reply. That is the single
+ * clearest way the interview stopped reading as a conversation with something intelligent.
+ *
+ * Deliberately narrow. An answer that happens to end in a question mark — "about 200 products?" —
+ * is still an answer, so a bare question mark is not enough on its own: it also has to be short
+ * enough to be nothing but a question.
+ */
+const CONFUSION = /\b(what do you mean|i (do not|don't) (understand|know what)|not sure what you|can you (explain|clarify|rephrase)|explain that|no idea what|why (do|are) you (need|asking|ask))\b/i
+
+export function asksForClarification(message: string) {
+  const said = message.trim()
+  if (!said) return false
+  if (CONFUSION.test(said)) return true
+  // A trailing question mark is not enough on its own — "about two hundred products, I think?" is an
+  // uncertain answer, not a question back. It has to open like a question too.
+  return said.endsWith('?') && said.split(/\s+/).length <= 10 && /^(what|why|how|which|who|when|where|can|could|do|does|did|are|is|sorry)\b/i.test(said)
+}
+
+/** The operator's last word, which is what decides whether this turn is an answer at all. */
+export function lastOperatorMessage(session: DiscoverySession) {
+  return [...session.messages].reverse().find(message => message.role === 'user')?.content ?? ''
+}
+
+/** BO is allowed to ask again when it was not answered. Repeating yourself is right, here. */
+export function awaitingClarification(session: DiscoverySession) {
+  return asksForClarification(lastOperatorMessage(session))
+}
+
 export function isDuplicateQuestion(question: string, session: DiscoverySession) {
   const candidate = normalizedWords(question)
   if (!candidate.size) return false
@@ -242,6 +276,18 @@ export function isDuplicateQuestion(question: string, session: DiscoverySession)
 export function applyAgentResponse(session: DiscoverySession, response: DiscoveryAgentResponse): DiscoverySession {
   const now = new Date().toISOString()
   const ready = response.decision === 'READY_TO_ARCHITECT'
+  /**
+   * Asking the same thing again in plainer words is not a new question.
+   *
+   * It matters because the interview has a ceiling. Somebody who says "what do you mean?" three
+   * times should not lose three of their questions to a misunderstanding that was BO's fault, and
+   * the ceiling should still mean what it says: how many things BO asked about.
+   *
+   * Recognised by the operator not having answered, rather than by the two questions looking alike.
+   * A re-ask that works is deliberately worded differently from the one that confused them — which
+   * is exactly the re-ask that does not resemble its original.
+   */
+  const reasked = !ready && Boolean(response.nextQuestion.text) && awaitingClarification(session)
   const assistantContent = ready
     ? response.acknowledgment || 'I have a good picture of how your company works.'
     : [response.acknowledgment, response.nextQuestion.text].filter(Boolean).join('\n\n')
@@ -253,7 +299,7 @@ export function applyAgentResponse(session: DiscoverySession, response: Discover
     architecture: ready ? response.architectureContext : null,
     architectureVersion: ready ? session.architectureVersion + 1 : session.architectureVersion,
     messages: [...session.messages, { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, suggestedAnswers: ready ? undefined : response.nextQuestion.suggestedAnswers, createdAt: now }],
-    metrics: { ...session.metrics, discoveryTurns: session.metrics.discoveryTurns + 1, questionsAsked: session.metrics.questionsAsked + (ready ? 0 : 1) },
+    metrics: { ...session.metrics, discoveryTurns: session.metrics.discoveryTurns + 1, questionsAsked: session.metrics.questionsAsked + (ready || reasked ? 0 : 1) },
     updatedAt: now,
   }
 }
