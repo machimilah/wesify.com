@@ -76,7 +76,16 @@ function isNoisyPath(pathname) {
   return pathname.startsWith('/assets/') || /\.(js|css|map|png|svg|ico|woff2?)$/.test(pathname)
 }
 
-export const server = createServer(async (request, response) => {
+/**
+ * One request, handled — whatever is holding the socket.
+ *
+ * Extracted from the server so a serverless platform can call it directly. Vercel hands a function
+ * the same pair Node's http server does, so the routing, the CORS headers, the error shaping and the
+ * request log all belong here rather than inside a listener that only exists on a long-running host.
+ * The alternative is a second copy of this on the serverless path, and the copy that drifts is the
+ * one that stops shaping errors the way the interface expects.
+ */
+export async function handleRequest(request, response) {
   const requestId = newRequestId()
   const startedAt = Date.now()
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
@@ -121,7 +130,9 @@ export const server = createServer(async (request, response) => {
       logRequest({ requestId, method: request.method, path: url.pathname, status: response.statusCode, ms: Date.now() - startedAt, workspaceId: String(request.headers['x-bo-workspace-id'] ?? '') || undefined })
     }
   }
-})
+}
+
+export const server = createServer(handleRequest)
 
 /**
  * Only start listening when this file is what was run.

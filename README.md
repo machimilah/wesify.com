@@ -53,6 +53,16 @@ La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https:/
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
+## Desplegar en Vercel
+
+`api/[...path].mjs` ejecuta el router de BO como una función de Vercel, así que las keys del cuadro de arriba funcionan ahí: se ponen en el proyecto de Vercel y ya. No hacen falta `VITE_API_URL` ni `BO_ALLOWED_ORIGINS` — la interfaz y la API comparten origen, igual que en local.
+
+Lo que sí hace falta es `DATABASE_URL`. El disco de Vercel es de solo lectura salvo `/tmp`, y `/tmp` no sobrevive entre invocaciones: sin Postgres, cada workspace desaparece en cuanto la función se enfría.
+
+Sin `vercel.json` y sin `api/`, Vercel detecta Vite, compila y sirve `dist` como estático: el servidor nunca arranca, ninguna key se lee, y cada llamada a `/api` cae en el CDN y devuelve la página. Desde fuera eso parece un despliegue que ignora sus variables de entorno, que es exactamente lo que no es.
+
+`VITE_API_URL` y `BO_ALLOWED_ORIGINS` siguen existiendo para el otro reparto: la interfaz en un CDN y la API en un host que sí puede sostener un proceso —el `Dockerfile` de este repo—, cuando el disco efímero o el límite de duración de una función se quedan cortos.
+
 ## Base de datos (Supabase)
 
 Para activar las cuentas hacen falta dos cosas:

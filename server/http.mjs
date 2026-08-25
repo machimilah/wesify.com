@@ -61,6 +61,21 @@ export function send(response, status, value, type = 'application/json; charset=
  * re-serialised body no longer matches the signature computed over the original bytes.
  */
 export async function rawBody(request) {
+  /**
+   * A serverless platform may have read the body before BO ever sees the request.
+   *
+   * Vercel's Node runtime parses JSON into `request.body` and leaves the stream drained, so iterating
+   * it here returns nothing and every POST arrives looking empty — a build with no specification, an
+   * interview turn with no conversation. Reading what was already parsed is the only way to see what
+   * the caller actually sent. Stripe's webhook still needs the exact bytes it signed, so a platform
+   * that hands back a string is preferred over one that hands back an object BO would re-serialise.
+   */
+  if (request.body !== undefined && request.body !== null) {
+    if (typeof request.body === 'string') return request.body
+    if (Buffer.isBuffer(request.body)) return request.body.toString('utf8')
+    return JSON.stringify(request.body)
+  }
+
   const chunks = []
   let size = 0
   for await (const chunk of request) {
