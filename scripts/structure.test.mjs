@@ -81,13 +81,30 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
  * provider and holds its key configures the provider Wesify prefers, so the other is never reached.
  */
 // Helpers rather than suites: they are imported *by* the suites, which is where the rule belongs.
-const helpers = ['/browser.mjs', '/noSpend.mjs', '/clerkStub.mjs']
+const helpers = ['/browser.mjs', '/noSpend.mjs', '/noInfra.mjs', '/clerkStub.mjs']
 const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !helpers.some(helper => item.file.endsWith(helper)))
 const spenders = suites
   .filter(item => /server\/index\.mjs|\.\.\/server\//.test(item.text))
   .filter(item => !item.text.includes('noSpend.mjs') && !item.text.includes('ANTHROPIC_BASE_URL') && !item.text.includes('GEMINI_BASE_URL'))
   .map(item => item.file)
 assert.deepEqual(spenders, [], 'these suites would call the real API if a key is configured')
+
+/**
+ * And no test may touch the real infrastructure, which is the same rule with worse consequences.
+ *
+ * A key spends money. A connection string writes into the place customers' work lives — and the
+ * suites read `.env.local` exactly as production reads its environment, so the day a working
+ * `DATABASE_URL` appeared in that file, every suite that built a workspace created rows in the live
+ * Supabase project. Nothing failed there either.
+ *
+ * `noInfra.mjs` is the answer and there is no second one: unlike a model, a database has no stub to
+ * point at from the environment. A suite that wants one asks for pg-mem explicitly.
+ */
+const reachers = suites
+  .filter(item => /server\/index\.mjs|\.\.\/server\//.test(item.text))
+  .filter(item => !item.text.includes('noInfra.mjs') && !item.text.includes('noSpend.mjs'))
+  .map(item => item.file)
+assert.deepEqual(reachers, [], 'these suites would use the real database and Clerk instance if they are configured')
 
 /**
  * A suite that stubs one provider must pin that provider.

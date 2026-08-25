@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SignIn as ClerkSignIn, useAuth } from '@clerk/clerk-react'
+import { SignIn as ClerkSignIn, useAuth } from '@clerk/react'
 import { currentAccount, type Account } from '../engine/authClient'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
@@ -17,9 +17,9 @@ import { ThemeToggle } from './ThemeToggle'
  * So the moment Clerk reports a session, this asks the server who that is — which is also what creates
  * the local row the first time — and hands the answer up.
  *
- * `routing="virtual"` because Wesify routes by reading `window.location` itself rather than through a
- * router Clerk could hook into: the sign-in flow stays on this screen instead of pushing paths that
- * App.tsx would then have to know about.
+ * No routing props: Wesify routes by reading `window.location` itself rather than through a router
+ * Clerk could hook into, and with no `path` given the component keeps its flow on this screen
+ * instead of pushing paths that App.tsx would then have to know about.
  */
 export function SignIn({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
   /**
@@ -67,7 +67,7 @@ function ClerkGate({ onSignedIn }: { onSignedIn: (account: Account) => void }) {
       <Brand/>
       {error
         ? <div className="bo-signin-error" role="alert" data-testid="signin-error">{error}</div>
-        : <ClerkSignIn routing="virtual" signUpUrl={undefined} appearance={{ variables: { colorBackground: 'transparent' } }}/>}
+        : <ClerkSignIn appearance={{ variables: { colorBackground: 'transparent' } }}/>}
     </div>
   </main>
 }

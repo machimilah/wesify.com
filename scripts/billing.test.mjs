@@ -263,12 +263,12 @@ try {
   /**
    * A signed-in browser, without a Clerk instance to sign in against.
    *
-   * The interface asks `window.Clerk` for a token on every request — that is the whole of what it
-   * knows about Clerk outside the sign-in screen — so standing in for that object is standing in for
-   * being signed in. `addInitScript` puts it there before the app's own scripts run, on this
+   * The interface asks for a token on every request, and falls back to this seam when there is no Clerk
+   * instance in the page — so setting it is standing in for being signed in, without loading Clerk's
+   * script over the network. `addInitScript` puts it there before the app's own scripts run, on this
    * navigation and every one after it.
    */
-  await page.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, token)
+  await page.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, token)
   await page.goto(`http://127.0.0.1:${vitePort}/billing`, { waitUntil: 'networkidle' })
   await page.getByTestId('billing-current').waitFor({ timeout: 15_000 })
 

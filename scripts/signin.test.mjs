@@ -21,9 +21,10 @@ import './noSpend.mjs'
  * would be testing Clerk. What Wesify still owns is everything on either side of it, and that is what
  * follows.
  *
- * Being signed in is stood in for the way the interface actually reads it: `window.Clerk`, asked for a
- * token per request. A page with that object present is signed in, one without it is not, and the
- * token it returns is the stub the server verifies. See clerkStub.mjs.
+ * Being signed in is stood in for with `window.__BO_SESSION_TOKEN__`, the seam the interface falls back
+ * to when there is no Clerk instance in the page — which is the case here, because loading Clerk's
+ * script over the network would make these suites depend on Clerk being up. The token it holds is the
+ * stub the server verifies. See clerkStub.mjs.
  */
 
 const apiPort = 8959
@@ -67,7 +68,7 @@ async function open({ signedIn = false } = {}) {
     errors.push(text)
   })
   if (signedIn) {
-    await page.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, sessionToken)
+    await page.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, sessionToken)
   }
   // Only needed so the build below runs straight through to a finished Command Center rather than
   // stopping at the first question — the discovery model itself is not what this file is about.
@@ -140,7 +141,11 @@ try {
   // 4. The session survives a reload of the workspace itself. One that has to be re-established on
   //    refresh is not a session — and a returning operator hitting "/" goes straight back to this
   //    same workspace rather than the prompt, which is checked here too, in the same reload.
-  await page.reload({ waitUntil: 'networkidle' })
+  // `load` rather than `networkidle`: a finished Command Center keeps talking to the server — it
+  // asks what it is, then what is in it — and waiting for the network to fall silent is waiting for
+  // something that is not the assertion. What matters is that the workspace renders, which is the
+  // next line.
+  await page.reload({ waitUntil: 'load' })
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
@@ -163,7 +168,7 @@ try {
 
   // 6. A different account is not shown somebody else's workspace, however it arrives at the URL.
   const other = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-  await other.addInitScript(value => { window.Clerk = { session: { getToken: async () => value } } }, tokenFor('user_intruder'))
+  await other.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, tokenFor('user_intruder'))
   await other.goto(`http://127.0.0.1:${vitePort}/workspace/${builtWorkspaceId}/home`, { waitUntil: 'networkidle' })
   const intruderPages = await other.locator('[data-testid^="schema-nav-"]').count()
   if (intruderPages > 0) throw new Error('Another account was shown the sections of a workspace it does not own.')
@@ -175,7 +180,7 @@ try {
    * session ended elsewhere — signed out on another device, revoked, expired — must never leave stale
    * workspace content on screen just because the page has not been asked to go anywhere.
    */
-  await page.addInitScript(() => { window.Clerk = { session: null } })
+  await page.addInitScript(() => { delete window.__BO_SESSION_TOKEN__ })
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out reload of the workspace URL still showed the workspace.')

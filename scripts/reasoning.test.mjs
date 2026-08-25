@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import assert from 'node:assert/strict'
+import './noInfra.mjs'
 
 /**
  * Exercises the frontier researcher against a mock Anthropic API.

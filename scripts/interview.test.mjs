@@ -1,6 +1,7 @@
 import { launchBrowser } from './browser.mjs'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
+import './noInfra.mjs'
 
 /**
  * The interview runs on the server, and the browser model is not downloaded when it does.

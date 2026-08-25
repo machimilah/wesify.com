@@ -1,6 +1,7 @@
 import { launchBrowser } from './browser.mjs'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
+import './noInfra.mjs'
 
 /**
  * Verifies that frontier research reaches the interface.

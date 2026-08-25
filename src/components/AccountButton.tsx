@@ -1,4 +1,4 @@
-import { UserButton } from '@clerk/clerk-react'
+import { UserButton } from '@clerk/react'
 
 /**
  * The way out, and the only account control Wesify renders.
@@ -13,6 +13,8 @@ import { UserButton } from '@clerk/clerk-react'
  */
 export function AccountButton() {
   if (!String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '').trim()) return null
-  // Back to the prompt, which is the only page a signed-out person can use.
-  return <UserButton afterSignOutUrl="/"/>
+  // Where signing out lands is the Clerk instance's setting rather than a prop here: the SDK stopped
+  // taking `afterSignOutUrl` per component, and one answer for the whole app is the right shape for
+  // it anyway. Wesify's is "/", the prompt, which is the only page a signed-out person can use.
+  return <UserButton/>
 }
