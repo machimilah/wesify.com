@@ -88,14 +88,12 @@ const howItWorksGlow = {
  * is the only illustration that cannot promise something the product does not do.
  */
 
-export function Home({ initialValue = '', onSubmit, signedIn = false, accounts = false, onSignIn, onOpenWorkspace }: {
+export function Home({ initialValue = '', onSubmit, signedIn = false, accounts = false, onSignIn }: {
   initialValue?: string
   onSubmit: (brief: string) => void
   signedIn?: boolean
   accounts?: boolean
   onSignIn?: () => void
-  /** Absent until this account has a workspace to open. */
-  onOpenWorkspace?: () => void
 }) {
   const explain = useRef<HTMLElement>(null)
   const modelWarmStarted = useRef(false)
@@ -157,7 +155,6 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
         {accounts && !signedIn && <button type="button" className="bo-home__signin" onClick={onSignIn} data-testid="open-signin">Sign in</button>}
         {/* And the other half of the same thought: somebody signed in gets their account here, so
             the page they land on after signing in shows that it worked. */}
-        {onOpenWorkspace && <button type="button" className="bo-home__open-workspace" onClick={onOpenWorkspace} data-testid="open-workspace">Open workspace <ArrowRight size={15}/></button>}
         {accounts && signedIn && <div className="bo-home__account" data-testid="home-account"><AccountButton/></div>}
       </header>
       <section className="bo-home__center">

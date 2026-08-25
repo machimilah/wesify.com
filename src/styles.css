@@ -37,11 +37,6 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__hero .brand-logo { filter: invert(1); }
 .bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 20px; display: inline-flex; align-items: center; border: 0; border-radius: 99px; color: white; background: var(--solid-fill); font-size: 13px; font-weight: 600; }
 .bo-home__signin:hover { background: var(--accent-strong); }
-/* The way back into a workspace from the home page, which no longer redirects there on its own.
-   Quieter than Sign in: it is for somebody already inside, not the one call to action on the page. */
-.bo-home__open-workspace { min-height: 40px; margin-left: 10px; padding: 0 18px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 99px; color: var(--text); background: transparent; font-size: 13px; font-weight: 600; }
-.bo-home__open-workspace:hover { border-color: var(--text-2); background: var(--surface); }
-
 .bo-home__center { width: min(900px, calc(100% - 48px)); position: relative; z-index: 1; margin: 0 auto; padding: clamp(16px, 3vh, 48px) 0; align-self: center; text-align: center; }
 .bo-home__eyebrow { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 24px; color: var(--text-2); font-size: 14px; font-weight: 500; }
 .bo-home__eyebrow b { color: var(--text); font-weight: 600; }
@@ -62,7 +57,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__prompt-loading { width: min(620px, 100%); min-height: 126px; margin: 0 auto; border: 1px solid rgba(255,255,255,.22); border-radius: 18px; background: rgba(255,255,255,.08); }
 @keyframes bo-home-prompt-in { from { opacity: 0; transform: translateY(14px); } }
 .bo-home__center .bo-prompt { max-width: 620px; margin-right: auto; margin-left: auto; }
-.bo-prompt__guidance { max-width: 620px; margin: 14px auto 0; color: var(--text-3); font-size: 13px; line-height: 1.5; text-align: center; }
+.bo-prompt__guidance { max-width: 620px; margin: 14px auto 0; color: #ffffff; font-size: 15px; line-height: 1.5; text-align: center; }
 .bo-home__center > small { display: block; margin-top: 13px; color: var(--text-2); font-size: 11px; }
 .bo-home__trusted { padding-top: clamp(34px, 4vw, 48px); color: var(--text); background: var(--bg); border-top: 1px solid var(--border); }
 .bo-home__trusted h2 { margin: 0 auto 24px; text-align: center; font: 600 clamp(26px, 3.6vw, 38px)/1.15 'Ubuntu', sans-serif; letter-spacing: -.03em; }

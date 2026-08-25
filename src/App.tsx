@@ -176,9 +176,6 @@ export default function App() {
     signedIn={Boolean(account)}
     accounts={accounts === true}
     onSignIn={() => navigate('/signin')}
-    // Nothing to open until they have one, which is why this is the workspace itself rather than a
-    // button that might lead nowhere.
-    onOpenWorkspace={workspaces.length ? () => navigate(homeFor(workspaces)) : undefined}
   />
 
   // `/start` was Wesify's second home page until there was only one. It is gone rather than duplicated,

@@ -78,6 +78,6 @@ export function CompanyPrompt({ initialValue = '', onSubmit, testId }: {
       />
       <button onClick={submit} disabled={!brief.trim()} aria-label="Start building" data-testid="start-building"><ArrowUp size={20}/></button>
     </div>
-    <div className="bo-prompt__guidance">Describe what your business does, how work moves, and what you need to manage.</div>
+    <div className="bo-prompt__guidance">Describe what you do, Wesify will build your workspace.</div>
   </>
 }
