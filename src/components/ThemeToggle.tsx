@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { getTheme, toggleTheme } from '../engine/theme'
 
 /**
- * The one control for BO's whole light/dark theme.
+ * The one control for Wesify's whole light/dark theme.
  *
  * Placed on every screen that has its own header, rather than living only in Settings, because the
  * scope of the toggle is the whole product — landing page included — and a person should not have to

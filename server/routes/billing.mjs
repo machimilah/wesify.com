@@ -6,7 +6,7 @@ import { bearer, body, originOf, rawBody, send } from '../http.mjs'
 /**
  * Billing: /api/billing/...
  *
- * Checkout happens on Stripe's own hosted page. A card number that never reaches BO is one BO can
+ * Checkout happens on Stripe's own hosted page. A card number that never reaches Wesify is one Wesify can
  * never leak, and it keeps PCI scope off a product with no business carrying it.
  */
 export async function billingRoutes(request, response, segments) {
@@ -19,7 +19,7 @@ export async function billingRoutes(request, response, segments) {
     const raw = await rawBody(request)
     const event = verifyWebhook(raw, request.headers['stripe-signature'])
     const outcome = await applyWebhook(event)
-    // 200 even for an event BO ignores or has already seen. Anything else asks Stripe to retry
+    // 200 even for an event Wesify ignores or has already seen. Anything else asks Stripe to retry
     // something that will never succeed, and eventually to disable the endpoint.
     return send(response, 200, { received: true, ...outcome })
   }

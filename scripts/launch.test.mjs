@@ -5,7 +5,7 @@ import './noSpend.mjs'
 /**
  * Opening a finished Command Center must feel like opening a finished app.
  *
- * The user has already watched it being built and approved it. A second full-screen "BO is adapting
+ * The user has already watched it being built and approved it. A second full-screen "Wesify is adapting
  * your Command Center" overlay on first load was both a repeat and a lie — nothing was being adapted,
  * the page was just fetching its records. The overlay belongs to real structural changes only.
  */

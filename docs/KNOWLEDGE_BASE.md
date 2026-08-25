@@ -1,20 +1,20 @@
-# BO's business knowledge base
+# Wesify's business knowledge base
 
-BO needs to recognise any business a person can describe and know what it needs to run. That is three
+Wesify needs to recognise any business a person can describe and know what it needs to run. That is three
 separate layers, and only one of them is imported.
 
 | Layer | What it holds | Where it comes from |
 |---|---|---|
 | Industry taxonomy | 20 sectors, 96 subsectors, 1,923 industry titles | **Imported** — NAICS 2022, US Census Bureau |
-| Operating archetypes | 25 packs mapping an industry to the systems it runs on | **Authored** for BO |
-| Capability catalog | 120 buildable business systems with entities, views, metrics, workflows | **Authored** for BO |
+| Operating archetypes | 25 packs mapping an industry to the systems it runs on | **Authored** for Wesify |
+| Capability catalog | 120 buildable business systems with entities, views, metrics, workflows | **Authored** for Wesify |
 
 ## What is imported, and why only this
 
 **NAICS 2022** — the North American Industry Classification System, published by the US Census Bureau.
 As a work of the US federal government it is public domain and freely redistributable.
 
-It is the only imported dataset because it is the only one that solves a problem BO cannot solve by
+It is the only imported dataset because it is the only one that solves a problem Wesify cannot solve by
 authoring: enumerating *every kind of business there is*. NAICS already did that, exhaustively, with
 the vocabulary operators actually use about themselves — "Nail Salons", "Title Abstract and Settlement
 Offices", "Dimension Stone Mining and Quarrying".
@@ -26,13 +26,13 @@ Offices", "Dimension Stone Mining and Quarrying".
 ## What is deliberately not imported
 
 Vendor documentation and data models from Odoo, SAP, Microsoft Dynamics, Salesforce, NetSuite and
-similar products are copyrighted. Copying them into BO would be infringement, and no amount of
+similar products are copyrighted. Copying them into Wesify would be infringement, and no amount of
 reformatting changes that.
 
 It would also be the wrong input. Those documents describe *their* menus, objects and terminology —
-"Opportunity Line Item", "Business Partner Master". BO's job is to decide what a company needs, which
+"Opportunity Line Item", "Business Partner Master". Wesify's job is to decide what a company needs, which
 is a question about the company, not about another product's schema. An imported vendor model would
-push BO toward reproducing that vendor's shape for every business, which is the exact failure BO
+push Wesify toward reproducing that vendor's shape for every business, which is the exact failure Wesify
 exists to avoid.
 
 Open-source ERP models (Apache OFBiz under Apache 2.0, ERPNext and Odoo Community under GPL/LGPL) are
@@ -65,7 +65,7 @@ Scoring individual industry titles rewards short ones. "Dairy farm" scores highe
 Product Manufacturing" (three words, one hit) than against "Dairy Cattle and Milk Production" (four
 words, one hit) — and puts a farm in a factory. Pooling every title under a subsector fixes it:
 "farm" and "dairy" both appear somewhere under Animal Production, while only "dairy" appears under
-Food Manufacturing. It is also the level BO maps at, so nothing is lost by aggregating there.
+Food Manufacturing. It is also the level Wesify maps at, so nothing is lost by aggregating there.
 
 Terms are weighted by rarity across the taxonomy. "Dairy" appears in a handful of titles and nearly
 identifies the business; "production" appears in hundreds and identifies nothing. A single rare word
@@ -99,6 +99,6 @@ so `account` was quietly matching *accounting firm* and *accountant*.
 Coverage is now broad rather than deep. Each capability models the records and status flow of its
 domain, not its full computation — `finance.fixed-assets` holds the method and accumulated
 depreciation but does not run the depreciation schedule; `manufacturing.mrp` records requirements and
-shortfalls but does not explode a multi-level BOM. That is the right shape for BO, whose job is to
+shortfalls but does not explode a multi-level BOM. That is the right shape for Wesify, whose job is to
 give a business the records it needs to operate, but it means the catalog is not a drop-in
 replacement for a specialist system in any one of these areas.

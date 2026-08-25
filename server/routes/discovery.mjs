@@ -9,7 +9,7 @@ import { reasoningAvailable, researchCompany } from '../reasoning.mjs'
  * The interview, and the research behind it.
  *
  * These are the two endpoints that cost money, so both pay the model toll before doing anything. The
- * interview is the one call BO cannot ask for a workspace token on: it is the call that produces the
+ * interview is the one call Wesify cannot ask for a workspace token on: it is the call that produces the
  * workspace in the first place.
  */
 
@@ -33,7 +33,7 @@ export async function researchRoutes(request, response, segments) {
      * `available` is the interview — Anthropic or Gemini, whichever is configured — and it is what
      * the build screen reads to decide against downloading a gigabyte of browser model. `research`
      * is the web-search pass, which only the Anthropic path can run. A deployment holding just a free
-     * Gemini key gets the intelligent interview and BO's own local research, rather than neither.
+     * Gemini key gets the intelligent interview and Wesify's own local research, rather than neither.
      */
     return send(response, 200, { available: interviewAvailable(), model: interviewModel(), research: reasoningAvailable() })
   }
@@ -102,7 +102,7 @@ export async function discoveryRoutes(request, response, segments) {
         confidence: Number.isFinite(item?.confidence) ? Math.max(0, Math.min(1, item.confidence)) : 0,
         capabilityIds: idsFrom(item?.capabilityIds, 30),
       })).filter(item => item.id && item.title),
-      // Set only when BO has just rejected this turn's question as one already asked, so the retry
+      // Set only when Wesify has just rejected this turn's question as one already asked, so the retry
       // knows why rather than rolling the dice on the same prompt.
       repair: String(input.repair ?? '').slice(0, 400),
     })

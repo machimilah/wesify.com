@@ -2,16 +2,16 @@ import path from 'node:path'
 import { databaseAvailable } from './db.mjs'
 
 /**
- * Whether anything BO writes will still be there tomorrow.
+ * Whether anything Wesify writes will still be there tomorrow.
  *
- * BO has always had a disk fallback: with no `DATABASE_URL`, records, interviews and builds are JSON
+ * Wesify has always had a disk fallback: with no `DATABASE_URL`, records, interviews and builds are JSON
  * files under `BO_GENERATED_ROOT`. On a laptop that is the whole point — the prototype runs with no
  * infrastructure at all. On a serverless platform it is a trap. The filesystem is read-only apart
  * from `/tmp`, `/tmp` belongs to one instance, and that instance is discarded when it goes cold. So
  * an operator can answer twelve questions, watch a Command Center get built, type real records into
  * it, and find all of it gone — with nothing having failed, and no error anywhere to explain it.
  *
- * Silence is the problem worth fixing. BO cannot refuse to run: a deployment mid-configuration is a
+ * Silence is the problem worth fixing. Wesify cannot refuse to run: a deployment mid-configuration is a
  * normal state and taking the product away would be worse than the risk. What it can do is say so,
  * in the logs at cold start and in the health endpoint, so nobody ships this state without knowing.
  */

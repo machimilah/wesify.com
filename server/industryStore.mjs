@@ -4,16 +4,16 @@ import { writeJsonAtomic } from './atomicWrite.mjs'
 import { databaseAvailable, query, queryOne } from './db.mjs'
 
 /**
- * Where BO keeps what it has learned about industries.
+ * Where Wesify keeps what it has learned about industries.
  *
- * This is the one thing BO owns that cannot be copied by reading the product: what real companies in
- * an industry kept, removed and added after being handed a workspace. Everything else about BO could
+ * This is the one thing Wesify owns that cannot be copied by reading the product: what real companies in
+ * an industry kept, removed and added after being handed a workspace. Everything else about Wesify could
  * be rebuilt by somebody with the same idea; this is the accumulated behaviour of every operator who
  * ever corrected it.
  *
  * It lived in JSON files on local disk — the same disk Render, Railway, Fly and Vercel wipe on every
  * redeploy. Records were moved off it once for exactly that reason and this was left behind, which
- * made the most valuable thing BO holds also the least durable: one deploy and it would have
+ * made the most valuable thing Wesify holds also the least durable: one deploy and it would have
  * forgotten everything, silently, with nothing to restore from.
  *
  * With a database it is a table. Without one it is the files it always was, so the prototype still

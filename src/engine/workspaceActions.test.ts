@@ -8,7 +8,7 @@ import { generateWorkspaceConfigurationFromDiscovery } from './workspaceSchema'
  * This is the code that changes an operator's data.
  *
  * The assistant hands it whatever a model decided, and it edits records and the workspace structure
- * with no round trip. Everything else in BO can be wrong and cost someone a page they did not want;
+ * with no round trip. Everything else in Wesify can be wrong and cost someone a page they did not want;
  * being wrong here costs them their work. It had no tests at all.
  */
 
@@ -73,7 +73,7 @@ describe('changing records', () => {
 
 describe('changing the workspace itself', () => {
   it('keeps the records when a capability is removed', () => {
-    // Removing a system hides its pages. The data behind them is the operator's, and BO says so in
+    // Removing a system hides its pages. The data behind them is the operator's, and Wesify says so in
     // the message it returns — so it had better be true.
     const entity = config.entities.find(item => item.capabilityId) ?? firstEntity
     const before: WorkspaceRecords = { [entity.id]: [{ id: 'a', createdAt: '1', updatedAt: '1', name: 'Real work' }] }
@@ -123,7 +123,7 @@ describe('reading a typed command', () => {
 
   it('asks rather than guesses when the command names nothing it knows', () => {
     const result = interpretWorkspaceCommand('do the thing', config, {})
-    expect(result.action, 'BO acted on a command it did not understand').toBeUndefined()
+    expect(result.action, 'Wesify acted on a command it did not understand').toBeUndefined()
     expect(result.message).toBeTruthy()
   })
 

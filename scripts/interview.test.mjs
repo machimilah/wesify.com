@@ -5,12 +5,12 @@ import { spawn } from 'node:child_process'
 /**
  * The interview runs on the server, and the browser model is not downloaded when it does.
  *
- * BO's first minute used to be a one-gigabyte model download, a WebGPU requirement, and then a
+ * Wesify's first minute used to be a one-gigabyte model download, a WebGPU requirement, and then a
  * questionnaire asking a plumber what their company sells. This covers the replacement: the turn goes
  * to the server, the question reaches the screen in plain words, the answer goes back with
  * the conversation attached, and the architecture that follows is the one the server produced.
  *
- * It also holds the fallback. With no key configured the server must decline and BO must keep going
+ * It also holds the fallback. With no key configured the server must decline and Wesify must keep going
  * on its own, because a product that stops working without a paid API is not a product.
  */
 
@@ -83,7 +83,7 @@ const anthropic = createServer(async (request, response) => {
   const payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
   const prompt = String(payload.system ?? '')
   const asked = String(payload.messages?.[0]?.content ?? '')
-  turns.push({ consultant: prompt.includes("BO's business consultant"), architect: prompt.includes('Business Application Architect'), asked })
+  turns.push({ consultant: prompt.includes("Wesify's business consultant"), architect: prompt.includes('Business Application Architect'), asked })
   // First interview turn asks; the second, after the operator answers, is ready to build.
   const answered = /Operator:.*van/i.test(asked)
   const body = prompt.includes('Business Application Architect') || answered ? architecture : question
@@ -150,14 +150,14 @@ try {
   // The consultant asks about this company, not about what a company is.
   await page.getByText('Do your technicians carry stock in their vans?', { exact: true }).waitFor({ timeout: 30_000 })
   // Answered by typing. The interview used to put two to four buttons under every question, which
-  // taught people BO wanted a pick rather than a sentence — and the sentence is what the
+  // taught people Wesify wanted a pick rather than a sentence — and the sentence is what the
   // architecture is built from, so the buttons are gone and this checks they stay gone.
   if (await page.locator('.bo-quick-answers').count()) throw new Error('The interview is offering clickable answers again.')
 
   /**
    * The interview has to be worth sitting through.
    *
-   * The question is the thing the operator is being asked to do, so it goes above BO's own notes
+   * The question is the thing the operator is being asked to do, so it goes above Wesify's own notes
    * rather than under a wall of them; it says how far in they are; and it does not print a different
    * "still open" line beside the question actually on screen.
    */
@@ -167,7 +167,7 @@ try {
   if (!/Question 2/i.test(progressText)) throw new Error(`The interview does not say how far in it is: ${progressText}`)
   if (!/\d+% understood/.test(progressText)) throw new Error(`The interview shows no measure of progress: ${progressText}`)
 
-  // It reads as a conversation: what BO said, then the question, then the box you answer in. The
+  // It reads as a conversation: what Wesify said, then the question, then the box you answer in. The
   // question being anywhere but last is what made the old build feel like a form with a log stapled
   // underneath it.
   const threadShape = await page.evaluate(() => {
@@ -180,21 +180,21 @@ try {
     }
   })
   if (!threadShape) throw new Error('The build screen is not a single thread.')
-  if (!threadShape.questionIsLast) throw new Error('Something is stacked below the question BO is waiting on.')
+  if (!threadShape.questionIsLast) throw new Error('Something is stacked below the question Wesify is waiting on.')
   if (!threadShape.composerAfterThread) throw new Error('The reply box is not under the conversation.')
 
   /**
-   * BO's reasoning is not reading material.
+   * Wesify's reasoning is not reading material.
    *
    * There used to be an expandable journal here — a paragraph per fact absorbed, per capability
-   * chosen, per research finding. It was built to show BO's working and it read as BO talking to
+   * chosen, per research finding. It was built to show Wesify's working and it read as Wesify talking to
    * itself at length while somebody waited to answer a question. The reasoning still decides what
    * gets built; it is no longer something the operator has to scroll past to reach the question.
    */
   if (await page.getByTestId('agent-thinking').count()) throw new Error('The reasoning journal is back on the build screen.')
   const threadText = await page.getByTestId('build-thread').innerText()
   for (const leak of [/Updating the operating model/i, /Choosing the business systems/i, /Knitting the Command Center/i, /Thought this through in \d+ step/i]) {
-    if (leak.test(threadText)) throw new Error(`BO is still narrating its reasoning: ${threadText.slice(0, 400)}`)
+    if (leak.test(threadText)) throw new Error(`Wesify is still narrating its reasoning: ${threadText.slice(0, 400)}`)
   }
 
   const first = turns.find(turn => turn.consultant)

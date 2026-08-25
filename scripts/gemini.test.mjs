@@ -9,13 +9,13 @@ import path from 'node:path'
 /**
  * The free interview, against a mock Gemini API.
  *
- * BO's intelligent interview used to need a paid Anthropic key, so what most people actually met was
+ * Wesify's intelligent interview used to need a paid Anthropic key, so what most people actually met was
  * the built-in question bank: the same questions in the same order for every company, asked again
  * after they had been answered. Gemini's free tier removes that, and this covers the parts of the
  * swap that can silently break.
  *
  * The schema is the sharpest edge. Gemini rejects the whole request over a keyword it does not
- * support — `additionalProperties` and `maxLength` being two BO's schemas carry for Anthropic — and a
+ * support — `additionalProperties` and `maxLength` being two Wesify's schemas carry for Anthropic — and a
  * rejected request means the operator drops to the question bank without anything looking wrong.
  */
 
@@ -53,7 +53,7 @@ const gemini = createServer(async (request, response) => {
    * The models that refuse `thinkingConfig` do not say so.
    *
    * `gemini-3.5-flash-lite` and `gemini-3.6-flash` answer a flat "Request contains an invalid
-   * argument.", with no mention of thinking anywhere in it. BO used to look for that word, conclude
+   * argument.", with no mention of thinking anywhere in it. Wesify used to look for that word, conclude
    * the model was broken, and skip past three perfectly usable ones — so the message here is the
    * unhelpful one on purpose.
    */
@@ -65,14 +65,14 @@ const gemini = createServer(async (request, response) => {
   const requested = decodeURIComponent(/models\/([^:]+):/.exec(request.url)?.[1] ?? '')
 
   // Google retires a model for new keys and names its replacement in the message. Following that is
-  // the difference between BO healing itself and BO waiting for somebody to edit a list.
+  // the difference between Wesify healing itself and Wesify waiting for somebody to edit a list.
   if (state.retired.has(requested)) {
     return json(response, 404, { error: { code: 404, message: `This model models/${requested} is no longer available to new users. Please update your code to use models/${state.retired.get(requested)} for the latest features and improvements.`, status: 'NOT_FOUND' } })
   }
 
   /**
    * The free tier meters per model, so the newest one runs dry first. A daily quota carries no short
-   * `retryDelay`, which is how BO tells "wait a moment" apart from "not today".
+   * `retryDelay`, which is how Wesify tells "wait a moment" apart from "not today".
    */
   if (state.exhausted.has(requested)) {
     return json(response, 429, { error: { code: 429, message: 'You exceeded your current quota. * Quota exceeded for metric: generate_requests_per_model_per_day', status: 'RESOURCE_EXHAUSTED' } })
@@ -126,7 +126,7 @@ function keywords(value, found = new Set()) {
 try {
   // The interview is on, the model named is the one being used, and research is honestly off: only
   // the Anthropic path can run the web-search pass, and claiming otherwise turns into a 503 the
-  // operator reads as BO being broken.
+  // operator reads as Wesify being broken.
   const status = await (await fetch(`http://127.0.0.1:${apiPort}/api/research/status`)).json()
   assert.equal(status.available, true, 'The interview should be available on a Gemini key alone.')
   assert.equal(status.model, 'gemini-3.5-flash')
@@ -156,7 +156,7 @@ try {
 
   // Two calls: the first rejected `thinkingConfig`, the second dropped it and went through.
   assert.equal(calls.length, 2, `Expected the thinking retry, saw ${calls.length} calls.`)
-  assert.ok(!calls[1].payload.generationConfig.thinkingConfig, 'BO kept sending a parameter the model refused.')
+  assert.ok(!calls[1].payload.generationConfig.thinkingConfig, 'Wesify kept sending a parameter the model refused.')
   assert.equal(calls[0].key, 'gemini-mock-key', 'The key goes in the header, never the URL.')
   assert.ok(!calls[0].url.includes('gemini-mock-key'), 'The key must not be in the request URL.')
 
@@ -174,7 +174,7 @@ try {
   assert.ok(prompt.includes('Questions you have already asked'), 'The model was not told what it has already asked.')
   assert.ok(prompt.includes('Who does the work?'), 'The question already asked was not listed.')
   assert.ok(prompt.includes('You just proposed a repeat.'), 'The repeat correction never reached the model.')
-  assert.ok(calls[0].payload.systemInstruction.parts[0].text.includes("BO's business consultant"), 'The consultant prompt was not sent.')
+  assert.ok(calls[0].payload.systemInstruction.parts[0].text.includes("Wesify's business consultant"), 'The consultant prompt was not sent.')
 
   /**
    * A busy free tier must not end the interview.
@@ -196,7 +196,7 @@ try {
   })
   assert.equal(retried.status, 200, 'A busy free tier ended the interview instead of being waited out.')
   assert.equal((await retried.json()).decision, 'ASK_QUESTION')
-  assert.equal(calls.length - before, 2, 'BO did not retry the overloaded call.')
+  assert.equal(calls.length - before, 2, 'Wesify did not retry the overloaded call.')
 
   /**
    * A spent daily quota changes model, it does not end the interview.
@@ -219,19 +219,19 @@ try {
   assert.equal(spent.status, 200, 'A spent daily quota on one model ended the interview.')
   const spentBody = await spent.json()
   assert.equal(spentBody.decision, 'ASK_QUESTION')
-  assert.notEqual(spentBody.model, 'gemini-3.5-flash', 'BO stayed on the model that has no quota left.')
-  assert.ok(spentBody.model.startsWith('gemini-'), `BO moved to something unexpected: ${spentBody.model}`)
+  assert.notEqual(spentBody.model, 'gemini-3.5-flash', 'Wesify stayed on the model that has no quota left.')
+  assert.ok(spentBody.model.startsWith('gemini-'), `Wesify moved to something unexpected: ${spentBody.model}`)
 
   /**
    * A retired model is followed to its replacement, not treated as a dead end.
    *
    * Google retires models for keys issued after a date and says so in the 404, naming what to use
    * instead. A free key that met that on every remaining fallback ended the interview — with the
-   * answer sitting in the error message BO had just been handed.
+   * answer sitting in the error message Wesify had just been handed.
    */
-  // Retires whichever model BO actually reaches here. The quota case above parked the one it leads
+  // Retires whichever model Wesify actually reaches here. The quota case above parked the one it leads
   // with for fifteen minutes, and these cases share a server process, so retiring that one again
-  // would prove nothing: BO would skip it without ever seeing the 404.
+  // would prove nothing: Wesify would skip it without ever seeing the 404.
   state.retired.set('gemini-3.1-flash-lite', 'gemini-3.5-flash-lite')
   const retired = await fetch(`http://127.0.0.1:${apiPort}/api/discovery/turn`, {
     method: 'POST',
@@ -245,7 +245,7 @@ try {
   })
   assert.equal(retired.status, 200, 'A retired model ended the interview instead of being replaced.')
   const retiredBody = await retired.json()
-  assert.equal(retiredBody.model, 'gemini-3.5-flash-lite', `BO ignored the replacement Google named and used ${retiredBody.model}.`)
+  assert.equal(retiredBody.model, 'gemini-3.5-flash-lite', `Wesify ignored the replacement Google named and used ${retiredBody.model}.`)
 
   console.log('Gemini test passed: the free tier runs the interview, the schema survives it, a busy tier is waited out, a spent daily quota moves to another free model, a retired one is followed to its replacement, and the model is told what it has already asked.')
 } finally {

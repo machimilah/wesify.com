@@ -1,7 +1,7 @@
 /**
  * Who may call this API from a browser.
  *
- * BO used to be one origin: the same Node process served the interface and the API, so a browser
+ * Wesify used to be one origin: the same Node process served the interface and the API, so a browser
  * never made a cross-origin request and there was nothing to allow. Splitting the deployment — the
  * interface on a static host, the API on a machine that can hold a process — makes every call from
  * the interface cross-origin, and a browser refuses those by default however correct the server's
@@ -40,9 +40,9 @@ export function allowedOrigin(request) {
 }
 
 /**
- * The headers that make a cross-origin call work, and only for an origin BO recognises.
+ * The headers that make a cross-origin call work, and only for an origin Wesify recognises.
  *
- * `Vary: Origin` matters as much as the rest: without it a cache in front of BO can serve one
+ * `Vary: Origin` matters as much as the rest: without it a cache in front of Wesify can serve one
  * origin's allow header to another origin, which either leaks access or blocks a caller at random.
  */
 export function corsHeaders(request) {
@@ -60,14 +60,14 @@ export function corsHeaders(request) {
 
 /**
  * The preflight. A browser sends it before anything that is not a simple request — which is every
- * call BO makes, because they all carry a token header — and it must be answered before the real
+ * call Wesify makes, because they all carry a token header — and it must be answered before the real
  * request is ever sent. Answered here rather than in a route, since it is about the connection
  * rather than about what is being asked for.
  */
 export function handlePreflight(request, response) {
   if (request.method !== 'OPTIONS') return false
   const headers = corsHeaders(request)
-  // 204 for a recognised origin, 403 for one BO does not know: a preflight that quietly succeeds
+  // 204 for a recognised origin, 403 for one Wesify does not know: a preflight that quietly succeeds
   // for an unknown caller teaches nobody anything, and the browser reports the block either way.
   response.writeHead(headers['access-control-allow-origin'] ? 204 : 403, headers)
   response.end()

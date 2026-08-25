@@ -67,7 +67,7 @@ function relationships(specification) {
 function runtimeSource(manifest) {
   const widgetJson = JSON.stringify(manifest.specializedComponents)
   const entityJson = JSON.stringify(manifest.entities.map(entity => ({ id: entity.id, primaryField: entity.primaryField })))
-  return `// Generated internally by BO. Not exposed in the customer interface.\nexport const workspaceId = ${JSON.stringify(manifest.workspaceId)};\nexport const version = ${manifest.version};\nexport const widgets = ${widgetJson};\nexport const entities = ${entityJson};\nexport function projectCost(records, projectId) {\n  return (records['project-costs'] ?? []).filter(item => item.project === projectId).reduce((sum, item) => sum + Number(item.amount ?? 0), 0);\n}\nexport function mostExpensiveProject(records) {\n  const projects = records.projects ?? [];\n  return projects.map(project => ({ project, cost: projectCost(records, project.id) })).sort((a, b) => b.cost - a.cost)[0] ?? null;\n}\nexport function selfTest() { return Array.isArray(widgets) && Array.isArray(entities) && version > 0; }\n`
+  return `// Generated internally by Wesify. Not exposed in the customer interface.\nexport const workspaceId = ${JSON.stringify(manifest.workspaceId)};\nexport const version = ${manifest.version};\nexport const widgets = ${widgetJson};\nexport const entities = ${entityJson};\nexport function projectCost(records, projectId) {\n  return (records['project-costs'] ?? []).filter(item => item.project === projectId).reduce((sum, item) => sum + Number(item.amount ?? 0), 0);\n}\nexport function mostExpensiveProject(records) {\n  const projects = records.projects ?? [];\n  return projects.map(project => ({ project, cost: projectCost(records, project.id) })).sort((a, b) => b.cost - a.cost)[0] ?? null;\n}\nexport function selfTest() { return Array.isArray(widgets) && Array.isArray(entities) && version > 0; }\n`
 }
 
 function serviceSource(entity) {
@@ -147,7 +147,7 @@ async function rememberBuild(manifest) {
     )
   } catch (error) {
     // A build that succeeded must not be reported as failed because its copy could not be stored.
-    console.warn(`BO could not record build ${manifest.version} of ${manifest.workspaceId}: ${error?.message ?? error}`)
+    console.warn(`Wesify could not record build ${manifest.version} of ${manifest.workspaceId}: ${error?.message ?? error}`)
   }
 }
 

@@ -44,7 +44,7 @@ export interface ActionResult {
  * These values arrive from a model deciding what the operator meant. Spreading them over a record
  * let a supplied `id` become the record's id: a create could collide with a row that already exists,
  * and an update could rename a record's identity so every later edit and delete hit the wrong one.
- * Identity belongs to BO, never to the request.
+ * Identity belongs to Wesify, never to the request.
  */
 function fieldValues(values: Record<string, unknown>) {
   const { id, createdAt, updatedAt, ...rest } = values

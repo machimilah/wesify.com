@@ -1,5 +1,5 @@
 /**
- * Every NAICS subsector, mapped to the operating model BO builds for it.
+ * Every NAICS subsector, mapped to the operating model Wesify builds for it.
  *
  * The taxonomy answers "what kind of business is this"; this file answers "so what does it need".
  * The mapping is at subsector level (96 entries) because that is where the software actually changes

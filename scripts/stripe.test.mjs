@@ -7,10 +7,10 @@ import path from 'node:path'
 import './noSpend.mjs'
 
 /**
- * BO's first real connector.
+ * Wesify's first real connector.
  *
- * The value of a connected app is that BO stops having to be the payment system. The danger is that
- * BO now holds a credential to somebody's money and writes into their workspace on a schedule. So
+ * The value of a connected app is that Wesify stops having to be the payment system. The danger is that
+ * Wesify now holds a credential to somebody's money and writes into their workspace on a schedule. So
  * these checks are mostly about restraint: refuse a key that grants too much, never hand a stored
  * credential back, never destroy a record the operator typed, and never quietly delete something
  * because the other side stopped mentioning it.
@@ -107,7 +107,7 @@ try {
   const stored = await readFile(path.join(root, '.connections', `${workspaceId}.json`), 'utf8')
   assert.ok(!stored.includes('rk_test_abcdefgh12345678'), `the credential must be encrypted at rest: ${stored.slice(0, 160)}`)
 
-  // 6. Syncing brings Stripe's records in, in BO's own field names.
+  // 6. Syncing brings Stripe's records in, in Wesify's own field names.
   const synced = await (await call('POST', '/stripe/sync')).json()
   assert.equal(synced.counts.customers.added, 2)
   assert.equal(synced.counts.subscriptions.added, 2)
@@ -118,7 +118,7 @@ try {
   assert.equal(acme.connection.externalId, 'cus_1')
   assert.equal(first.customers.find(item => item.connection.externalId === 'cus_2').name, 'hello@beta.test', 'a customer with no name falls back to the email')
   const growth = first.subscriptions.find(item => item.connection.externalId === 'sub_1')
-  assert.equal(growth.amount, 249, 'Stripe holds cents; BO shows currency')
+  assert.equal(growth.amount, 249, 'Stripe holds cents; Wesify shows currency')
   assert.equal(growth.status, 'Active')
   assert.equal(growth.cadence, 'Monthly')
   assert.equal(growth.customer, 'ACME Ltd', 'the subscription is linked to a named customer, not an id')
@@ -132,7 +132,7 @@ try {
   assert.equal(again.counts.customers.updated, 2)
   assert.equal((await records()).customers.length, 2)
 
-  // 8. A record the operator typed in BO is never touched by a sync.
+  // 8. A record the operator typed in Wesify is never touched by a sync.
   const local = await records()
   local.customers.push({ id: 'local-1', name: 'Typed by hand', createdAt: new Date().toISOString() })
   await fetch(`http://127.0.0.1:${apiPort}/api/workspaces/${workspaceId}/records`, {
@@ -164,11 +164,11 @@ try {
   })
   assert.equal(intruder.status, 403)
 
-  // 12. Without a server secret BO refuses to store a credential rather than writing it in the clear.
+  // 12. Without a server secret Wesify refuses to store a credential rather than writing it in the clear.
   const files = await readdir(path.join(root, '.connections')).catch(() => [])
   assert.ok(!files.length || !files.some(name => name.includes('plain')), 'credentials must not be written unencrypted')
 
-  console.log('Stripe test passed: over-scoped and dead keys refused, credential encrypted and never returned, records mapped into BO field names, repeat syncs updating in place, hand-typed records untouched, remote deletions marked not deleted, and cross-workspace access denied.')
+  console.log('Stripe test passed: over-scoped and dead keys refused, credential encrypted and never returned, records mapped into Wesify field names, repeat syncs updating in place, hand-typed records untouched, remote deletions marked not deleted, and cross-workspace access denied.')
 } finally {
   api.kill()
   stripe.close()

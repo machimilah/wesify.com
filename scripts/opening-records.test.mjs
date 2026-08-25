@@ -134,11 +134,11 @@ try {
   assert.equal(records.invoices, undefined, 'A record was written to an entity this workspace does not have.')
   assert.ok(!shops.some(shop => !shop.name), 'A row with nothing in it but an undefined field was stored anyway.')
   assert.ok(!JSON.stringify(records).includes('vat_number'), 'An undefined field reached storage.')
-  assert.ok(!JSON.stringify(records).includes('@'), 'BO invented a contact detail nobody gave it.')
+  assert.ok(!JSON.stringify(records).includes('@'), 'Wesify invented a contact detail nobody gave it.')
 
   // The operator is told what was put in and why, inside the workspace, in their own words.
   const notifications = await (await get(`/api/projects/${workspaceId}/notifications`)).json()
-  assert.ok(notifications.some(item => item.message.includes('five Madrid shops')), `The workspace does not say what BO recorded: ${JSON.stringify(notifications)}`)
+  assert.ok(notifications.some(item => item.message.includes('five Madrid shops')), `The workspace does not say what Wesify recorded: ${JSON.stringify(notifications)}`)
 
   // The recorder was given the interview and the workspace's own field names, or it is guessing.
   const prompt = seen?.contents?.[0]?.parts?.[0]?.text ?? ''

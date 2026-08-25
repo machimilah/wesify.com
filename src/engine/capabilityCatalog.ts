@@ -181,9 +181,9 @@ export const industryCapabilityPacks: IndustryCapabilityPack[] = [...corePacks, 
 /**
  * The company's own words — and only those.
  *
- * The architecture used to be folded in here too, but BO writes the architecture from the
+ * The architecture used to be folded in here too, but Wesify writes the architecture from the
  * capabilities it already chose, so its labels and descriptions came straight back in as "evidence".
- * The word "approval" inside BO's own description of expense tracking was enough to attach the
+ * The word "approval" inside Wesify's own description of expense tracking was enough to attach the
  * approvals system to a business that never mentioned approvals, and each round added more. The
  * architecture still has a say through `capabilityIds` and `excludedCapabilityIds`, which is an
  * explicit choice rather than a text match.

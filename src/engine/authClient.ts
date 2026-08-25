@@ -1,12 +1,12 @@
 /**
  * The signed-in account, in the browser.
  *
- * BO runs in two modes and the interface must not guess which. With a database configured the server
- * has accounts and a workspace belongs to one; without, BO is the single-browser prototype it has
+ * Wesify runs in two modes and the interface must not guess which. With a database configured the server
+ * has accounts and a workspace belongs to one; without, Wesify is the single-browser prototype it has
  * always been. `accountsEnabled()` asks once and the rest of the app follows the answer, so nobody
  * is shown a sign-in screen for a server that cannot sign them in.
  *
- * The session token is the one secret the browser holds. It lives in localStorage because BO is a
+ * The session token is the one secret the browser holds. It lives in localStorage because Wesify is a
  * single-page app talking to its own origin; moving it to an httpOnly cookie is worth doing and is a
  * change to the server, not to this file.
  */

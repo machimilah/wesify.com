@@ -9,7 +9,7 @@ import {
 import './noSpend.mjs'
 
 /**
- * BO's own user management.
+ * Wesify's own user management.
  *
  * Writing your own accounts is where products quietly get this wrong: a password stored in a form
  * something can reverse, a session that never ends, a login that answers faster for addresses that

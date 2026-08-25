@@ -1,7 +1,7 @@
 /**
  * The free tier that lets the interview be intelligent everywhere.
  *
- * BO's interview is only as good as the model behind it. With a key it behaves like a consultant who
+ * Wesify's interview is only as good as the model behind it. With a key it behaves like a consultant who
  * already knows the trade; without one it drops to a fixed question bank that asks a plumber what a
  * plumbing company sells, and asks it again after they have answered. That fallback is the product
  * most people actually saw, because the only way to leave it was a paid Anthropic key.
@@ -24,7 +24,7 @@
  *   gemini-3.7-flash        503 after 12s, then 503 after 39s, then 429
  *
  * The newest model was first, which is why an interview took ten seconds and sometimes far longer:
- * BO spent the operator's wait discovering that the most contended model on the free tier was busy,
+ * Wesify spent the operator's wait discovering that the most contended model on the free tier was busy,
  * before trying anything that would answer. Asked the same question, 3.5-flash and 3.1-flash-lite
  * returned the identical question text, so leading with a smaller model costs nothing that shows.
  *
@@ -39,7 +39,7 @@ const GEMINI_FALLBACK_MODELS = (process.env.BO_GEMINI_FALLBACK_MODELS ?? 'gemini
 /**
  * Models that refuse `thinkingConfig`, remembered after the first refusal.
  *
- * They answer a flat "Request contains an invalid argument.", so BO learns it the only way available:
+ * They answer a flat "Request contains an invalid argument.", so Wesify learns it the only way available:
  * by being told once. Without this the same 400 is paid on every single call — a wasted round trip in
  * front of somebody waiting, on every question of every interview.
  */
@@ -65,7 +65,7 @@ const geminiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
 
 /**
  * Gemini's structured output accepts a subset of JSON Schema, and rejects the request outright when
- * it meets a keyword outside it — `additionalProperties` and `maxLength` both being ones BO's schemas
+ * it meets a keyword outside it — `additionalProperties` and `maxLength` both being ones Wesify's schemas
  * carry for the Anthropic path. Whitelisted rather than blacklisted: a keyword nobody thought about
  * costs a 400 on a call the operator is sitting and waiting for, and the limits these expressed are
  * enforced in the validators that parse the reply anyway.
@@ -94,7 +94,7 @@ function textFrom(payload) {
   if (text) return text
   const reason = candidate?.finishReason ?? payload?.promptFeedback?.blockReason ?? 'unknown'
   if (reason === 'SAFETY' || reason === 'PROHIBITED_CONTENT' || reason === 'BLOCKLIST') {
-    throw Object.assign(new Error(`The request was declined by safety review (${reason}). BO continued the interview with its built-in questions.`), { status: 422 })
+    throw Object.assign(new Error(`The request was declined by safety review (${reason}). Wesify continued the interview with its built-in questions.`), { status: 422 })
   }
   throw Object.assign(new Error(`The consultant returned no output (${reason}).`), { status: 502 })
 }
@@ -127,10 +127,10 @@ function retryAfter(detail) {
  *   everybody is on — runs dry while an older one on the same key still answers. A short per-minute
  *   limit is waited out instead, because Google says which it is in `retryDelay`.
  *
- * The whole point is that none of these reach the operator as BO reverting to a fixed questionnaire.
+ * The whole point is that none of these reach the operator as Wesify reverting to a fixed questionnaire.
  */
 export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, thinkingBudget = 0, temperature = 0.4, timeoutMs = 12000, budgetMs = timeoutMs * 3 }) {
-  if (!geminiAvailable()) throw Object.assign(new Error('BO is not configured for Gemini. Set GEMINI_API_KEY to enable it.'), { status: 503 })
+  if (!geminiAvailable()) throw Object.assign(new Error('Wesify is not configured for Gemini. Set GEMINI_API_KEY to enable it.'), { status: 503 })
 
   const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS.filter(name => name !== GEMINI_MODEL)]
   const wireSchema = geminiSchema(schema)
@@ -145,7 +145,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
   })
   // Anything this process already knows to be gone or spent is skipped, rather than re-proved on
   // every question. If that leaves nothing, the whole list is tried again: better a slow turn than a
-  // refusal based on a note BO wrote to itself an hour ago.
+  // refusal based on a note Wesify wrote to itself an hour ago.
   const live = models.filter(isUsable)
   const queue = live.length ? live : [...models]
   let model = queue[0]
@@ -180,7 +180,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
      * A deadline, because a busy model does not always say so quickly.
      *
      * One measured 503 took 12 seconds to arrive and another took 39, all of it spent in front of
-     * somebody waiting for a question. Past the deadline BO stops listening and asks the next model,
+     * somebody waiting for a question. Past the deadline Wesify stops listening and asks the next model,
      * which on the same key answers in about two seconds.
      */
     const remaining = budgetMs - spent()
@@ -209,7 +209,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
 
     const detail = await response.text().catch(() => '')
     // The operator reads this on the build screen, so it carries Google's sentence rather than the
-    // JSON envelope around it. A wall of braces reads as BO breaking; a sentence reads as a limit.
+    // JSON envelope around it. A wall of braces reads as Wesify breaking; a sentence reads as a limit.
     const said = (() => { try { return String(JSON.parse(detail)?.error?.message ?? '').trim() } catch { return '' } })()
     lastError = Object.assign(new Error(`${model} declined the request (${response.status}). ${said || detail.slice(0, 200)}`), { status: response.status === 429 ? 429 : 502 })
 
@@ -218,7 +218,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
      *
      * This used to test the complaint for the word "thinking", which the models that actually reject
      * it do not say: `gemini-3.5-flash-lite` and `gemini-3.6-flash` answer a flat "Request contains an
-     * invalid argument." So BO read a working model as broken, skipped it, and ran out of fallbacks
+     * invalid argument." So Wesify read a working model as broken, skipped it, and ran out of fallbacks
      * while three usable models sat in the list. The parameter is an optimisation; dropping it and
      * asking again costs one round trip and is right whatever the wording.
      */
@@ -229,7 +229,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
     /**
      * A busy model is left, not waited for — while there is another one to ask.
      *
-     * BO used to sleep 1.5s and try the same model again, twice, before moving on. On a free tier
+     * Wesify used to sleep 1.5s and try the same model again, twice, before moving on. On a free tier
      * where "currently experiencing high demand" is the normal answer from the newest model, that is
      * three seconds of sleep plus three slow round trips, all of it in front of somebody waiting for
      * a question that another model on the same key would have answered in two. Waiting is right
@@ -245,7 +245,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
       }
     }
     if (response.status === 404) {
-      // Google names the replacement in the message — "use models/gemini-3.5-flash-lite" — so BO
+      // Google names the replacement in the message — "use models/gemini-3.5-flash-lite" — so Wesify
       // follows it rather than waiting for someone to notice a deprecation and edit a list.
       parkModel(model, Infinity)
       const replacement = /models\/([a-z0-9.\-]+)/gi.exec(said.split('use ').pop() ?? '')?.[1]
@@ -259,7 +259,7 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
     }
     if (response.status === 429) {
       // A per-minute limit clears while the operator is still reading the last question; a daily one
-      // does not clear today, so BO changes model rather than sitting in a wait it cannot win.
+      // does not clear today, so Wesify changes model rather than sitting in a wait it cannot win.
       const seconds = retryAfter(detail)
       if (seconds !== null && seconds <= 8 && busyAttempts < 2) {
         busyAttempts += 1
@@ -277,12 +277,12 @@ export async function runGeminiJson({ system, prompt, schema, maxTokens = 4000, 
    *
    * `lastError` is whichever model happened to be last, which is the least capable one in the
    * cascade and the one they have least reason to have heard of. When more than one model was tried,
-   * the honest sentence is that none of them answered — naming what was tried, and how long BO spent
+   * the honest sentence is that none of them answered — naming what was tried, and how long Wesify spent
    * before giving up.
    */
   if (tried.length > 1) {
     throw Object.assign(
-      new Error(`No free model answered within ${Math.round(spent() / 1000)}s. BO tried ${tried.join(', ')}. ${lastError?.message ?? ''}`.trim()),
+      new Error(`No free model answered within ${Math.round(spent() / 1000)}s. Wesify tried ${tried.join(', ')}. ${lastError?.message ?? ''}`.trim()),
       { status: lastError?.status === 429 ? 429 : 504 },
     )
   }

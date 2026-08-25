@@ -1,10 +1,10 @@
-# BO — MVP V2
+# Wesify — MVP V2
 
-BO es un prototipo funcional de un espacio de trabajo empresarial generado a partir de una conversación:
+Wesify es un prototipo funcional de un espacio de trabajo empresarial generado a partir de una conversación:
 
 1. Una frase inicial explica qué hace la empresa.
 2. El modelo de IA decide los módulos, la vista inicial y la siguiente pregunta.
-3. BO selecciona una base operativa estable según el tipo de empresa y la IA la adapta con cada respuesta.
+3. Wesify selecciona una base operativa estable según el tipo de empresa y la IA la adapta con cada respuesta.
 4. Las respuestas se pueden volver a editar desde la conversación.
 5. Una transición convierte la vista previa en el dashboard final.
 6. La entrevista la lleva un modelo frontera en el servidor cuando hay API key; si no la hay, un modelo local en el navegador toma el relevo.
@@ -20,7 +20,7 @@ Abrir `http://localhost:4173`.
 
 No requiere cuenta.
 
-Con `GEMINI_API_KEY` o `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: arranca al instante, funciona en cualquier navegador y las preguntas son específicas de la empresa en lugar de una lista fija igual para todos. Sin key, BO recurre a Qwen 2.5 0.5B en el navegador; la primera vez se descarga y se guarda en caché, y hace falta WebGPU (Chrome o Edge actuales). El producto funciona en ambos casos.
+Con `GEMINI_API_KEY` o `ANTHROPIC_API_KEY` configurada, la entrevista se ejecuta en el servidor: arranca al instante, funciona en cualquier navegador y las preguntas son específicas de la empresa en lugar de una lista fija igual para todos. Sin key, Wesify recurre a Qwen 2.5 0.5B en el navegador; la primera vez se descarga y se guarda en caché, y hace falta WebGPU (Chrome o Edge actuales). El producto funciona en ambos casos.
 
 La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → *Create API key*. Es la forma recomendada de tener la entrevista inteligente sin coste. La de Anthropic añade además la investigación web, que Gemini no ejecuta; con las dos configuradas manda Anthropic, salvo que `BO_INTERVIEW_PROVIDER=gemini` diga lo contrario.
 
@@ -30,32 +30,32 @@ La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https:/
 | `ANTHROPIC_API_KEY` | Entrevista e investigación web en el servidor |
 | `BO_INTERVIEW_PROVIDER` | Fuerza `gemini` o `anthropic` cuando hay dos keys |
 | `BO_GEMINI_MODEL` | Modelo de Gemini (por defecto `gemini-3.7-flash`) |
-| `BO_GEMINI_FALLBACK_MODELS` | Modelos a los que BO baja cuando el primero se queda sin cuota gratuita |
+| `BO_GEMINI_FALLBACK_MODELS` | Modelos a los que Wesify baja cuando el primero se queda sin cuota gratuita |
 | `VITE_API_URL` | Solo para despliegue partido: dónde vive la API. Se compila en el bundle, así que es una dirección, nunca un secreto |
 | `BO_ALLOWED_ORIGINS` | Qué orígenes de navegador pueden llamar a la API. Sin ella, ninguno |
-| `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
+| `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, Wesify se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
-| `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |
+| `DATABASE_URL` | Cadena de conexión de Supabase. Con ella Wesify tiene cuentas; sin ella, funciona como antes y sin cuentas |
 | `BO_MODEL_RATE_LIMIT` | Peticiones al modelo por IP y minuto (por defecto 20) |
 | `BO_DAILY_MODEL_CALLS` | Techo de llamadas al modelo por día en todo el despliegue (por defecto 500) |
 | `BO_HOST` | Interfaz donde escucha el servidor (por defecto `127.0.0.1`; el contenedor usa `0.0.0.0`) |
 | `PORT` / `BO_API_PORT` | Puerto (por defecto 8787). `PORT` es el que inyectan las plataformas de despliegue |
-| `BO_GENERATED_ROOT` | Dónde guarda BO lo que sigue en disco (por defecto `generated-projects/`; el contenedor usa `/data`) |
+| `BO_GENERATED_ROOT` | Dónde guarda Wesify lo que sigue en disco (por defecto `generated-projects/`; el contenedor usa `/data`) |
 | `BO_BROWSER` | Ejecutable del navegador para las pruebas end-to-end. Sin ella se busca Chrome o Edge en las rutas habituales |
 | `RESEND_API_KEY` + `BO_MAIL_FROM` | Envío de correo. Sin ambas, los enlaces de recuperación se escriben en el log del servidor en vez de enviarse |
-| `BO_PUBLIC_URL` | La dirección pública de BO, para construir los enlaces del correo. Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
+| `BO_PUBLIC_URL` | La dirección pública de Wesify, para construir los enlaces del correo. Detrás de un proxy hace falta: la cabecera `Host` es la del proxy, no la que ve el cliente |
 | `BO_RESET_RATE_LIMIT` | Intentos de recuperación por IP y minuto (por defecto 5) |
 | `SENTRY_DSN` | Monitorización de errores. Sin ella, los fallos solo quedan en el log |
 | `BO_ENVIRONMENT` / `BO_RELEASE` | Etiquetas del despliegue en los informes de error |
 | `STRIPE_SECRET_KEY` | Cobros. Sin ella, todas las cuentas se quedan en el plan gratuito |
-| `STRIPE_WEBHOOK_SECRET` | Firma de los webhooks de Stripe. Sin ella BO los rechaza todos |
+| `STRIPE_WEBHOOK_SECRET` | Firma de los webhooks de Stripe. Sin ella Wesify los rechaza todos |
 | `BO_STRIPE_PRICE_PRO` / `BO_STRIPE_PRICE_BUSINESS` | Los price IDs creados en Stripe para cada plan |
 
 Los dos límites existen porque `/api/discovery/turn` no puede pedir token: es la llamada que crea el workspace. Hasta que haya cuentas, son la única defensa contra que la dirección de un despliegue baste para gastar el presupuesto de su dueño.
 
 ## Desplegar en Vercel
 
-`api/[...path].mjs` ejecuta el router de BO como una función de Vercel, así que las keys del cuadro de arriba funcionan ahí: se ponen en el proyecto de Vercel y ya. No hacen falta `VITE_API_URL` ni `BO_ALLOWED_ORIGINS` — la interfaz y la API comparten origen, igual que en local.
+`api/[...path].mjs` ejecuta el router de Wesify como una función de Vercel, así que las keys del cuadro de arriba funcionan ahí: se ponen en el proyecto de Vercel y ya. No hacen falta `VITE_API_URL` ni `BO_ALLOWED_ORIGINS` — la interfaz y la API comparten origen, igual que en local.
 
 Lo que sí hace falta es `DATABASE_URL`. El disco de Vercel es de solo lectura salvo `/tmp`, y `/tmp` no sobrevive entre invocaciones: sin Postgres, cada workspace desaparece en cuanto la función se enfría.
 
@@ -76,13 +76,13 @@ Con `DATABASE_URL` configurada, los registros del workspace —clientes, factura
 
 Con `DATABASE_URL` también viven en Postgres la entrevista de cada workspace (`discovery_sessions`) y la descripción de lo que ese Command Center es —sus entidades, sus campos, sus páginas— (`workspace_builds`). Sin ella estaban solo en disco: los registros sobrevivían a un redespliegue y la definición de lo que significaban, no.
 
-Con `DATABASE_URL` también vive en Postgres lo que BO ha aprendido de cada industria: qué sistemas conservaron, quitaron o añadieron las empresas reales de ese sector. Es lo único que BO tiene que no se puede copiar leyendo el producto, y estaba en el mismo disco que un redespliegue borra. Solo agregados: nunca el nombre de una empresa, nunca un registro.
+Con `DATABASE_URL` también vive en Postgres lo que Wesify ha aprendido de cada industria: qué sistemas conservaron, quitaron o añadieron las empresas reales de ese sector. Es lo único que Wesify tiene que no se puede copiar leyendo el producto, y estaba en el mismo disco que un redespliegue borra. Solo agregados: nunca el nombre de una empresa, nunca un registro.
 
-Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que BO escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
+Lo que sí sigue en disco es el Command Center generado —el manifiesto versionado y los ficheros `runtime.mjs`, servicios y páginas que Wesify escribe en cada build—, porque es salida regenerable y no datos que alguien haya tecleado.
 
 ## Planes y cobro
 
-Construir el Command Center es gratis, para todo el mundo y siempre. Es también el único argumento de venta que BO tiene: nadie compra un espacio de trabajo que no ha visto construido a partir de su propia descripción. Lo que cuesta dinero es lo que viene después.
+Construir el Command Center es gratis, para todo el mundo y siempre. Es también el único argumento de venta que Wesify tiene: nadie compra un espacio de trabajo que no ha visto construido a partir de su propia descripción. Lo que cuesta dinero es lo que viene después.
 
 | | Free | Pro — $10/mes | Business — $50/mes |
 | --- | --- | --- | --- |
@@ -92,33 +92,33 @@ Construir el Command Center es gratis, para todo el mundo y siempre. Es también
 | Apps conectadas | — | ✓ | ✓ |
 | Equipo | — | — | ✓ |
 
-Esto sale de lo que BO cuesta de verdad: construir es caro —un turno de entrevista por intercambio, más una pasada de investigación en un modelo frontera con búsqueda web— y usar lo construido es casi gratis, filas en Postgres. Por eso lo que se mide son los rebuilds, no el uso diario.
+Esto sale de lo que Wesify cuesta de verdad: construir es caro —un turno de entrevista por intercambio, más una pasada de investigación en un modelo frontera con búsqueda web— y usar lo construido es casi gratis, filas en Postgres. Por eso lo que se mide son los rebuilds, no el uso diario.
 
 **Nada se borra nunca por impago.** Si un plan caduca, la cuenta vuelve a los límites del gratuito con todo lo que tenía intacto y legible; simplemente deja de poder añadir hasta volver a un plan que lo cubra. Un pago fallido tampoco es una cancelación: Stripe reintenta durante días, y quitar el producto al primer fallo castiga una tarjeta caducada como si fuera una decisión.
 
-El pago ocurre en la página de Stripe, no en BO. Un número de tarjeta que nunca llega al servidor es un número que no se puede filtrar desde él. Los webhooks se verifican con firma HMAC y ventana temporal, y se aplican una sola vez aunque Stripe los reenvíe.
+El pago ocurre en la página de Stripe, no en Wesify. Un número de tarjeta que nunca llega al servidor es un número que no se puede filtrar desde él. Los webhooks se verifican con firma HMAC y ventana temporal, y se aplican una sola vez aunque Stripe los reenvíe.
 
-Para activarlo: crear los dos productos en Stripe, poner sus price IDs en `BO_STRIPE_PRICE_PRO` y `BO_STRIPE_PRICE_BUSINESS`, la clave secreta en `STRIPE_SECRET_KEY`, y apuntar el webhook de Stripe a `POST /api/billing/webhook` con su secreto en `STRIPE_WEBHOOK_SECRET`. Sin esas variables BO arranca igual, avisa por el log, y todas las cuentas se quedan en el plan gratuito.
+Para activarlo: crear los dos productos en Stripe, poner sus price IDs en `BO_STRIPE_PRICE_PRO` y `BO_STRIPE_PRICE_BUSINESS`, la clave secreta en `STRIPE_SECRET_KEY`, y apuntar el webhook de Stripe a `POST /api/billing/webhook` con su secreto en `STRIPE_WEBHOOK_SECRET`. Sin esas variables Wesify arranca igual, avisa por el log, y todas las cuentas se quedan en el plan gratuito.
 
 ## Saber cuándo se rompe
 
 Cada respuesta lleva una cabecera `x-bo-request-id`, y cada petición deja una línea JSON en stdout con su ruta, su estado y cuánto tardó. Cuando algo falla con un 500, la respuesta incluye ese mismo id como `reference`: es lo que el cliente puede citar y lo que encuentra la petición exacta en el log.
 
-Con `SENTRY_DSN` configurada, los 500 se envían además a Sentry con su traza y su contexto. Los 4xx no se envían: son BO diciéndole a quien llama que se equivocó, y enviarlos entierra los fallos que sí son de BO.
+Con `SENTRY_DSN` configurada, los 500 se envían además a Sentry con su traza y su contexto. Los 4xx no se envían: son Wesify diciéndole a quien llama que se equivocó, y enviarlos entierra los fallos que sí son de Wesify.
 
-Lo que nunca sale de aquí: cuerpos de petición, cabeceras y query strings. Un cuerpo lleva contraseñas y claves de API, una cabecera `Authorization` lleva una sesión viva, y un enlace de recuperación vive en un query string. El informe se envía después de responder y con timeout, así que un monitor caído ni retrasa ni tumba a BO.
+Lo que nunca sale de aquí: cuerpos de petición, cabeceras y query strings. Un cuerpo lleva contraseñas y claves de API, una cabecera `Authorization` lleva una sesión viva, y un enlace de recuperación vive en un query string. El informe se envía después de responder y con timeout, así que un monitor caído ni retrasa ni tumba a Wesify.
 
 ## Contraseñas olvidadas
 
-Desde la pantalla de acceso, **I forgot my password** pide la dirección y BO envía un enlace. El enlace vale una hora, funciona una sola vez, y al usarlo cierra todas las sesiones abiertas de esa cuenta —porque el motivo para recuperarla puede ser precisamente que otra persona la tenga abierta.
+Desde la pantalla de acceso, **I forgot my password** pide la dirección y Wesify envía un enlace. El enlace vale una hora, funciona una sola vez, y al usarlo cierra todas las sesiones abiertas de esa cuenta —porque el motivo para recuperarla puede ser precisamente que otra persona la tenga abierta.
 
-BO responde lo mismo exista o no la cuenta: un endpoint que distinga las dos cosas es la forma de averiguar quién es cliente. El enlace nunca vuelve en la respuesta HTTP, solo por correo.
+Wesify responde lo mismo exista o no la cuenta: un endpoint que distinga las dos cosas es la forma de averiguar quién es cliente. El enlace nunca vuelve en la respuesta HTTP, solo por correo.
 
 Sin `RESEND_API_KEY` y `BO_MAIL_FROM`, el enlace se escribe en el log del servidor en vez de enviarse, y el servidor lo avisa al arrancar. Sirve para desarrollo; en producción es que nadie recibe nada.
 
 ## Desplegar
 
-BO se empaqueta como una sola imagen. El [`Dockerfile`](Dockerfile) tiene dos etapas: la primera compila el frontend con todo el toolchain, la segunda arranca el servidor sin nada de él.
+Wesify se empaqueta como una sola imagen. El [`Dockerfile`](Dockerfile) tiene dos etapas: la primera compila el frontend con todo el toolchain, la segunda arranca el servidor sin nada de él.
 
 ```bash
 docker build -t bo .
@@ -201,7 +201,7 @@ Las respuestas están restringidas por un esquema JSON en ambos caminos. Con el 
 
 ## Apps conectadas
 
-BO no sustituye al sistema que la empresa ya usa: lo muestra. Stripe es el primer conector y es **solo de lectura** — trae clientes, suscripciones y pagos, y nunca cambia nada en Stripe. Las credenciales se guardan cifradas fuera del directorio del workspace y ningún endpoint las devuelve.
+Wesify no sustituye al sistema que la empresa ya usa: lo muestra. Stripe es el primer conector y es **solo de lectura** — trae clientes, suscripciones y pagos, y nunca cambia nada en Stripe. Las credenciales se guardan cifradas fuera del directorio del workspace y ningún endpoint las devuelve.
 
 El contrato de escritura existe y está probado, pero deliberadamente no está conectado. Ver [docs/CONNECTED_APPS.md](docs/CONNECTED_APPS.md).
 
@@ -217,7 +217,7 @@ La investigación y especificación de las bases por tipo de empresa está en [d
 
 El motor que decide qué necesita cada empresa, con evidencia y ganancia de información, está en [docs/BUSINESS_RESEARCH.md](docs/BUSINESS_RESEARCH.md).
 
-Cómo BO muestra apps que la empresa ya usa (Xero, Stripe, Shopify…) en vez de duplicarlas, y las
+Cómo Wesify muestra apps que la empresa ya usa (Xero, Stripe, Shopify…) en vez de duplicarlas, y las
 reglas de escritura segura, está en [docs/CONNECTED_APPS.md](docs/CONNECTED_APPS.md).
 
 La base de conocimiento de negocio —taxonomía de industrias (NAICS, dominio público), arquetipos
@@ -225,9 +225,9 @@ operativos y catálogo de capacidades— está en [docs/KNOWLEDGE_BASE.md](docs/
 
 ## Investigación externa (opcional)
 
-Con una API key, BO añade un segundo nivel: un modelo frontera que investiga en la web cómo opera
+Con una API key, Wesify añade un segundo nivel: un modelo frontera que investiga en la web cómo opera
 realmente este tipo de empresa antes de decidir qué construir. Se ejecuta en el servicio Node; la
-key nunca llega al navegador. Sin key, BO funciona igual con su investigador local.
+key nunca llega al navegador. Sin key, Wesify funciona igual con su investigador local.
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."   # setx ANTHROPIC_API_KEY "..." en Windows

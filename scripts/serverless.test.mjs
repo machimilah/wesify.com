@@ -6,7 +6,7 @@ import { Readable } from 'node:stream'
 import './noSpend.mjs'
 
 /**
- * BO's API answering the way a serverless platform calls it.
+ * Wesify's API answering the way a serverless platform calls it.
  *
  * Vercel does not run `server/index.mjs`; it invokes a function with the same `(request, response)`
  * pair Node's http server passes, so `api/[...path].mjs` is an adapter over the real router rather
@@ -79,7 +79,7 @@ try {
   const turn = { mode: 'DISCOVER', conversation: [{ role: 'user', content: 'We run a bakery.' }], capabilityIds: ['crm.contacts'], modules: ['customers'] }
 
   const parsed = await call({ method: 'POST', url: '/api/discovery/turn', headers: { 'content-type': 'application/json' }, parsed: turn })
-  assert.match(parsed.json?.error ?? '', /model/i, `the parsed body did not reach the route; BO answered: ${parsed.text}`)
+  assert.match(parsed.json?.error ?? '', /model/i, `the parsed body did not reach the route; Wesify answered: ${parsed.text}`)
   assert.doesNotMatch(parsed.json?.error ?? '', /catalog/i, 'the route saw an empty body, so the parsed body never reached it')
 
   // 3. And a POST that arrives as a stream, the way a normal Node server delivers it.
@@ -92,14 +92,14 @@ try {
   const empty = await call({ method: 'POST', url: '/api/discovery/turn', headers: { 'content-type': 'application/json' }, body: '{}' })
   assert.match(empty.json?.error ?? '', /catalog/i, 'an empty body was not refused for the catalog, so the check above proves nothing')
 
-  // 4. Malformed JSON is still the caller's fault, not a 500 BO reports as its own.
+  // 4. Malformed JSON is still the caller's fault, not a 500 Wesify reports as its own.
   const broken = await call({ method: 'POST', url: '/api/discovery/turn', headers: { 'content-type': 'application/json' }, body: '{not json' })
   assert.equal(broken.statusCode, 400, `malformed JSON answered ${broken.statusCode}`)
 
   // 5. Every response carries the request id, which is what a customer quotes when reporting a fault.
   assert.ok(health.getHeader('x-bo-request-id'), 'no request id on a serverless response')
 
-  // 6. An unknown API path is a 404 from BO rather than the index page from the CDN.
+  // 6. An unknown API path is a 404 from Wesify rather than the index page from the CDN.
   const missing = await call({ url: '/api/nothing-here' })
   assert.equal(missing.statusCode, 404)
 

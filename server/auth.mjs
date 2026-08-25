@@ -3,9 +3,9 @@ import { promisify } from 'node:util'
 import { query, queryOne } from './db.mjs'
 
 /**
- * BO's own user management.
+ * Wesify's own user management.
  *
- * Written rather than bought, deliberately: the account is where BO's data model starts, and handing
+ * Written rather than bought, deliberately: the account is where Wesify's data model starts, and handing
  * it to a provider means every later question about workspaces, membership and deletion is answered
  * on someone else's terms. The parts that are genuinely dangerous to write yourself are the parts
  * that are done here by the platform — scrypt for hashing, a CSPRNG for tokens, constant-time
@@ -26,7 +26,7 @@ const SESSION_DAYS = 30
 const TOKEN_BYTES = 32
 
 export const MIN_PASSWORD_LENGTH = 10
-/** scrypt cost is paid per attempt, so an unbounded password is a way to make BO do work for free. */
+/** scrypt cost is paid per attempt, so an unbounded password is a way to make Wesify do work for free. */
 export const MAX_PASSWORD_LENGTH = 200
 
 export function normalizeEmail(value) {

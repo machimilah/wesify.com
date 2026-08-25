@@ -1,4 +1,4 @@
-# BO V1 command center
+# Wesify V1 command center
 
 The command center is the shared operational layer around each AI-generated company workspace. Company templates decide which operating modules appear; the command center, documents, access/audit, and automation surfaces remain available as platform infrastructure.
 
@@ -28,4 +28,4 @@ The current browser prototype must not be represented as providing these control
 
 ## Data integrity rule
 
-BO never fabricates records, cash values, KPI performance, alerts, approvals, or integration state. A metric is calculated from stored operational data, shown as zero when the connected dataset is genuinely empty, or shown as unconfigured when its source does not exist.
+Wesify never fabricates records, cash values, KPI performance, alerts, approvals, or integration state. A metric is calculated from stored operational data, shown as zero when the connected dataset is genuinely empty, or shown as unconfigured when its source does not exist.

@@ -11,7 +11,7 @@ import './noSpend.mjs'
 /**
  * Forgetting a password, and getting back in.
  *
- * Until now BO's only answer to a forgotten password was to make another account, which loses the
+ * Until now Wesify's only answer to a forgotten password was to make another account, which loses the
  * person their workspace. A reset flow is easy to write and easy to write badly, and every way of
  * writing it badly is a way into somebody else's account, so this covers the failure modes rather
  * than the happy path alone:
@@ -37,7 +37,7 @@ const generatedRoot = await mkdtemp(path.join(tmpdir(), 'bo-reset-'))
 process.env.BO_GENERATED_ROOT = generatedRoot
 // No provider configured: sendPasswordReset logs the link instead of sending it, which is also how
 // this test gets hold of it. A test that read the token out of the database would prove less — it
-// would pass even if the link BO builds were wrong.
+// would pass even if the link Wesify builds were wrong.
 delete process.env.RESEND_API_KEY
 delete process.env.BO_MAIL_FROM
 process.env.BO_PUBLIC_URL = 'https://bo.example.com'
@@ -69,7 +69,7 @@ async function json(pathname, init = {}) {
 
 const post = (pathname, payload, headers) => json(pathname, { method: 'POST', body: JSON.stringify(payload), headers })
 
-/** The link BO built, taken from where an unconfigured mail provider leaves it. */
+/** The link Wesify built, taken from where an unconfigured mail provider leaves it. */
 function lastLink() {
   const line = [...logged].reverse().find(entry => entry.includes('/reset?token='))
   return line ? line.slice(line.indexOf('https://')) : ''
@@ -109,7 +109,7 @@ try {
   assert.equal(asked.status, 200)
   assert.equal(JSON.stringify(asked.payload).includes('token'), false, 'the reset endpoint returned a token to its caller')
   const stranger = await post('/api/auth/forgot', { email: 'nobody@example.com' })
-  assert.deepEqual(stranger.payload, asked.payload, 'BO answers differently for an address that has no account, which is how a customer list gets built')
+  assert.deepEqual(stranger.payload, asked.payload, 'Wesify answers differently for an address that has no account, which is how a customer list gets built')
 
   // 2. The link points at the public URL, carries a token, and that token is not what is stored.
   const link = lastLink()
@@ -167,7 +167,7 @@ try {
   const stale = await post('/api/auth/reset', { token: staleToken, password: 'one-more-password-here' })
   assert.equal(stale.status, 400, 'an expired reset link still worked')
 
-  // 10. The throttle is real. This endpoint sends mail, so an unthrottled caller can use BO to spray
+  // 10. The throttle is real. This endpoint sends mail, so an unthrottled caller can use Wesify to spray
   //     messages at addresses that never asked for anything.
   process.env.BO_RESET_RATE_LIMIT = '1'
   await post('/api/auth/forgot', { email })

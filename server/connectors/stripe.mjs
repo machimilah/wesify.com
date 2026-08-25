@@ -1,7 +1,7 @@
 /**
  * Stripe, read-only.
  *
- * BO's first real connector, and the shape every later one copies. It reads; it does not write. That
+ * Wesify's first real connector, and the shape every later one copies. It reads; it does not write. That
  * is a deliberate first step rather than a limitation to apologise for: a company's payment history
  * is not something to practise on, and a connector that can only read cannot damage anything while
  * the mapping is still being learned.
@@ -13,14 +13,14 @@
 const API = process.env.BO_STRIPE_API_URL || 'https://api.stripe.com/v1'
 const PAGE = 100
 
-/** A restricted key is read-scoped by construction. A live secret key is not, so BO refuses it. */
+/** A restricted key is read-scoped by construction. A live secret key is not, so Wesify refuses it. */
 export function checkKey(apiKey) {
   const key = String(apiKey ?? '').trim()
   if (!/^(rk|sk)_(test|live)_[A-Za-z0-9]{8,}$/.test(key)) {
-    throw Object.assign(new Error('That does not look like a Stripe API key. BO expects a restricted key beginning rk_test_ or rk_live_.'), { status: 400 })
+    throw Object.assign(new Error('That does not look like a Stripe API key. Wesify expects a restricted key beginning rk_test_ or rk_live_.'), { status: 400 })
   }
   if (key.startsWith('sk_live_')) {
-    throw Object.assign(new Error('BO will not store a live secret key. Create a restricted key with read-only permissions in Stripe and use that instead.'), { status: 400 })
+    throw Object.assign(new Error('Wesify will not store a live secret key. Create a restricted key with read-only permissions in Stripe and use that instead.'), { status: 400 })
   }
   return key
 }
@@ -33,20 +33,20 @@ async function get(apiKey, resource, params = {}) {
   })
   if (response.status === 401) throw Object.assign(new Error('Stripe rejected the key. Check it is correct and still active.'), { status: 401 })
   if (response.status === 403) throw Object.assign(new Error('The key is missing a read permission Stripe needs for this data.'), { status: 403 })
-  if (response.status === 429) throw Object.assign(new Error('Stripe is rate limiting BO. Try the sync again shortly.'), { status: 429 })
+  if (response.status === 429) throw Object.assign(new Error('Stripe is rate limiting Wesify. Try the sync again shortly.'), { status: 429 })
   if (!response.ok) throw Object.assign(new Error(`Stripe returned ${response.status}.`), { status: 502 })
   const payload = await response.json()
   return Array.isArray(payload.data) ? payload.data : []
 }
 
-/** Confirms the key works before BO stores it, and names the account so the operator sees what they connected. */
+/** Confirms the key works before Wesify stores it, and names the account so the operator sees what they connected. */
 export async function verify(apiKey) {
   const response = await fetch(`${API}/customers?limit=1`, {
     headers: { authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(20_000),
   })
   if (response.status === 401) throw Object.assign(new Error('Stripe rejected the key. Check it is correct and still active.'), { status: 401 })
-  if (!response.ok) throw Object.assign(new Error(`Stripe returned ${response.status} when BO tested the key.`), { status: 502 })
+  if (!response.ok) throw Object.assign(new Error(`Stripe returned ${response.status} when Wesify tested the key.`), { status: 502 })
   return { livemode: apiKey.includes('_live_') }
 }
 
@@ -60,9 +60,9 @@ const subscriptionStatus = {
 const cadence = interval => (interval === 'year' ? 'Yearly' : interval === 'week' || interval === 'day' ? 'Monthly' : interval === 'month' ? 'Monthly' : 'Quarterly')
 
 /**
- * Everything Stripe holds that BO has a place for, in BO's own field names.
+ * Everything Stripe holds that Wesify has a place for, in Wesify's own field names.
  *
- * The mapping is deliberately lossy. BO shows what an operator needs to see on one screen; the full
+ * The mapping is deliberately lossy. Wesify shows what an operator needs to see on one screen; the full
  * object stays in Stripe, which is where it belongs and where they will go to work on it.
  */
 export async function pull(apiKey) {

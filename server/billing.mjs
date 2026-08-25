@@ -4,12 +4,12 @@ import { databaseAvailable, query, queryOne } from './db.mjs'
 /**
  * What an account may do, and how it comes to pay for more.
  *
- * The plans below follow from what BO actually costs to run, not from what looked round. Building a
+ * The plans below follow from what Wesify actually costs to run, not from what looked round. Building a
  * Command Center is the expensive part — an interview turn per exchange, then a research pass on a
  * frontier model with web search. Running one afterwards is close to free: rows in Postgres and the
  * hosting they sit on.
  *
- * So building is free, for everyone, forever. It is also BO's only real sales pitch: nobody buys a
+ * So building is free, for everyone, forever. It is also Wesify's only real sales pitch: nobody buys a
  * workspace they have not seen built out of their own description. What costs money afterwards is
  * scale — records past a point, rebuilds, connected apps, a second person — and that is what the paid
  * plans sell.
@@ -40,7 +40,7 @@ export const PLANS = {
 const priceIdFor = plan => process.env[`BO_STRIPE_PRICE_${plan.toUpperCase()}`] || ''
 const API = process.env.BO_STRIPE_BILLING_API_URL || 'https://api.stripe.com/v1'
 
-/** Whether BO can take money at all. Without keys it still runs; everyone is simply on the free plan. */
+/** Whether Wesify can take money at all. Without keys it still runs; everyone is simply on the free plan. */
 export function billingAvailable() {
   return Boolean(process.env.STRIPE_SECRET_KEY && priceIdFor('pro'))
 }
@@ -171,14 +171,14 @@ async function stripe(resource, form) {
 /**
  * Starts a checkout, on Stripe's own hosted page.
  *
- * Hosted rather than embedded on purpose: a card number that never touches BO's servers is a card
- * number BO can never leak, and it takes the whole of PCI scope off a product that has no business
+ * Hosted rather than embedded on purpose: a card number that never touches Wesify's servers is a card
+ * number Wesify can never leak, and it takes the whole of PCI scope off a product that has no business
  * carrying it.
  */
 export async function startCheckout(user, planId, origin) {
   const plan = PLANS[planId]
   if (!plan || plan.priceUsd === 0) throw Object.assign(new Error('That is not a plan you can subscribe to.'), { status: 400 })
-  if (!billingAvailable()) throw Object.assign(new Error('BO has no billing configured, so every account is on the free plan.'), { status: 503 })
+  if (!billingAvailable()) throw Object.assign(new Error('Wesify has no billing configured, so every account is on the free plan.'), { status: 503 })
 
   const existing = await queryOne('select stripe_customer_id from subscriptions where user_id = $1', [user.id])
   const session = await stripe('checkout/sessions', {
@@ -188,7 +188,7 @@ export async function startCheckout(user, planId, origin) {
     success_url: `${origin}/billing?checkout=done`,
     cancel_url: `${origin}/billing?checkout=cancelled`,
     client_reference_id: user.id,
-    // Both, deliberately: client_reference_id survives into the session BO reads back, and the
+    // Both, deliberately: client_reference_id survives into the session Wesify reads back, and the
     // subscription metadata survives into every later invoice event, which the session does not.
     'subscription_data[metadata][bo_user_id]': user.id,
     'subscription_data[metadata][bo_plan]': planId,
@@ -197,7 +197,7 @@ export async function startCheckout(user, planId, origin) {
   return { url: session.url, id: session.id }
 }
 
-/** Stripe's own page for changing a card, switching plan, or cancelling. BO does not rebuild any of it. */
+/** Stripe's own page for changing a card, switching plan, or cancelling. Wesify does not rebuild any of it. */
 export async function billingPortal(userId, origin) {
   const row = await queryOne('select stripe_customer_id from subscriptions where user_id = $1', [userId])
   if (!row?.stripe_customer_id) throw Object.assign(new Error('There is no subscription on this account yet.'), { status: 400 })
@@ -214,7 +214,7 @@ export async function billingPortal(userId, origin) {
  */
 export function verifyWebhook(rawBody, signatureHeader, toleranceSeconds = 300) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET
-  if (!secret) throw Object.assign(new Error('BO has no Stripe webhook secret configured, so it cannot trust this request.'), { status: 503 })
+  if (!secret) throw Object.assign(new Error('Wesify has no Stripe webhook secret configured, so it cannot trust this request.'), { status: 503 })
   const parts = Object.fromEntries(String(signatureHeader ?? '').split(',').map(part => part.split('=', 2)))
   const timestamp = Number(parts.t)
   if (!timestamp || !parts.v1) throw Object.assign(new Error('That request is not signed.'), { status: 400 })
@@ -227,7 +227,7 @@ export function verifyWebhook(rawBody, signatureHeader, toleranceSeconds = 300) 
   return JSON.parse(rawBody)
 }
 
-/** The plan a Stripe object is for: its metadata first, then whichever price id BO configured. */
+/** The plan a Stripe object is for: its metadata first, then whichever price id Wesify configured. */
 function planOf(subscription) {
   const fromMetadata = subscription?.metadata?.bo_plan
   if (PLANS[fromMetadata]) return fromMetadata
@@ -250,7 +250,7 @@ async function upsert(userId, fields) {
   )
 }
 
-/** The account a Stripe event is about: whatever it names directly, else the customer BO already stored. */
+/** The account a Stripe event is about: whatever it names directly, else the customer Wesify already stored. */
 async function userFor(object) {
   const named = object?.metadata?.bo_user_id || object?.client_reference_id
   if (named) return named

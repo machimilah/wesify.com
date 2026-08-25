@@ -7,9 +7,9 @@ import { databaseAvailable, query } from './db.mjs'
  * Where the interview lives.
  *
  * The same arrangement records use: Postgres when `DATABASE_URL` is configured, a JSON file when it
- * is not, and one shape for every caller either way. The interview is the most valuable thing BO
- * holds about a company that BO cannot regenerate — it is what the workspace was built from, what a
- * returning operator continues from, and what BO re-reads to explain a decision — and it was the
+ * is not, and one shape for every caller either way. The interview is the most valuable thing Wesify
+ * holds about a company that Wesify cannot regenerate — it is what the workspace was built from, what a
+ * returning operator continues from, and what Wesify re-reads to explain a decision — and it was the
  * last thing still living only on the disk a redeploy wipes.
  */
 

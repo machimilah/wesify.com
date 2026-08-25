@@ -50,7 +50,7 @@ function metricValue(metric: MetricDefinition, records: WorkspaceRecords) {
 }
 
 /**
- * Normalises the navigation of a workspace built by an older version of BO.
+ * Normalises the navigation of a workspace built by an older version of Wesify.
  *
  * Two things changed after workspaces were already in the wild: automations became "Links", and the
  * assistant stopped being a page — it is reachable from anywhere now, so a tab for it is a section
@@ -183,7 +183,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     return () => window.removeEventListener('popstate', syncRoute)
   }, [config, basePath])
 
-  /** A capability the operator added or removed is a correction to BO, and the best evidence there is. */
+  /** A capability the operator added or removed is a correction to Wesify, and the best evidence there is. */
   const recordCapabilityChange = (nextConfig: WorkspaceConfiguration) => {
     const before = new Set(config.capabilities ?? [])
     const after = new Set(nextConfig.capabilities ?? [])
@@ -210,11 +210,11 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
    * Moving between pages of the module it belongs to keeps it open, because that is still inside it.
    */
   /**
-   * Everything BO says back to the operator, routed by where the request came from.
+   * Everything Wesify says back to the operator, routed by where the request came from.
    *
    * A reply to something the operator asked the assistant belongs in the conversation, including the
    * outcome of whatever the agent then did. Feedback from a form or a dialog does not — it would read
-   * as BO talking to itself, and the thread would fill with turns nobody said. Those keep the strip.
+   * as Wesify talking to itself, and the thread would fill with turns nobody said. Those keep the strip.
    * While the panel is open the strip stays quiet, so one sentence never appears twice at once.
    */
   const assistantOpenRef = useRef(false)
@@ -427,7 +427,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
 /**
  * The assistant, reachable from every page.
  *
- * It was a tab, which made asking BO something a place you had to travel to and come back from — and
+ * It was a tab, which made asking Wesify something a place you had to travel to and come back from — and
  * the request always concerned the page you had just left. As a panel it sits beside the work instead
  * of replacing it, and it keeps the conversation rather than showing one answer at a time.
  */
@@ -467,7 +467,7 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
   const unreadNotifications = notifications.filter(item => !item.read)
   /**
    * The launcher is built from the workspace's own navigation, so it always matches the sidebar. The
-   * counts are real records — a tile never shows a number BO cannot point at.
+   * counts are real records — a tile never shows a number Wesify cannot point at.
    */
   const alertsByEntity = new Map<string, number>()
   for (const alert of recordAlerts) alertsByEntity.set(alert.entityId, (alertsByEntity.get(alert.entityId) ?? 0) + 1)
@@ -596,11 +596,11 @@ type LinkCanvasNode =
   | { id: 'action'; kind: 'action'; connectorId: string; x: number; y: number }
 
 /**
- * The apps a company already runs on, shown in BO.
+ * The apps a company already runs on, shown in Wesify.
  *
- * Read-only on purpose. BO is not going to become anyone's payment system, and until the mapping has
+ * Read-only on purpose. Wesify is not going to become anyone's payment system, and until the mapping has
  * been proved against real accounts it should not be able to change anything in one either. The
- * screen says so plainly rather than implying more than BO does.
+ * screen says so plainly rather than implying more than Wesify does.
  */
 function ConnectedApps({ workspaceId, onSynced }: { workspaceId: string; onSynced: () => Promise<void> }) {
   const [apps, setApps] = useState<ConnectedApp[]>([])

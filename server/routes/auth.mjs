@@ -14,7 +14,7 @@ import { captureError } from '../observability.mjs'
  */
 export async function authRoutes(request, response, segments) {
   if (segments[1] !== 'auth') return false
-  if (!databaseAvailable()) return send(response, 503, { error: 'BO has no database configured, so it has no accounts yet. Set DATABASE_URL to your Supabase connection string.' })
+  if (!databaseAvailable()) return send(response, 503, { error: 'Wesify has no database configured, so it has no accounts yet. Set DATABASE_URL to your Supabase connection string.' })
 
   const throttle = (bucket, max) => {
     const window = rateLimit(`${bucket}:${callerOf(request)}`, { max, windowMs: 60_000 })
@@ -43,11 +43,11 @@ export async function authRoutes(request, response, segments) {
    *
    * `forgot` answers the same thing whether or not the address has an account, and takes no shortcut
    * when it does not: an endpoint that responds differently for a known address is how a list of
-   * BO's customers gets built. The link is mailed and never returned here, so asking is not a way to
+   * Wesify's customers gets built. The link is mailed and never returned here, so asking is not a way to
    * be handed someone else's account.
    */
   if (request.method === 'POST' && segments[2] === 'forgot') {
-    // Tighter than sign-in: this one sends mail, so an unthrottled caller can also use BO to spray
+    // Tighter than sign-in: this one sends mail, so an unthrottled caller can also use Wesify to spray
     // messages at addresses that never asked for them.
     const refusal = throttle('forgot', Number(process.env.BO_RESET_RATE_LIMIT || 5))
     if (refusal) return send(response, 429, { error: refusal })

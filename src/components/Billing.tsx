@@ -12,7 +12,7 @@ import { ThemeToggle } from './ThemeToggle'
  * thing and refused another.
  *
  * There is no card form here and never will be: checkout is Stripe's own hosted page, so a card
- * number never reaches BO and cannot leak from it.
+ * number never reaches Wesify and cannot leak from it.
  */
 function limitLine(plan: Plan) {
   return [

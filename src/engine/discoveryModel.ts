@@ -33,9 +33,9 @@ export interface DiscoveryModelRequest {
 export interface DiscoveryStreamHandlers {
   onText?: (text: string) => void
   onActivity?: (text: string) => void
-  /** Told when BO had to fall back, and why. Falling back is silent otherwise, which reads as broken. */
+  /** Told when Wesify had to fall back, and why. Falling back is silent otherwise, which reads as broken. */
   onNotice?: (title: string, body: string) => void
-  /** Names what produced this turn: a model id, or empty for BO’s own built-in questions. */
+  /** Names what produced this turn: a model id, or empty for Wesify’s own built-in questions. */
   onSource?: (model: string) => void
 }
 
@@ -140,7 +140,7 @@ async function loadEngineWithTimeout() {
 export async function prepareBusinessDiscoveryModel(onProgress?: (value: string) => void) {
   if (window.__BO_DISCOVERY_MODEL_MOCK__) return
   // A gigabyte nobody is going to use. When the server runs the interview, the browser model is only
-  // ever reached if that fails, and paying for it up front is the whole reason the first minute of BO
+  // ever reached if that fails, and paying for it up front is the whole reason the first minute of Wesify
   // used to be slow.
   if (await serverInterviewAvailable()) return
   if (onProgress) { progressListeners.add(onProgress); if (lastProgress) onProgress(lastProgress) }
@@ -282,7 +282,7 @@ function fallbackArchitectureResponse(request: DiscoveryModelRequest): Discovery
   }
 }
 
-/** Everything the company has said, plus everything BO has already asked, in one research corpus. */
+/** Everything the company has said, plus everything Wesify has already asked, in one research corpus. */
 function researchInput(session: DiscoverySession, state: BusinessState = session.businessState) {
   const spoken = session.messages.filter(message => message.role === 'user').map(message => message.content)
   const text = [
@@ -295,7 +295,7 @@ function researchInput(session: DiscoverySession, state: BusinessState = session
   return { text, asked }
 }
 
-/** The operating model BO has established so far, with the evidence behind each conclusion. */
+/** The operating model Wesify has established so far, with the evidence behind each conclusion. */
 export function researchSession(session: DiscoverySession, state: BusinessState = session.businessState): BusinessResearch {
   return researchBusiness(researchInput(session, state))
 }
@@ -303,13 +303,13 @@ export function researchSession(session: DiscoverySession, state: BusinessState 
 /**
  * The interview ends, whatever the model thinks.
  *
- * BO asked questions forever. Two things had to be true at once for that, and both were: the model
+ * Wesify asked questions forever. Two things had to be true at once for that, and both were: the model
  * is never told how long it has been going, so it weighs one more question against nothing and one
- * more question always wins; and BO pushes back whenever the model tries to finish before the
+ * more question always wins; and Wesify pushes back whenever the model tries to finish before the
  * readiness heuristic is satisfied. Neither has a counter, so between them the interview had no end
  * that did not depend on the operator giving up or typing "just build it".
  *
- * Fourteen is the top of the range BO's own prompt already calls a good interview, so this is a
+ * Fourteen is the top of the range Wesify's own prompt already calls a good interview, so this is a
  * ceiling on what was intended rather than a new limit. Reaching it is the same as the operator
  * asking to stop: the architect is told to build from what it has and write down the rest as
  * assumptions, which is what it does for "just build it" today. The server prompt counts down to the
@@ -375,11 +375,11 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
     /**
      * The last turn rejected only for finishing early, kept rather than thrown away.
      *
-     * BO pushes back on an interview that ends before the critical operating decisions are settled —
+     * Wesify pushes back on an interview that ends before the critical operating decisions are settled —
      * that is the point of the readiness check. What it must not do is push back forever: readiness
      * is a heuristic scored over the conversation, and the model has read that same conversation. If
      * it says twice that it has what it needs, the honest move is to defer, because the alternative
-     * is an interview that can never end and an operator staring at "retry" on a question BO will
+     * is an interview that can never end and an operator staring at "retry" on a question Wesify will
      * refuse to accept an answer to.
      */
     let heldBack: DiscoveryAgentResponse | null = null
@@ -387,7 +387,7 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const result = await generateOnce({ ...request, repairInstruction }, stream)
-        // Unless BO was asked what it meant, in which case asking again is the whole point.
+        // Unless Wesify was asked what it meant, in which case asking again is the whole point.
         if (request.mode === 'DISCOVER' && result.decision === 'ASK_QUESTION' && !awaitingClarification(request.session) && isDuplicateQuestion(result.nextQuestion.text, request.session)) {
           throw new Error('The proposed question repeats information already resolved.')
         }
@@ -399,7 +399,7 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
           }
         }
         if (request.mode !== 'DISCOVER' && !hasUsableArchitecture(result.architectureContext)) throw new Error('The architecture is incomplete.')
-        console.info('[BO discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
+        console.info('[Wesify discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
         return result
       } catch (error) {
         lastError = error
@@ -416,7 +416,7 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
     /**
      * No question unless a model wrote it.
      *
-     * BO used to answer a failed turn with the next unresolved item from a hand-written list — which
+     * Wesify used to answer a failed turn with the next unresolved item from a hand-written list — which
      * is how somebody who had just written "we sell Uruguayan and Argentinian products to Spain" got
      * asked what their company sells. A canned question is not a cheaper version of the interview; it
      * is a different product, and a worse one, wearing the same screen. Failing here is honest, the
@@ -429,19 +429,19 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
 }
 
 /**
- * The interview BO actually runs.
+ * The interview Wesify actually runs.
  *
  * Server first when a frontier model is configured: it answers in seconds, works in every browser,
  * and asks about the company instead of asking the company to define itself. The browser model is
- * the fallback, and it is a real one — BO stays usable with no key, no network and no WebGPU, only
+ * the fallback, and it is a real one — Wesify stays usable with no key, no network and no WebGPU, only
  * with blunter questions.
  */
 /**
- * Says out loud that the server turn was dropped, and what BO is doing instead.
+ * Says out loud that the server turn was dropped, and what Wesify is doing instead.
  *
  * The fallback chain is deliberate and must stay silent in the sense of never stopping — but the
  * operator still deserves to know, because the two paths ask visibly different questions. Without
- * this, a spent free-tier quota looks exactly like BO having got worse at its job.
+ * this, a spent free-tier quota looks exactly like Wesify having got worse at its job.
  */
 function notice(stream: DiscoveryStreamHandlers, turn: DiscoveryAgentResponse | null) {
   const issue = lastInterviewIssue()
@@ -458,7 +458,7 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
   async generate(input: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
     const request = withInterviewCeiling(input)
     // A mock stands in for the model, not for the pipeline around it: it falls through to the local
-    // path so the repair loop and the question BO insists on asking still apply to it.
+    // path so the repair loop and the question Wesify insists on asking still apply to it.
     if (!window.__BO_DISCOVERY_MODEL_MOCK__ && await serverInterviewAvailable()) {
       /**
        * The critic pass is skipped on this path, and it costs nothing to skip.
@@ -467,7 +467,7 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
        * bad output. On the server there is no separate critic prompt: `runDiscoveryTurn` treats every
        * non-DISCOVER turn as an architecture turn, so this re-ran the *identical* architect prompt
        * over the same inputs and waited another seven seconds to be told roughly the same thing.
-       * That was half of the wait at the end of an interview, spent re-deriving an answer BO had.
+       * That was half of the wait at the end of an interview, spent re-deriving an answer Wesify had.
        */
       if (request.mode === 'REVIEW_ARCHITECTURE') {
         return {
@@ -482,12 +482,12 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
       /**
        * A repeat is asked again, not given up on.
        *
-       * A duplicate question is worse than a blunt one: it tells the operator BO was not listening.
+       * A duplicate question is worse than a blunt one: it tells the operator Wesify was not listening.
        * But dropping to the local path over one is worse still — the fallback is a fixed question
-       * bank, so BO answers a repeated question by asking the same repeated question forever. The
+       * bank, so Wesify answers a repeated question by asking the same repeated question forever. The
        * second attempt is told what went wrong, and only then does the browser model take over.
        */
-      // A repeat is a fault unless BO was asked to repeat itself, which is what a question back is.
+      // A repeat is a fault unless Wesify was asked to repeat itself, which is what a question back is.
       const repeats = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'ASK_QUESTION' && !awaitingClarification(request.session) && isDuplicateQuestion(turn.nextQuestion.text, request.session))
       const premature = (turn: DiscoveryAgentResponse | null) => Boolean(turn && request.mode === 'DISCOVER' && turn.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture && !assessDiscoveryReadiness(request.session, turn.businessState).ready)
       const usable = (turn: DiscoveryAgentResponse | null) => Boolean(turn && !repeats(turn) && !premature(turn) && (request.mode === 'DISCOVER' || hasUsableArchitecture(turn.architectureContext)))
@@ -515,10 +515,10 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
         /**
          * Pushed back once; now deferred to.
          *
-         * Readiness is BO's own score over the conversation, and the model has read that same
+         * Readiness is Wesify's own score over the conversation, and the model has read that same
          * conversation. Insisting past this point does not produce a better interview — it produces
          * one that cannot end, because the next turn disagrees exactly as this one did, and the
-         * operator is left retrying a question BO will not accept an answer to.
+         * operator is left retrying a question Wesify will not accept an answer to.
          */
         const settled = second ?? first
         if (settled && !repeats(settled)) { stream.onSource?.(lastInterviewModel()); return settled }

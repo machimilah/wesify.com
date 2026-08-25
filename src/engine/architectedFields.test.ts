@@ -6,12 +6,12 @@ import { architectureToBlueprint } from './businessDiscovery'
 /**
  * The record shape comes from the architect, not from matching its name against a list.
  *
- * BO used to decide what was inside an entity by pattern-matching the noun: anything containing
+ * Wesify used to decide what was inside an entity by pattern-matching the noun: anything containing
  * "invoice" got a number field, anything containing "job" got a customer relation. That is why two
  * companies in the same trade received identical forms however differently they answered — the model
  * chose the label and hand-written rules chose the substance.
  *
- * The architect now returns the fields. Nothing here trusts it: this covers what BO does with a
+ * The architect now returns the fields. Nothing here trusts it: this covers what Wesify does with a
  * relation pointing at nothing, a dropdown with no options, and a duplicate — because the failure
  * mode of generated schema is not a crash, it is a form somebody cannot fill in.
  */
@@ -54,7 +54,7 @@ describe('fields the architect asked for', () => {
       ] }],
     })
     const callouts = config.entities.find(entity => entity.id === 'callouts')!
-    // Boards, filters and every workflow trigger in BO group by status.
+    // Boards, filters and every workflow trigger in Wesify group by status.
     expect(callouts.fields.some(field => field.id === 'status')).toBe(true)
     expect(callouts.fields.some(field => field.type === 'long-text')).toBe(true)
   })

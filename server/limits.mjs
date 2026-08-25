@@ -1,8 +1,8 @@
 /**
- * What BO is willing to spend, and how fast anyone may ask.
+ * What Wesify is willing to spend, and how fast anyone may ask.
  *
  * Two endpoints call a frontier model, and one of them cannot require a workspace token because it is
- * the call that creates the workspace. Without a limit, the address of a BO deployment is enough to
+ * the call that creates the workspace. Without a limit, the address of a Wesify deployment is enough to
  * spend its owner's model budget in a loop. This is the cheap protection that has to exist before the
  * real one — accounts — is built.
  *

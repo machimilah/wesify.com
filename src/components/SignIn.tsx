@@ -6,10 +6,10 @@ import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 
 /**
- * The way in, when BO has accounts.
+ * The way in, when Wesify has accounts.
  *
  * One screen for both signing up and signing in, because at this stage almost everybody arriving is
- * new and asking them to pick first is a decision about BO rather than about their business. The
+ * new and asking them to pick first is a decision about Wesify rather than about their business. The
  * server's messages are shown as they are: it already distinguishes "that email has an account" from
  * "that password is wrong", and rewriting them here would only make the screen less helpful.
  *

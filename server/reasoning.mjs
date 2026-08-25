@@ -1,12 +1,12 @@
 import { MODEL, conversationText, citedSources, refusal, reasoningAvailable, textOf, wireSchema, withFallbacks } from './anthropic.mjs'
 
 /**
- * BO's frontier researcher.
+ * Wesify's frontier researcher.
  *
  * The local research engine reasons over an operating-model ontology and never leaves the browser.
  * This module is the upgrade path: a real model that searches the open web for how this kind of
  * company actually operates, then compiles what it learned into the same evidence-carrying shape the
- * rest of BO already consumes. It runs server-side so the API key never reaches a browser.
+ * rest of Wesify already consumes. It runs server-side so the API key never reaches a browser.
  *
  * Two passes on purpose. The first pass researches and is allowed to be discursive; the second pass
  * compiles that brief into strict JSON with no tools. A single prompt that researches, decides, and
@@ -18,7 +18,7 @@ import { MODEL, conversationText, citedSources, refusal, reasoningAvailable, tex
 
 export { reasoningAvailable }
 
-const researchSystem = `You are BO's business researcher. BO builds a custom Business Command Center for one company, and you decide what that company actually needs to run itself.
+const researchSystem = `You are Wesify's business researcher. Wesify builds a custom Business Command Center for one company, and you decide what that company actually needs to run itself.
 
 Research the company and its operating model using web search and web fetch. Look for how this kind of business actually operates: what it sells, who buys, how money arrives and when, how work reaches the customer, what it must buy in to deliver, who does the work, what regulation or contract obligations gate it, and what commonly goes wrong operationally. If the company is named and has a public presence, research that specific company. Otherwise research the industry and operating model.
 
@@ -26,7 +26,7 @@ Produce a business-facing research brief. For every operational conclusion, stat
 
 End the brief with: the operating model you concluded, the business systems that follow from it, the systems this company explicitly does not need, and the single most valuable thing you still do not know.`
 
-const compileSystem = `You are BO's architecture compiler. You are given a research brief about one company and BO's hidden capability catalog. Convert the brief into strict JSON.
+const compileSystem = `You are Wesify's architecture compiler. You are given a research brief about one company and Wesify's hidden capability catalog. Convert the brief into strict JSON.
 
 Rules:
 - Every finding must trace to the brief. Never introduce a conclusion the brief did not reach.
@@ -81,7 +81,7 @@ export async function researchCompany({ description, conversation = [], catalog 
       /**
        * Tuned for the person waiting, not for the best possible answer.
        *
-       * This is the slowest thing BO does — every search and fetch is a round trip to the open web,
+       * This is the slowest thing Wesify does — every search and fetch is a round trip to the open web,
        * and an operator sits watching a progress stage while it happens. Eight searches produced
        * marginally better sourcing than five and took noticeably longer to get there.
        *
@@ -94,19 +94,19 @@ export async function researchCompany({ description, conversation = [], catalog 
        *
        * Left off, they default to allowing a code-execution caller, and the API then refuses the
        * whole request on any model without programmatic tool calling: "'claude-haiku-4-5' does not
-       * support programmatic tool calling". BO's default model is exactly that one, so every
+       * support programmatic tool calling". Wesify's default model is exactly that one, so every
        * research call 400ed the moment these tool versions landed — and the build screen reported it
        * as "external research unavailable", which reads like a network problem rather than a request
-       * BO was never going to get an answer to.
+       * Wesify was never going to get an answer to.
        */
       tools: [
         { type: 'web_search_20260209', name: 'web_search', max_uses: 5, allowed_callers: ['direct'] },
         { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3, allowed_callers: ['direct'] },
       ],
     },
-    [{ role: 'user', content: `The operator described their company as:\n"""${description}"""\n\nWhat they have told BO so far:\n${conversationText(conversation) || '(nothing yet)'}\n\nResearch this company and produce the brief.` }],
+    [{ role: 'user', content: `The operator described their company as:\n"""${description}"""\n\nWhat they have told Wesify so far:\n${conversationText(conversation) || '(nothing yet)'}\n\nResearch this company and produce the brief.` }],
   )
-  const briefRefusal = refusal(brief.message, 'BO continued with its built-in researcher.')
+  const briefRefusal = refusal(brief.message, 'Wesify continued with its built-in researcher.')
   if (briefRefusal) throw briefRefusal
   const briefText = textOf(brief.message)
   if (!briefText) throw Object.assign(new Error('The researcher returned an empty brief.'), { status: 502 })
@@ -120,12 +120,12 @@ export async function researchCompany({ description, conversation = [], catalog 
     },
     [{ role: 'user', content: `Research brief:\n"""${briefText}"""\n\nBO capability catalog (id=label):\n${catalog}\n\nCompile the brief into JSON.` }],
   )
-  const compiledRefusal = refusal(compiled.message, 'BO continued with its built-in researcher.')
+  const compiledRefusal = refusal(compiled.message, 'Wesify continued with its built-in researcher.')
   if (compiledRefusal) throw compiledRefusal
 
   let result
   try { result = JSON.parse(textOf(compiled.message)) }
-  catch { throw Object.assign(new Error('The researcher returned output BO could not read.'), { status: 502 }) }
+  catch { throw Object.assign(new Error('The researcher returned output Wesify could not read.'), { status: 502 }) }
 
   const allowed = new Set(capabilityIds)
   const searched = citedSources(brief.message)

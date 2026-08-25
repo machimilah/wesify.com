@@ -78,9 +78,9 @@ describe('AI business discovery contract', () => {
   /**
    * No model, no question.
    *
-   * BO used to answer an unreachable model with the next entry from a hand-written list, which is how
+   * Wesify used to answer an unreachable model with the next entry from a hand-written list, which is how
    * a company that had just described itself got asked what it sells. Every question the operator
-   * sees is now written by a model that read the whole conversation, and when none can be reached BO
+   * sees is now written by a model that read the whole conversation, and when none can be reached Wesify
    * says so and offers a retry instead of impersonating itself.
    */
   it('refuses to invent a question when no model can be reached', async () => {

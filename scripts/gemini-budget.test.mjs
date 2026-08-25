@@ -45,14 +45,14 @@ try {
   const elapsed = Date.now() - startedAt
 
   // The whole point: five models at the per-model deadline would be 3500ms, and the budget is 1800.
-  assert.ok(elapsed < budgetMs + 900, `BO spent ${elapsed}ms against a ${budgetMs}ms budget, so the cascade is still unbounded.`)
-  assert.ok(elapsed >= timeoutMs, `BO gave up after ${elapsed}ms without giving even one model its deadline.`)
+  assert.ok(elapsed < budgetMs + 900, `Wesify spent ${elapsed}ms against a ${budgetMs}ms budget, so the cascade is still unbounded.`)
+  assert.ok(elapsed >= timeoutMs, `Wesify gave up after ${elapsed}ms without giving even one model its deadline.`)
 
   // More than one model was tried, so the operator is told that rather than being handed the name of
   // whichever one happened to be last.
   assert.ok(requests > 1, 'Only one model was tried, so this proves nothing about the cascade.')
   assert.match(failure.message, /No free model answered/, `The failure still blames a single model: ${failure.message}`)
-  assert.match(failure.message, /BO tried .+,/, `The failure does not say what was tried: ${failure.message}`)
+  assert.match(failure.message, /Wesify tried .+,/, `The failure does not say what was tried: ${failure.message}`)
   assert.equal(failure.status, 504)
 
   console.log(`Gemini budget test passed: a free tier that never answers costs ${elapsed}ms against a ${budgetMs}ms budget rather than the whole cascade, and the operator is told no model answered and which ones were tried, instead of the name of the last one in the list.`)

@@ -1,10 +1,10 @@
 import { saysSignal } from '../engine/shared'
 /**
- * Outside systems BO knows how to stand in front of.
+ * Outside systems Wesify knows how to stand in front of.
  *
- * BO does not have to *be* the accounting system. Most companies already have one and will not swap
- * it. What they lack is one screen. So a capability can be **built** (BO owns the records) or
- * **connected** (another app owns them and BO shows them) — same page, same shape, different backing.
+ * Wesify does not have to *be* the accounting system. Most companies already have one and will not swap
+ * it. What they lack is one screen. So a capability can be **built** (Wesify owns the records) or
+ * **connected** (another app owns them and Wesify shows them) — same page, same shape, different backing.
  *
  * `provides` must name capability ids that exist; `providers.test.ts` enforces that.
  */
@@ -15,9 +15,9 @@ export interface ProviderDefinition {
   category: 'accounting' | 'payments' | 'commerce' | 'crm' | 'people' | 'work' | 'support' | 'field-service'
   /** Words that mean "we already use this". Matched against what the company said. */
   signals: string[]
-  /** Capabilities this app can back instead of BO building them. */
+  /** Capabilities this app can back instead of Wesify building them. */
   provides: string[]
-  /** Whether the app's API can accept changes from BO, not only hand them out. */
+  /** Whether the app's API can accept changes from Wesify, not only hand them out. */
   writable: boolean
   /** What the operator has to do to connect it. Shown honestly before anything is connected. */
   auth: 'oauth' | 'api-key'

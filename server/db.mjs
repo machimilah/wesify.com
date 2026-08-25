@@ -3,13 +3,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * BO's database, when it has one.
+ * Wesify's database, when it has one.
  *
- * Accounts arrived first, because they are what stands between BO and a second person using the
+ * Accounts arrived first, because they are what stands between Wesify and a second person using the
  * product at all. Workspace records — the actual clients, invoices and work orders an operator
  * creates — followed once accounts existed to own them; see records.mjs for that migration.
  *
- * `DATABASE_URL` is a Supabase connection string. Without one, BO runs exactly as it did before, with
+ * `DATABASE_URL` is a Supabase connection string. Without one, Wesify runs exactly as it did before, with
  * no accounts and workspace data back in local JSON files. That keeps the prototype usable with zero
  * infrastructure and keeps the test suite honest about which path it is exercising;
  * `databaseAvailable()` is what the rest of the server asks before choosing either.
@@ -32,7 +32,7 @@ export function databaseAvailable() {
 
 async function getPool() {
   if (pool) return pool
-  if (!process.env.DATABASE_URL) throw Object.assign(new Error('BO has no database configured. Set DATABASE_URL to your Supabase connection string.'), { status: 503 })
+  if (!process.env.DATABASE_URL) throw Object.assign(new Error('Wesify has no database configured. Set DATABASE_URL to your Supabase connection string.'), { status: 503 })
   connecting ??= import('pg').then(({ default: pg }) => {
     // Supabase terminates TLS with its own certificate chain; verifying it needs the CA bundle, which
     // is a deployment concern rather than a code one.

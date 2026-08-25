@@ -33,7 +33,7 @@ await new Promise(resolve => server.listen(port, '127.0.0.1', resolve))
 const base = `http://127.0.0.1:${port}`
 const workspaceId = 'ws-durability-test'
 
-// With a database configured, BO requires an account for every workspace route — the token-only path
+// With a database configured, Wesify requires an account for every workspace route — the token-only path
 // is the no-infrastructure fallback, not a second way in. So this signs up the way an operator does.
 const registered = await fetch(`${base}/api/auth/register`, {
   method: 'POST', headers: { 'content-type': 'application/json' },
@@ -64,7 +64,7 @@ const session = {
     customers: [], revenueModel: [], team: [], operations: [], resources: [], locations: [], currentTools: [], painPoints: [],
     goals: [], knownEntities: [], knownWorkflows: [], uncertainties: [], assumptions: [], softwareImplications: [],
   },
-  messages: [{ id: 'u1', role: 'user', content: 'We test whether BO forgets things when the disk is wiped.', createdAt: new Date().toISOString() }],
+  messages: [{ id: 'u1', role: 'user', content: 'We test whether Wesify forgets things when the disk is wiped.', createdAt: new Date().toISOString() }],
   currentQuestion: null, architecture: null,
   metrics: { discoveryTurns: 1, questionsAsked: 1, architectureEdits: 0, architectureApproved: false, startedAt: new Date().toISOString(), approvedAt: '' },
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),

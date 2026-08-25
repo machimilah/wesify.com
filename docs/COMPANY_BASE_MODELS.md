@@ -1,8 +1,8 @@
-# BO company base models
+# Wesify company base models
 
 ## Product decision
 
-BO should classify the initial company sentence into an operating archetype, install a stable structural base, and then ask only the questions that can change that base. A base contains workflows and record types, never invented customers, transactions, employees, metrics, or performance data.
+Wesify should classify the initial company sentence into an operating archetype, install a stable structural base, and then ask only the questions that can change that base. A base contains workflows and record types, never invented customers, transactions, employees, metrics, or performance data.
 
 The shared operating primitives are:
 
@@ -13,7 +13,7 @@ The shared operating primitives are:
 5. Move inventory when physical goods or parts exist.
 6. Resolve customer requests when ongoing service exists.
 
-This follows the cross-functional logic of APQC's Process Classification Framework and the lead-to-cash pattern documented by Salesforce and Microsoft: leads become opportunities, quotes, orders, delivery, invoices, and post-sale service. The important design implication is that CRM is one operating process inside BO, not the whole company system.
+This follows the cross-functional logic of APQC's Process Classification Framework and the lead-to-cash pattern documented by Salesforce and Microsoft: leads become opportunities, quotes, orders, delivery, invoices, and post-sale service. The important design implication is that CRM is one operating process inside Wesify, not the whole company system.
 
 ## Initial archetypes
 
@@ -29,17 +29,17 @@ This follows the cross-functional logic of APQC's Process Classification Framewo
 | Healthcare clinic | Patients, appointments/care workflow, billing, team, requests | Appointment → registration/check-in → encounter → treatment → checkout → follow-up | Visit workflow, payer mix, roles, authorizations, patient requests |
 | Generic fallback | Sales, customers, work, finance, team | Lead → proposal → work request → execution → review → invoice | Delivery flow first, then sales, billing, ownership, support |
 
-## Evidence translated into BO structures
+## Evidence translated into Wesify structures
 
-- CRM and lead-to-cash: Microsoft documents opportunity → quote → sales order → invoice, while Salesforce extends the pattern through delivery, billing, and post-sales service. BO therefore keeps customer, pipeline, commercial documents, delivery, and service linked rather than creating isolated cards.
+- CRM and lead-to-cash: Microsoft documents opportunity → quote → sales order → invoice, while Salesforce extends the pattern through delivery, billing, and post-sales service. Wesify therefore keeps customer, pipeline, commercial documents, delivery, and service linked rather than creating isolated cards.
 - Service businesses: Odoo and NetSuite connect projects, tasks, time entries, expenses, approvals, and invoicing. Agency and professional-services bases therefore require projects/processes and finance, with billing model as an early customization question.
 - Manufacturing: Oracle NetSuite defines routings as ordered operations tied to work centers, labor, machines, costs, and work orders; WIP tracks material issue, assembly, completion, and stock. Manufacturing therefore starts with inventory plus production routing, not a generic project board.
 - Subscription businesses: Stripe distinguishes trialing, active, incomplete, past-due, canceled, unpaid, and paused subscriptions and generates invoices every billing period. SaaS therefore needs accounts, onboarding/adoption, recurring billing, renewal, and support.
 - Retail/e-commerce: Shopify treats order management, payment, fulfillment, shipment, returns, exchanges, refunds, and inventory as one connected operating flow. Retail therefore starts from orders and fulfillment rather than a B2B opportunity pipeline.
 - Customer service: Dynamics models cases from intake through routing, queue assignment, remediation, SLA tracking, and resolution. Support is therefore a workflow with ownership and status, not merely a message list.
 - Field service: Dynamics documents create → schedule → dispatch → service → review → invoice, with technician resources, parts consumption, inventory adjustment, and agreements for recurring work. This becomes the field-service base.
-- Construction: Procore's project model centers budgets, bidding, commitments, RFIs, submittals, change events, change orders, direct costs, and contracts. BO's construction base therefore prioritizes project phases, role ownership, progress billing, and change control.
-- Healthcare administration: HealthIT.gov identifies scheduling, registration, practice management, coding/billing, patient identity, and authorization as connected administrative systems. BO's clinic base stays administrative and intentionally does not attempt to replace clinical/EHR functionality.
+- Construction: Procore's project model centers budgets, bidding, commitments, RFIs, submittals, change events, change orders, direct costs, and contracts. Wesify's construction base therefore prioritizes project phases, role ownership, progress billing, and change control.
+- Healthcare administration: HealthIT.gov identifies scheduling, registration, practice management, coding/billing, patient identity, and authorization as connected administrative systems. Wesify's clinic base stays administrative and intentionally does not attempt to replace clinical/EHR functionality.
 
 ## Sources
 
@@ -68,7 +68,7 @@ This follows the cross-functional logic of APQC's Process Classification Framewo
 
 ## Discovery-question policy
 
-- BO has one canonical catalog of 50 questions across sales/payments, products/inventory, delivery/projects, customers/marketing, team/roles, and finance/admin/reporting.
+- Wesify has one canonical catalog of 50 questions across sales/payments, products/inventory, delivery/projects, customers/marketing, team/roles, and finance/admin/reporting.
 - The selected company base provides a relevance-ranked subset. The local model chooses the next useful unanswered ID; it cannot invent alternate wording or ask outside the catalog.
 - Only one question is shown at a time. Selectable answers are used wherever a bounded answer is possible; company-specific details use one short phrase.
-- A base requires eight relevant discovery answers before the model can finish the initial workspace. Further capabilities can be added later through BO.
+- A base requires eight relevant discovery answers before the model can finish the initial workspace. Further capabilities can be added later through Wesify.

@@ -19,24 +19,24 @@ gsap.registerPlugin(useGSAP)
 const cardImage = (image: string) => ({ '--bo-card-image': `url("${image}")` }) as React.CSSProperties
 
 /**
- * BO's home page, signed in or not.
+ * Wesify's home page, signed in or not.
  *
- * There used to be two of these: a landing page at `/` that argued for BO, and this page behind the
+ * There used to be two of these: a landing page at `/` that argued for Wesify, and this page behind the
  * account. They had converged on the same thing — a sentence and the box to answer it in — so the
  * landing page is gone and this is what `/` serves.
  *
  * That makes the front door and the workbench the same door, which is the honest arrangement for a
- * product whose entire pitch is the thing it builds from one sentence. A stranger types; BO asks who
+ * product whose entire pitch is the thing it builds from one sentence. A stranger types; Wesify asks who
  * they are afterwards, at the moment there is something worth signing in for.
  *
  * What follows below the fold is not the landing page come back. It answers the one question the
  * prompt itself cannot — "and then what happens?" — by showing it. Every card carries a picture of
- * BO's own interface rather than an icon standing in for an idea, because a picture of the product
+ * Wesify's own interface rather than an icon standing in for an idea, because a picture of the product
  * is the only illustration that cannot promise something the product does not do.
  */
 
 /**
- * How far a card tilts toward the cursor, and the ceiling below which BO does not try.
+ * How far a card tilts toward the cursor, and the ceiling below which Wesify does not try.
  *
  * `(hover: hover) and (pointer: fine)` is a mouse — a trackpad or a real mouse, not a finger — and
  * reduced-motion is a person who has said, at the operating-system level, that they do not want
@@ -103,8 +103,8 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
    * Only warmed up for somebody who is already in.
    *
    * The in-browser model is a large download, and starting it for every stranger who lands spends
-   * their bandwidth before they have asked BO for anything. With no accounts configured there are no
-   * strangers — BO is a single-browser prototype — so it warms up then too.
+   * their bandwidth before they have asked Wesify for anything. With no accounts configured there are no
+   * strangers — Wesify is a single-browser prototype — so it warms up then too.
    */
   useEffect(() => {
     if (accounts && !signedIn) return
@@ -144,9 +144,9 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
           <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
         </div>}
       </section>
-      {/* Where a company with customers would put their logos. BO has none yet, and a row of
+      {/* Where a company with customers would put their logos. Wesify has none yet, and a row of
           borrowed or invented marks is the one thing on a landing page that cannot be walked back —
-          so this carries what is true instead: the trades BO knows before the first question. */}
+          so this carries what is true instead: the trades Wesify knows before the first question. */}
       <div className="bo-home__proof">
         <div>
           <small>ALREADY KNOWS</small>

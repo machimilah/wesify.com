@@ -6,12 +6,12 @@ import { writeFileAtomic } from './atomicWrite.mjs'
 /**
  * Credentials for the outside systems a workspace has connected.
  *
- * A stored API key is the most dangerous thing BO holds. It is not workspace data, so it is kept
+ * A stored API key is the most dangerous thing Wesify holds. It is not workspace data, so it is kept
  * outside the workspace directory that gets read, listed, versioned and rolled back; it is encrypted
  * at rest; and it is never returned by any endpoint, not even to the operator who set it. What the
  * interface gets back is the fact that a connection exists and when it last synced.
  *
- * Encryption uses BO_CONNECTION_SECRET. Without one set, BO refuses to store a key rather than
+ * Encryption uses BO_CONNECTION_SECRET. Without one set, Wesify refuses to store a key rather than
  * pretending a file of plaintext credentials is protected.
  */
 

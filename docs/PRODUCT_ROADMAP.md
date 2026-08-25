@@ -78,5 +78,5 @@ MVP is complete when every module traces to evidence or a platform invariant, th
 - A fixed ERP schema applied to every company.
 - Sharing company content, records or prompts to improve other companies.
 - Unsupervised money movement, legal commitments, employment decisions or destructive changes.
-- Dominican payroll, labor, tax or filing calculations in BO core.
+- Dominican payroll, labor, tax or filing calculations in Wesify core.
 - Claiming planned runtime behavior is already implemented.

@@ -25,7 +25,7 @@ const accessRoot = () => path.resolve(process.env.BO_GENERATED_ROOT || path.join
  * caller has not claimed yet is claimed for them here, which is what makes the first build after
  * signing in belong to somebody.
  *
- * Without a database, BO keeps its previous behaviour: the first caller to present a token for a
+ * Without a database, Wesify keeps its previous behaviour: the first caller to present a token for a
  * workspace id owns it from then on. That is trust-on-first-use, it is not real security, and it
  * exists so the prototype still runs with no infrastructure. `databaseAvailable()` is the switch.
  */
@@ -125,6 +125,6 @@ export function modelToll(request) {
   const window = rateLimit(`model:${callerOf(request)}`, { max: Number(process.env.BO_MODEL_RATE_LIMIT || 20), windowMs: 60_000 })
   if (!window.ok) return { status: 429, error: `Too many requests. Try again in ${window.retryAfterSeconds} seconds.` }
   const budget = spendModelCall()
-  if (!budget.ok) return { status: 429, error: `BO has reached its model budget for today (${budget.limit} requests). It resets at midnight UTC.` }
+  if (!budget.ok) return { status: 429, error: `Wesify has reached its model budget for today (${budget.limit} requests). It resets at midnight UTC.` }
   return null
 }

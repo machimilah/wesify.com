@@ -54,7 +54,7 @@ const marked = others.filter(item => /\b(TODO|FIXME|HACK|XXX)\b/.test(item.text)
 assert.deepEqual(marked, [], 'unfinished-work markers in shipped code')
 
 // Deliberately fake fixtures are allowed — stripe.test.mjs holds a live-shaped key precisely to
-// prove BO refuses one. What is looked for is a credential with real entropy.
+// prove Wesify refuses one. What is looked for is a credential with real entropy.
 const obviouslyFake = /(abcdef|12345678|pretend|example|placeholder|xxxx)/i
 const suspicious = others.filter(item => {
   const found = item.text.match(/(sk_live_[A-Za-z0-9]{8,}|rk_live_[A-Za-z0-9]{8,}|sk-ant-[A-Za-z0-9-]{12,}|postgres:\/\/[^\s'"]*:[^\s'"@]+@)/g) ?? []
@@ -78,7 +78,7 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
  *
  * So each suite must either drop the keys (scripts/noSpend.mjs) or point a provider at its own stub
  * (ANTHROPIC_BASE_URL, GEMINI_BASE_URL). One of the two, never neither. A suite that stubs one
- * provider and holds its key configures the provider BO prefers, so the other is never reached.
+ * provider and holds its key configures the provider Wesify prefers, so the other is never reached.
  */
 const suites = files.filter(item => /^scripts\/[^/]+\.mjs$/.test(item.file) && item.file !== SELF && !item.file.endsWith('/browser.mjs') && !item.file.endsWith('/noSpend.mjs'))
 const spenders = suites
@@ -90,7 +90,7 @@ assert.deepEqual(spenders, [], 'these suites would call the real API if a key is
 /**
  * A suite that stubs one provider must pin that provider.
  *
- * BO now has two, and it picks between them from the environment — including `.env.local`, which is
+ * Wesify now has two, and it picks between them from the environment — including `.env.local`, which is
  * loaded in every child process. So a developer holding a Gemini key had `interview.test.mjs` quietly
  * ignore its Anthropic stub, spend real free-tier quota, and fail on a question it never asked for.
  * Stubbing a base URL is only half the instruction; the other half is saying which provider to use.
@@ -118,7 +118,7 @@ const shipped = [...runtimeStage.matchAll(/^COPY\s+(?!--from)(.+)$/gm)]
   .map(item => item.replace(/\*$/, '').replace(/\\/g, '/'))
 
 /**
- * Anchored to the start of a line, because BO writes code as well as running it.
+ * Anchored to the start of a line, because Wesify writes code as well as running it.
  *
  * `project-builder.mjs` emits a generated self-test whose source text contains
  * `import { selfTest } from '../runtime.mjs'`. A regex looking anywhere for `from '...'` reads that

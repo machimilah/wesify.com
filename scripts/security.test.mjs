@@ -11,7 +11,7 @@ import './noSpend.mjs'
  * The defences that are invisible until the day they are not there.
  *
  * `auth.test.mjs` covers passwords and sessions. This covers the rest of the surface: what every
- * response tells a browser, what BO refuses to be pointed at, how much a stranger can make it hold
+ * response tells a browser, what Wesify refuses to be pointed at, how much a stranger can make it hold
  * in memory, and whether a failure ever hands back something it should not.
  *
  * These are exactly the checks that get skipped because nothing visibly depends on them, and are
@@ -58,13 +58,13 @@ try {
   }
 
   // The browser model needs these three, and a policy tightened without noticing would break the
-  // no-API-key path silently — the path where BO still works for someone with no account anywhere.
+  // no-API-key path silently — the path where Wesify still works for someone with no account anywhere.
   const policy = (await fetch(`${base}/api/health`)).headers.get('content-security-policy')
   for (const needed of ["'wasm-unsafe-eval'", 'worker-src', 'blob:']) {
     assert.ok(policy.includes(needed), `the policy would break the in-browser model: no ${needed}`)
   }
 
-  // 2. BO will not be pointed at things only BO can reach. A server that POSTs to any URL it is
+  // 2. Wesify will not be pointed at things only Wesify can reach. A server that POSTs to any URL it is
   //    given is a way into a private network from outside it.
   const refused = [
     'http://example.com/hook',                    // not https
@@ -86,11 +86,11 @@ try {
     '',
   ]
   for (const candidate of refused) {
-    assert.throws(() => safeWebhookUrl(candidate), /HTTPS|allowed|valid/, `BO accepted a webhook target it should refuse: ${candidate}`)
+    assert.throws(() => safeWebhookUrl(candidate), /HTTPS|allowed|valid/, `Wesify accepted a webhook target it should refuse: ${candidate}`)
   }
   assert.equal(safeWebhookUrl('https://hook.example.com/abc'), 'https://hook.example.com/abc', 'a legitimate webhook target was refused')
 
-  // 3. A stranger cannot make BO hold as much memory as they feel like sending.
+  // 3. A stranger cannot make Wesify hold as much memory as they feel like sending.
   // `connection: close` so the socket this deliberately breaks is not handed to the next request.
   const oversized = await fetch(`${base}/api/auth/register`, {
     method: 'POST',
@@ -98,12 +98,12 @@ try {
     body: JSON.stringify({ email: 'big@example.com', password: 'a-long-enough-password', padding: 'x'.repeat(3_000_000) }),
   }).catch(() => null)
   // Refused, or the connection dropped mid-upload. What must not happen is acceptance — and what
-  // must not happen either is a 500, which would be BO calling the sender's fault its own and
+  // must not happen either is a 500, which would be Wesify calling the sender's fault its own and
   // waking the error monitor every time somebody pasted something large.
-  assert.notEqual(oversized?.status, 200, 'BO accepted a three megabyte request body')
+  assert.notEqual(oversized?.status, 200, 'Wesify accepted a three megabyte request body')
   if (oversized) assert.equal(oversized.status, 413, `an oversized body answered ${oversized.status} rather than 413`)
 
-  // 4. A failure says nothing about how BO is built. A stack trace or a SQL error in a response is a
+  // 4. A failure says nothing about how Wesify is built. A stack trace or a SQL error in a response is a
   //    map of the inside of the server, handed to whoever asked for it.
   const broken = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{not json' })
   const detail = JSON.stringify(await broken.json())

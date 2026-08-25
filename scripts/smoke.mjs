@@ -66,7 +66,7 @@ await page.addInitScript(() => {
      * The second question is the model's, because there is no other kind any more.
      *
      * This mock used to answer the first reply with READY, and a real second question appeared on
-     * screen regardless — BO overrode the decision with the next entry from a written list. That list
+     * screen regardless — Wesify overrode the decision with the next entry from a written list. That list
      * is gone, so a mock that wants a two-question interview has to ask the second question itself.
      */
     if (userTurns > 1) {
@@ -100,7 +100,7 @@ await page.addInitScript(() => {
       decision: 'PREVIEW', message: 'I can add account tier to every client record.',
       action: { ...emptyAgentAction, kind: 'add_field', entityId: 'customers', field: { id: 'account-tier', label: 'account tier', type: 'text', required: false } },
     }
-    return { decision: 'CLARIFY', message: 'What should BO change?', action: emptyAgentAction }
+    return { decision: 'CLARIFY', message: 'What should Wesify change?', action: emptyAgentAction }
   }
 })
 
@@ -141,9 +141,9 @@ try {
   await page.waitForURL('**/build/*')
   await page.getByTestId('build-stages').waitFor()
   await page.getByText('How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?', { exact: true }).waitFor()
-  // BO asks and waits. Its reasoning is not printed into the thread for the operator to read past.
+  // Wesify asks and waits. Its reasoning is not printed into the thread for the operator to read past.
   if (await page.locator('[data-testid="agent-thinking"]').count()) throw new Error('The reasoning journal is back on the build screen.')
-  // Answers are typed, not picked. BO used to offer two to four buttons under each question, which
+  // Answers are typed, not picked. Wesify used to offer two to four buttons under each question, which
   // quietly taught people it wanted a choice rather than a sentence — and a sentence in the
   // operator's own words is what the architecture is actually built from.
   if (await page.locator('.bo-quick-answers').count()) throw new Error('The interview is offering clickable answers again.')

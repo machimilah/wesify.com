@@ -8,7 +8,7 @@ import type { WorkspaceConfiguration } from './workspaceSchema'
  * The gate between what a model says and what happens to a workspace.
  *
  * `askWorkspaceAgent` takes free text and turns it into an action against real records. Everything
- * dangerous about BO is on the other side of this function: a model that invents an entity id, a
+ * dangerous about Wesify is on the other side of this function: a model that invents an entity id, a
  * field that does not exist, or a record id it has not seen must produce nothing at all, not an
  * approximate action against approximately the right data.
  *

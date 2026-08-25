@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 
 /**
- * Knowing that BO broke, and where.
+ * Knowing that Wesify broke, and where.
  *
- * Until this existed, a 500 in production was answered with "BO could not complete the operation."
+ * Until this existed, a 500 in production was answered with "Wesify could not complete the operation."
  * and then discarded — not logged, not counted, not reported anywhere. The only way to learn that
  * something was broken was for a customer to say so, and the only thing to go on afterwards was their
  * description of it. That is not a monitoring gap so much as a promise that every production bug will
@@ -122,7 +122,7 @@ export async function captureError(error, context = {}) {
 /**
  * Catches what escapes every handler.
  *
- * An unhandled rejection leaves the process in a state nobody reasoned about, so BO reports it and
+ * An unhandled rejection leaves the process in a state nobody reasoned about, so Wesify reports it and
  * then stops rather than serving on from it — a container that exits is restarted, and a container
  * that keeps answering wrongly is not noticed at all.
  */

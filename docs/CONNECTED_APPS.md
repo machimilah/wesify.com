@@ -1,27 +1,27 @@
 # Connected apps
 
-BO does not have to *be* the accounting system. Most companies already have one and will not swap it.
+Wesify does not have to *be* the accounting system. Most companies already have one and will not swap it.
 What they lack is one screen.
 
 So a capability is either **built** or **connected**:
 
-| Source | Who owns the records | What BO does |
+| Source | Who owns the records | What Wesify does |
 |---|---|---|
-| `built` | BO | Holds and edits them, as today |
+| `built` | Wesify | Holds and edits them, as today |
 | `connected` | Xero, Stripe, Shopify… | Shows them on the same page, and writes changes back |
 
 Same page, same shape, different backing. The operator sees one system.
 
-## BO already asked
+## Wesify already asked
 
 The discovery agent has always collected `currentTools` — the apps the company already uses. Until
 now nothing read it. That answer is what decides built vs connected.
 
 A company that says *"we do our books in Xero"* gets an Invoices page backed by Xero, not a second
-invoicing system to keep in step with the first. That is the same promise BO already makes — don't
+invoicing system to keep in step with the first. That is the same promise Wesify already makes — don't
 build what you won't use — extended from features to whole applications.
 
-BO only hands a capability over when the company named an app that covers it. No tools named means
+Wesify only hands a capability over when the company named an app that covers it. No tools named means
 everything stays built, so a company with nothing gets a whole system.
 
 ## The write rules
@@ -33,8 +33,8 @@ start rather than bolted on when the first real connector lands.
 after a timeout re-sends the same key, so an invoice or a payment is never created twice. This is the
 failure that costs a business real money, and it is the one a naive retry loop causes.
 
-**2. Both sides changing is a conflict, not a merge.** If the record moved in BO *and* in the other
-app since they last agreed, BO marks it and asks. It never picks a winner. Last-write-wins here
+**2. Both sides changing is a conflict, not a merge.** If the record moved in Wesify *and* in the other
+app since they last agreed, Wesify marks it and asks. It never picks a winner. Last-write-wins here
 quietly corrupts the other system, and the operator finds out weeks later.
 
 **3. Failures stop.** A write retries up to five times, then is abandoned and surfaced — never
@@ -75,6 +75,6 @@ connection reads `not-connected`, and the interface says exactly that rather tha
 page that looks broken.
 
 The first real connector needs, per provider: OAuth or API-key exchange and token refresh, a mapping
-from that app's objects to BO entities, an incremental pull that survives interruption, and the
+from that app's objects to Wesify entities, an incremental pull that survives interruption, and the
 outbox drain that applies the write rules above. That is a meaningful piece of work per app, which is
 why the decision layer was worth proving first.

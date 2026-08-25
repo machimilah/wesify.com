@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises'
 
 /**
- * Regenerates BO's industry taxonomy module from the vendored NAICS source.
+ * Regenerates Wesify's industry taxonomy module from the vendored NAICS source.
  *
  * NAICS is published by the US Census Bureau and is a work of the US federal government — public
- * domain, redistributable. It is the only part of BO's knowledge base that is imported rather than
+ * domain, redistributable. It is the only part of Wesify's knowledge base that is imported rather than
  * authored, and it is imported because enumerating every kind of business is exactly the problem it
  * already solves: 20 sectors, 96 subsectors, 1,012 national industries.
  *

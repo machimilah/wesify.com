@@ -48,8 +48,8 @@ const compiled = {
   archetype: { id: 'field-service', label: 'Field service', confidence: 0.88 },
   summary: 'Dispatch-led plumbing operation that invoices on completion.',
   findings: [
-    { conclusion: 'Technicians are dispatched to customer sites', because: 'Trade guidance on dispatch operations', implication: 'BO is connecting work orders, technicians, and assets.', basis: 'researched', confidence: 0.85, sourceUrl: 'https://example.org/dispatch', capabilityIds: ['service.field-work', 'work.scheduling'] },
-    { conclusion: 'Parts are bought per job', because: 'You said parts are ordered when a job is booked', implication: 'BO is connecting suppliers and purchase orders to the work.', basis: 'stated', confidence: 0.95, sourceUrl: '', capabilityIds: ['procurement.purchasing', 'not.a.real.capability'] },
+    { conclusion: 'Technicians are dispatched to customer sites', because: 'Trade guidance on dispatch operations', implication: 'Wesify is connecting work orders, technicians, and assets.', basis: 'researched', confidence: 0.85, sourceUrl: 'https://example.org/dispatch', capabilityIds: ['service.field-work', 'work.scheduling'] },
+    { conclusion: 'Parts are bought per job', because: 'You said parts are ordered when a job is booked', implication: 'Wesify is connecting suppliers and purchase orders to the work.', basis: 'stated', confidence: 0.95, sourceUrl: '', capabilityIds: ['procurement.purchasing', 'not.a.real.capability'] },
   ],
   capabilityIds: ['service.field-work', 'work.scheduling', 'procurement.purchasing', 'bogus.capability'],
   excludedCapabilityIds: ['manufacturing.production'],
@@ -116,7 +116,7 @@ try {
   assert.equal(calls[0].body.tools.map(tool => tool.type).join(','), 'web_search_20260209,web_fetch_20260209')
   /**
    * Without `allowed_callers`, these tool versions default to permitting a code-execution caller, and
-   * the API rejects the whole request on any model that cannot do programmatic tool calling — BO's
+   * the API rejects the whole request on any model that cannot do programmatic tool calling — Wesify's
    * default model among them. Every research call 400ed, and the screen blamed the network.
    */
   for (const tool of calls[0].body.tools) {

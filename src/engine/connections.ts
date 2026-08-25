@@ -1,7 +1,7 @@
 import { detectProviders, providerById, type ProviderDefinition } from '../data/providers'
 
 /**
- * Connected capabilities: pages BO shows but another app owns.
+ * Connected capabilities: pages Wesify shows but another app owns.
  *
  * Writing into someone else's system is the part that goes wrong, so the rules live here from the
  * start rather than being bolted on once a real connector exists:
@@ -9,7 +9,7 @@ import { detectProviders, providerById, type ProviderDefinition } from '../data/
  * 1. **Every write is idempotent.** A queued write carries a key derived from what it changes. A
  *    retry after a timeout re-sends the same key, so a payment or invoice is never created twice —
  *    the failure mode that actually costs a business money.
- * 2. **Both sides changing is a conflict, not a merge.** BO never silently picks a winner. It marks
+ * 2. **Both sides changing is a conflict, not a merge.** Wesify never silently picks a winner. It marks
  *    the record and asks, because guessing wrong here quietly corrupts the other system.
  * 3. **Nothing claims to be synced when it is not.** `local-only` and `pending` are visible states,
  *    so a page never implies the other app agrees with it.
@@ -25,7 +25,7 @@ export interface WorkspaceConnection {
   providerLabel: string
   mode: ConnectionMode
   status: ConnectionStatus
-  /** What the company said that made BO believe it already uses this app. */
+  /** What the company said that made Wesify believe it already uses this app. */
   evidence: string
 }
 
@@ -52,7 +52,7 @@ export interface OutboxEntry {
   queuedAt: string
 }
 
-/** After this many failures BO stops retrying and shows the record as in error. */
+/** After this many failures Wesify stops retrying and shows the record as in error. */
 export const MAX_WRITE_ATTEMPTS = 5
 
 const after = (later?: string, earlier?: string) => Boolean(later && (!earlier || Date.parse(later) > Date.parse(earlier)))
@@ -146,7 +146,7 @@ export const stuckWrites = (outbox: OutboxEntry[]) => outbox.filter(item => item
 /**
  * Decides which capabilities another app should back.
  *
- * A capability is only handed over when the company said it already uses an app that covers it — BO
+ * A capability is only handed over when the company said it already uses an app that covers it — Wesify
  * never assumes. Everything else stays built, so a company with no tools still gets a whole system.
  */
 export function planConnections(capabilityIds: string[], toolsText: string): WorkspaceConnection[] {

@@ -1,6 +1,6 @@
-# BO master build architecture
+# Wesify master build architecture
 
-The attached master prompt is the product specification. The product name remains **BO**.
+The attached master prompt is the product specification. The product name remains **Wesify**.
 
 ## Two-layer system
 
@@ -62,4 +62,4 @@ Record creation and navigation can execute immediately. Destructive or structura
 - Add file storage, notification delivery, integrations, payments, e-signature, and client portal services.
 - Add forecasting and deeper cross-entity advisor analysis once sufficient real data exists.
 
-BO must never display fabricated records, performance, cash values, alerts, or integration state to make a demo appear populated.
+Wesify must never display fabricated records, performance, cash values, alerts, or integration state to make a demo appear populated.

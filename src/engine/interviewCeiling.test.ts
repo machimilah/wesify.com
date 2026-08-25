@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-// These suites run in Node. BO reaches for the mock through `window`, so there has to be one.
+// These suites run in Node. Wesify reaches for the mock through `window`, so there has to be one.
 if (typeof window === 'undefined') (globalThis as unknown as { window: unknown }).window = globalThis
 import { applyAgentResponse, createDiscoverySession, emptyArchitecture, type DiscoveryAgentResponse, type DiscoverySession } from './businessDiscovery'
 import { MAX_INTERVIEW_QUESTIONS, businessDiscoveryModel, type DiscoveryModelRequest } from './discoveryModel'
@@ -8,10 +8,10 @@ import { MAX_INTERVIEW_QUESTIONS, businessDiscoveryModel, type DiscoveryModelReq
 /**
  * The interview reaches a workspace.
  *
- * This is the failure as an operator met it: BO asked questions and went on asking them, and the
+ * This is the failure as an operator met it: Wesify asked questions and went on asking them, and the
  * only way out was to type "just build it" or close the tab. It needs two things to happen at once,
  * and both were true. A model reading a transcript has no sense of how long it has been going, so it
- * weighs one more question against nothing; and BO pushed back every time the model did try to
+ * weighs one more question against nothing; and Wesify pushed back every time the model did try to
  * finish, because a keyword-scored readiness heuristic said the operating model was not settled yet.
  * Neither side counted, so nothing ended the loop.
  *
@@ -22,7 +22,7 @@ import { MAX_INTERVIEW_QUESTIONS, businessDiscoveryModel, type DiscoveryModelReq
 /**
  * A model that never runs out of new things to ask.
  *
- * The words are nonsense on purpose. BO refuses a question that overlaps one it already asked, and
+ * The words are nonsense on purpose. Wesify refuses a question that overlaps one it already asked, and
  * a mock working from a fixed list of topics eventually trips that instead — which would fail this
  * test for the wrong reason and hide whether the interview actually ends.
  */
@@ -66,7 +66,7 @@ describe('the interview ends', () => {
 
     delete (window as unknown as { __BO_DISCOVERY_MODEL_MOCK__?: unknown }).__BO_DISCOVERY_MODEL_MOCK__
 
-    expect(session.phase, `BO was still asking after ${turns} turns and ${session.metrics.questionsAsked} questions`).not.toBe('DISCOVERING')
+    expect(session.phase, `Wesify was still asking after ${turns} turns and ${session.metrics.questionsAsked} questions`).not.toBe('DISCOVERING')
     expect(session.metrics.questionsAsked).toBeLessThanOrEqual(MAX_INTERVIEW_QUESTIONS)
     // An interview that ends by asking nothing is the opposite failure and just as bad a product.
     expect(session.metrics.questionsAsked).toBeGreaterThan(5)

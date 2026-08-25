@@ -6,8 +6,8 @@ import { automationPatterns, knowledgeRequirementSpecs, kpiPatterns, masterDataT
 /**
  * What other companies in the same industry actually kept.
  *
- * BO's ontology is a set of rules someone wrote. This is evidence: research about the industry, and
- * the corrections real companies made to the workspace BO gave them. Where the evidence is strong
+ * Wesify's ontology is a set of rules someone wrote. This is evidence: research about the industry, and
+ * the corrections real companies made to the workspace Wesify gave them. Where the evidence is strong
  * enough it decides, and the rules step aside.
  *
  * Only aggregate counts cross the wire. There is no company name, no record, nothing that says who
@@ -64,9 +64,9 @@ export async function recordIndustryObservations(subsector: string | undefined, 
 }
 
 /**
- * Folds the industry's evidence into the architecture BO is about to compile.
+ * Folds the industry's evidence into the architecture Wesify is about to compile.
  *
- * Applied before per-company research, so anything BO learned about *this* company still wins over
+ * Applied before per-company research, so anything Wesify learned about *this* company still wins over
  * what is merely typical of its industry.
  */
 export function applyIndustryVerdict(architecture: ArchitectureContext, verdict: IndustryVerdict | null): ArchitectureContext {

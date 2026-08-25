@@ -12,7 +12,7 @@ import type { AIBlueprint, ModuleId } from './blueprint'
 const blueprint: AIBlueprint = { modules: ['processes'], startView: 'processes', moduleConfig: { pipelineStages: [], processSteps: [], billingCadence: '', inventoryStages: [], supportStages: [] } }
 
 describe('provider registry', () => {
-  it('only promises capabilities BO can actually build', () => {
+  it('only promises capabilities Wesify can actually build', () => {
     for (const provider of providers) {
       expect(provider.provides.length, `${provider.id} backs nothing`).toBeGreaterThan(0)
       for (const capabilityId of provider.provides) {

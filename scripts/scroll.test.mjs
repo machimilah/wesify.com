@@ -13,7 +13,7 @@ import './noSpend.mjs'
  * half of the conversation sat a thousand pixels above the viewport, unreachable by mouse, keyboard
  * or scrollbar. Nothing threw, nothing looked broken, and the answers were simply gone.
  *
- * No model runs here: the session is seeded into localStorage, which is where BO keeps it anyway.
+ * No model runs here: the session is seeded into localStorage, which is where Wesify keeps it anyway.
  */
 
 const apiPort = 8955
@@ -93,7 +93,7 @@ try {
   await open(page, 'scroll-long-workspace-01', 14)
   const long = await measure(page)
   if (!long.canScroll) throw new Error('A fourteen-question interview does not scroll at all.')
-  if (!long.startedAtBottom) throw new Error('The thread did not open on the question BO is waiting on.')
+  if (!long.startedAtBottom) throw new Error('The thread did not open on the question Wesify is waiting on.')
   if (!long.firstTurnReachable) throw new Error(`The first answer is ${-long.firstTurnBelowViewportTop}px above the thread and cannot be scrolled to.`)
   if (long.documentScrolls) throw new Error('The page itself scrolls, so the composer leaves the screen.')
 
@@ -101,7 +101,7 @@ try {
   await page.evaluate(() => { document.querySelector('[data-testid="build-thread"]').scrollTop = 0 })
   await page.waitForTimeout(500)
   const held = await page.evaluate(() => document.querySelector('[data-testid="build-thread"]').scrollTop)
-  assert.ok(held < 200, `BO pulled the view back down to ${held}px while the operator was reading earlier answers.`)
+  assert.ok(held < 200, `Wesify pulled the view back down to ${held}px while the operator was reading earlier answers.`)
 
   // A short interview still sits at the bottom of the screen rather than floating at the top.
   await open(page, 'scroll-short-workspace-1', 1)

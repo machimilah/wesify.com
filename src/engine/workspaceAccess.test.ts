@@ -5,7 +5,7 @@ import { workspaceAccessHeaders, workspaceAccessToken } from './workspaceAccess'
 /**
  * The token that identifies a browser to a workspace when there is no account.
  *
- * It is what BO used before accounts existed and what it still uses with no database configured, so
+ * It is what Wesify used before accounts existed and what it still uses with no database configured, so
  * two properties matter: it is stable for a workspace across reloads, and it is different for every
  * workspace. A token that regenerated would lock somebody out of their own prototype workspace; a
  * token shared between workspaces would be one workspace's key opening another.

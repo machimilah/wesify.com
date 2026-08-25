@@ -7,15 +7,15 @@ import { useDatabase, migrate, query } from '../server/db.mjs'
 import './noSpend.mjs'
 
 /**
- * BO's industry knowledge, off the disk that redeploys wipe.
+ * Wesify's industry knowledge, off the disk that redeploys wipe.
  *
- * This is the one asset BO has that a competitor cannot obtain by reading the product: what real
+ * This is the one asset Wesify has that a competitor cannot obtain by reading the product: what real
  * companies in an industry kept, removed and added once they had a workspace in front of them.
  * Everything else here could be rebuilt by somebody with the same idea and enough time.
  *
  * It was sitting in JSON files under generated-projects/, on the same local disk Render, Railway,
  * Fly and Vercel wipe on every deploy — records were moved off it for exactly that reason and this
- * was left behind. So the most valuable thing BO holds was also the only thing with no copy: one
+ * was left behind. So the most valuable thing Wesify holds was also the only thing with no copy: one
  * deploy and it would have forgotten everything, silently, with nothing to restore from.
  *
  * What is proved here is that it is now a table, that nothing is written to disk once a database is
@@ -51,7 +51,7 @@ try {
   assert.equal(rows[0].label, 'Professional services')
 
   // 2. Nothing about it is on local disk. This is the property that actually matters: with a
-  //    database configured, nothing BO has learned depends on this container's filesystem existing.
+  //    database configured, nothing Wesify has learned depends on this container's filesystem existing.
   const onDisk = []
   async function walk(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -97,7 +97,7 @@ try {
   await assert.rejects(() => recordObservations('abc', { removed: ['work.time'] }), /three digits/)
   assert.equal((await query('select * from industry_knowledge')).rows.length, 1)
 
-  console.log('Industry store test passed: what BO learns is a Postgres row rather than a file on the disk a redeploy wipes, nothing about it is written to disk once a database is configured, research and observations share the row without overwriting each other, the verdict computed from it is unchanged, a fresh process sees everything, it stays anonymous, and a malformed subsector never reaches the database.')
+  console.log('Industry store test passed: what Wesify learns is a Postgres row rather than a file on the disk a redeploy wipes, nothing about it is written to disk once a database is configured, research and observations share the row without overwriting each other, the verdict computed from it is unchanged, a fresh process sees everything, it stays anonymous, and a malformed subsector never reaches the database.')
 } finally {
   await rm(generatedRoot, { recursive: true, force: true })
 }

@@ -9,7 +9,7 @@ import type { WorkspaceConfiguration } from '../engine/workspaceSchema'
 /**
  * What a page looks like, before its label is read.
  *
- * Shared because the same workspace is drawn twice: once as the live preview while BO is still
+ * Shared because the same workspace is drawn twice: once as the live preview while Wesify is still
  * building, and once as the finished Command Center. Two copies of this map would drift, and the
  * drift would be visible — the same page wearing two different icons on two screens.
  */

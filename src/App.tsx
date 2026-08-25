@@ -97,15 +97,15 @@ export default function App() {
   /**
    * Describing a company is public; the workspace it produces is not.
    *
-   * There is one home page, and it is the prompt. A separate landing page arguing for BO could only
-   * describe what BO does, while this does it — and nobody signs up for something they have not seen
+   * There is one home page, and it is the prompt. A separate landing page arguing for Wesify could only
+   * describe what Wesify does, while this does it — and nobody signs up for something they have not seen
    * work. So `/` is always reachable, and the gate sits in front of the product instead.
    *
    * The sentence survives the sign-in screen rather than being asked for twice: somebody who has
-   * just described their business has done the only work BO needs from them, and making them repeat
+   * just described their business has done the only work Wesify needs from them, and making them repeat
    * it to prove they have an account is a way to lose them between the two screens.
    *
-   * `accounts === undefined` means BO has not asked the server whether it has accounts yet. Waiting
+   * `accounts === undefined` means Wesify has not asked the server whether it has accounts yet. Waiting
    * is deliberate — rendering either half of that answer would show the wrong page and swap it.
    */
   const startBuild = (brief: string) => {
@@ -140,7 +140,7 @@ export default function App() {
     onSignIn={() => navigate('/signin')}
   />
 
-  // `/start` was BO's second home page until there was only one. It is gone rather than duplicated,
+  // `/start` was Wesify's second home page until there was only one. It is gone rather than duplicated,
   // and anybody holding an old link or an open tab lands on the page it became.
   if (path === '/start') {
     window.history.replaceState({}, '', '/')

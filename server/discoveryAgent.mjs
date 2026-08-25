@@ -4,7 +4,7 @@ import { GEMINI_MODEL, geminiAvailable, runGeminiJson } from './gemini.mjs'
 /**
  * Which model runs the interview.
  *
- * Anthropic first when both are configured — it is the one BO's research pass also uses, so a
+ * Anthropic first when both are configured — it is the one Wesify's research pass also uses, so a
  * deployment that pays for a key gets one model's judgement rather than two. Gemini is what makes the
  * intelligent interview the default rather than a paid upgrade: its free tier costs nothing and needs
  * no card, so the fixed question bank stops being what most people see.
@@ -15,9 +15,9 @@ import { GEMINI_MODEL, geminiAvailable, runGeminiJson } from './gemini.mjs'
  * A key that cannot be used, remembered so the next question does not wait on it too.
  *
  * "Your credit balance is too low to access the Anthropic API" arrives as a 400, and it is not a
- * request BO can repair by asking differently: the account is out of credit until somebody pays. A
+ * request Wesify can repair by asking differently: the account is out of credit until somebody pays. A
  * revoked or mistyped key is the same shape. Parked for half an hour rather than for the life of the
- * process, because topping up an account is exactly the sort of thing that happens while BO is
+ * process, because topping up an account is exactly the sort of thing that happens while Wesify is
  * running, and a deployment that had to be restarted to notice would be its own small trap.
  */
 const parkedProviders = new Map()
@@ -25,7 +25,7 @@ const providerUsable = name => (parkedProviders.get(name) ?? 0) < Date.now()
 
 export function parkProvider(name, reason, milliseconds = 30 * 60 * 1000) {
   parkedProviders.set(name, Date.now() + milliseconds)
-  console.warn(`BO parked the ${name} interview provider for ${Math.round(milliseconds / 60000)} minutes: ${reason}`)
+  console.warn(`Wesify parked the ${name} interview provider for ${Math.round(milliseconds / 60000)} minutes: ${reason}`)
 }
 
 /**
@@ -46,7 +46,7 @@ export function unusableKey(error) {
 /**
  * Every provider this deployment could use, best first.
  *
- * Anthropic leads when both are configured — it is the one BO's research pass also uses, so a
+ * Anthropic leads when both are configured — it is the one Wesify's research pass also uses, so a
  * deployment paying for a key gets one model's judgement rather than two. Gemini is what makes the
  * intelligent interview the default rather than a paid upgrade: its free tier costs nothing and
  * needs no card.
@@ -54,7 +54,7 @@ export function unusableKey(error) {
  * A list rather than a single answer, because holding two keys and stopping at the first is the
  * whole problem this exists to prevent: an operator with a working free Gemini key and an Anthropic
  * account out of credit was told the interview could not continue, while the key that would have
- * answered sat unused. BO already moves between Gemini models when one runs dry; this is the same
+ * answered sat unused. Wesify already moves between Gemini models when one runs dry; this is the same
  * idea one level up.
  *
  * `BO_INTERVIEW_PROVIDER` still forces one, for a deployment that holds both and has a preference.
@@ -70,7 +70,7 @@ export function interviewProviders({ includeParked = false } = {}) {
     : configured
   if (includeParked) return preferred
   const live = preferred.filter(providerUsable)
-  // Everything parked means trying the whole list again rather than refusing on a note BO wrote to
+  // Everything parked means trying the whole list again rather than refusing on a note Wesify wrote to
   // itself half an hour ago: a slow interview beats an interview that will not run.
   return live.length ? live : preferred
 }
@@ -87,7 +87,7 @@ export function interviewModel() {
 /**
  * The interview itself, run on the server.
  *
- * BO's in-browser model made the product private and free, and made the first minute terrible: a
+ * Wesify's in-browser model made the product private and free, and made the first minute terrible: a
  * one-gigabyte download, WebGPU required, and a 0.5B model that can only be trusted with tightly
  * railed questions. What came out was a questionnaire — "What does your company sell or deliver?" —
  * asked of someone who had just written "we run a plumbing company".
@@ -107,7 +107,7 @@ export function interviewModel() {
  */
 export const MAX_INTERVIEW_QUESTIONS = Number(process.env.BO_MAX_INTERVIEW_QUESTIONS || 14)
 
-const consultantSystem = `You are BO's business consultant. You interview one operator about their company so BO can build them a custom Business Command Center — the software they will run their business in.
+const consultantSystem = `You are Wesify's business consultant. You interview one operator about their company so Wesify can build them a custom Business Command Center — the software they will run their business in.
 
 Behave like an experienced consultant who already knows this industry, not like a form.
 
@@ -128,19 +128,19 @@ Write the way a person talks. This is the rule that matters most, because an ope
 Ask plenty, but the interview ends. Ten to fourteen questions is a good interview and ${MAX_INTERVIEW_QUESTIONS} is the ceiling. A short interview is a cheap-feeling product and a workspace full of guesses, and an operator who answers twelve easy questions understands their new software better than one who answered four hard ones — but an interview with no end is not thoroughness, it is a product that never delivers anything. Cover the ground you actually need: what they sell, who does the work, who they sell to, how a job or order runs from start to finish, how money comes in and when, what they buy or keep in stock, what they schedule, who works there and who is allowed to do what, what they track today and in what, and what goes wrong most often.
 - Stop when more questions would stop changing what gets built, then decide READY_TO_ARCHITECT. You are told below how many you have asked. Every remaining question has to earn its place against finishing now.
 - If they ask you to just build it, or say they do not know, stop asking immediately and build with stated assumptions.
-- Leave suggestedAnswers empty. The operator answers in their own words; offering choices teaches them BO wants a pick rather than a sentence, and their sentence is worth more.
+- Leave suggestedAnswers empty. The operator answers in their own words; offering choices teaches them Wesify wants a pick rather than a sentence, and their sentence is worth more.
 
 Record what you learn in businessState: what the operator said is explicit, what you reasonably concluded is inferred, what is still open is unknown. Include concise evidence and a basis of user or inference for each fact when possible. Never invent facts about this company — no customer names, no numbers, no volumes.
 
 While the decision is ASK_QUESTION, return an empty architectureContext with every required field present. Return only schema-valid JSON. Never expose private reasoning.`
 
-const architectSystem = `You are BO's Business Application Architect. The interview is finished. Turn what is known about this company into the smallest Command Center that actually runs it.
+const architectSystem = `You are Wesify's Business Application Architect. The interview is finished. Turn what is known about this company into the smallest Command Center that actually runs it.
 
 Select the capabilityIds this company needs now from the supplied catalog, and put deliberately rejected ones in excludedCapabilityIds. Respect dependencies. Never add an adjacent capability without evidence from what the operator said: an unused page is worse than a missing one, because it is the exact failure that makes every other business suite feel wrong.
 
 Give every entity its fields, in the company's own words. This is the part that makes the workspace theirs rather than a generic one with their name on it: a plumber's work order has a service address and a technician, a law firm's matter has a court date and a responsible partner, and nothing about the word "job" or "case" should decide that. Choose what the operator actually needs to see and type on that record — usually five to ten fields, the ones they would put on paper. Use relatedTo to point at another entity in this same list where a record genuinely belongs to another. Do not add fields nobody mentioned and nobody would fill in: an empty column is the thing that makes software feel like somebody else's.
 
-Name pages and entities in the company's own language — not BO's, and not another vendor's. Include the modules, workflows, metrics, process stages, sales stages where relevant, and billing cadence that follow from this company. Return READY_TO_ARCHITECT, an empty nextQuestion, and only schema-valid JSON.`
+Name pages and entities in the company's own language — not Wesify's, and not another vendor's. Include the modules, workflows, metrics, process stages, sales stages where relevant, and billing cadence that follow from this company. Return READY_TO_ARCHITECT, an empty nextQuestion, and only schema-valid JSON.`
 
 /**
  * A list, without a length cap on the wire.
@@ -153,7 +153,7 @@ Name pages and entities in the company's own language — not BO's, and not anot
  */
 const stringList = (_maxItems = 12, maxLength = 160) => ({ type: 'array', items: { type: 'string', maxLength } })
 
-/** Business-state fields the interview no longer asks for, because nothing in BO reads them. */
+/** Business-state fields the interview no longer asks for, because nothing in Wesify reads them. */
 const UNREAD_STATE_FIELDS = ['painPoints', 'uncertainties', 'assumptions']
 
 /**
@@ -187,13 +187,13 @@ export function discoverySchema(capabilityIds, modules, { architecting = true } 
           /**
            * An entity now arrives with its own fields.
            *
-           * Until this, the architect supplied a noun and BO decided what was inside it by matching
+           * Until this, the architect supplied a noun and Wesify decided what was inside it by matching
            * the noun against a list of patterns — an entity called anything with "invoice" in it got
            * a number field, anything with "job" got a customer relation. That is why two companies in
            * the same trade got identical record shapes however differently they answered: the model
            * was choosing labels while hand-written rules chose the substance.
            *
-           * Fields are optional. When the model omits them BO falls back to the same inference it
+           * Fields are optional. When the model omits them Wesify falls back to the same inference it
            * always used, which is what keeps the no-API-key path working.
            */
           entities: {
@@ -277,13 +277,13 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   if (!capabilityIds.length || !modules.length) throw Object.assign(new Error('The capability catalog is required.'), { status: 400 })
   const architecting = mode !== 'DISCOVER'
 
-  const known = businessState ? `What BO has recorded about this company so far:\n${JSON.stringify(businessState)}` : 'BO has recorded nothing about this company yet.'
+  const known = businessState ? `What Wesify has recorded about this company so far:\n${JSON.stringify(businessState)}` : 'Wesify has recorded nothing about this company yet.'
   const said = conversationText(conversation) || '(nothing yet)'
   /**
    * The questions already asked, listed on their own rather than left inside the transcript.
    *
    * A model reading a transcript treats its own earlier turns as scenery; it will ask what it asked
-   * four turns ago in slightly different words, and to the operator that reads as BO not having
+   * four turns ago in slightly different words, and to the operator that reads as Wesify not having
    * listened — the worst thing an interview can do. Pulled out and named, it is an instruction
    * rather than something to notice.
    */
@@ -335,7 +335,7 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   const schema = discoverySchema(capabilityIds, modules, { architecting })
   const system = architecting ? architectSystem : consultantSystem
   const providers = interviewProviders()
-  if (!providers.length) throw Object.assign(new Error('BO has no interview model configured. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.'), { status: 503 })
+  if (!providers.length) throw Object.assign(new Error('Wesify has no interview model configured. Set GEMINI_API_KEY (free) or ANTHROPIC_API_KEY.'), { status: 503 })
 
   const askProvider = async provider => {
     if (provider === 'gemini') {
@@ -349,12 +349,12 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
         maxTokens: architecting ? 8000 : 3000,
         thinkingBudget: architecting ? 2048 : 0,
         temperature: architecting ? 0.2 : 0.6,
-        // A question is something a person is sitting and waiting for, so BO gives up on a slow model
-        // quickly and asks a faster one. The architecture pass is the one long wait BO is allowed, and
+        // A question is something a person is sitting and waiting for, so Wesify gives up on a slow model
+        // quickly and asks a faster one. The architecture pass is the one long wait Wesify is allowed, and
         // it produces far more text, so it gets real patience instead.
         timeoutMs: architecting ? 40000 : 9000,
         // And a budget for the cascade behind it. Without one, a bad minute on the free tier costs
-        // five models times the deadline before BO admits it — forty-five seconds of spinner for a
+        // five models times the deadline before Wesify admits it — forty-five seconds of spinner for a
         // question, and nearly four minutes for an architecture. Better a clear failure with the
         // answers saved than a wait nobody would choose to sit through.
         budgetMs: architecting ? 75000 : 25000,
@@ -370,7 +370,7 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
       },
       [{ role: 'user', content: instruction }],
     )
-    const declined = refusal(message, 'BO continued the interview with its built-in questions.')
+    const declined = refusal(message, 'Wesify continued the interview with its built-in questions.')
     if (declined) throw declined
     return { raw: textOf(message), usedModel: message.model ?? MODEL }
   }
@@ -400,7 +400,7 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
 
   let parsed
   try { parsed = JSON.parse(raw) }
-  catch { throw Object.assign(new Error('The consultant returned output BO could not read.'), { status: 502 }) }
+  catch { throw Object.assign(new Error('The consultant returned output Wesify could not read.'), { status: 502 }) }
 
   /**
    * Capability ids are checked here rather than constrained on the wire.
@@ -414,7 +414,7 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
    * and throwing the whole thing away over it would drop the operator back to the built-in questions
    * for no gain.
    */
-  // The half this turn was not asked for, filled from what BO already holds. The architect echoing
+  // The half this turn was not asked for, filled from what Wesify already holds. The architect echoing
   // back a business state it never changed was pure output tokens; the interview describing an
   // architecture it was told to leave empty was the same waste in the other direction.
   if (architecting) {

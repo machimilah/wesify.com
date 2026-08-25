@@ -14,7 +14,7 @@ import { dispatchMutationEvents, mutationEventDefinitions, triggerEventNotificat
 /**
  * The workspace itself: building it, changing it, and everything inside it.
  *
- * This is the largest surface in BO because it is the product. What is deliberately *not* here is
+ * This is the largest surface in Wesify because it is the product. What is deliberately *not* here is
  * storage — records.mjs decides where a record lives — and access, which access.mjs decides. This
  * file is only the rules about what a request is allowed to mean.
  */
@@ -57,7 +57,7 @@ function triggerWorkflows(manifest, data, entityId, event, record) {
  *
  * Run once, on the first build, from the interview the server already has — not asked of the
  * browser, which may be closed by the time this finishes, and not left to the operator, who has just
- * spent twelve questions telling BO these exact facts.
+ * spent twelve questions telling Wesify these exact facts.
  *
  * Every failure here is swallowed on purpose. An empty table is a workspace with a head start
  * missing; a failed build is no workspace at all, and the second must never be caused by the first.
@@ -86,7 +86,7 @@ async function openWorkspaceWithWhatTheySaid(workspaceId, project, request) {
     await writeWorkspaceData(workspaceId, { ...existing, ...records, _notifications: notifications })
     await audit(workspaceId, 'workspace.opening_records', request, { records: total, entities: Object.keys(records) })
   } catch (error) {
-    console.warn(`BO could not open ${workspaceId} with what the operator said: ${error?.message ?? error}`)
+    console.warn(`Wesify could not open ${workspaceId} with what the operator said: ${error?.message ?? error}`)
   }
 }
 
@@ -115,7 +115,7 @@ export async function projectRoutes(request, response, segments, url) {
   if (segments[1] !== 'projects' || !segments[2]) return false
 
   const workspaceId = segments[2]
-  // Kept, not discarded: the plan limits below are about the account, and this is where BO learns
+  // Kept, not discarded: the plan limits below are about the account, and this is where Wesify learns
   // which account is asking.
   const caller = await tenant(request, workspaceId)
 
@@ -132,7 +132,7 @@ export async function projectRoutes(request, response, segments, url) {
     if (!current) return send(response, 404, { error: 'Project not built.' })
     authorize(current, request, 'admin')
     // The metered action. Building the first Command Center is free for everyone — it is the only
-    // way anybody finds out what BO does — and changing it afterwards is what the plans sell.
+    // way anybody finds out what Wesify does — and changing it afterwards is what the plans sell.
     if (databaseAvailable() && caller?.user) await requireRebuildRoom(caller.user.id)
     const project = await buildProject({ workspaceId, specification: input.specification, changeDescription: input.changeDescription ?? 'Updated Command Center', changeType: input.changeType ?? 'workspace-change', promote: false })
     if (databaseAvailable() && caller?.user) await recordRebuild(caller.user.id, workspaceId)
@@ -161,7 +161,7 @@ export async function projectRoutes(request, response, segments, url) {
   /**
    * Everything the workspace holds, in one file.
    *
-   * Deliberately on every plan, including a lapsed one. BO tells people their records stay theirs;
+   * Deliberately on every plan, including a lapsed one. Wesify tells people their records stay theirs;
    * a product that says that and offers no way to carry them out is asking to be believed on trust
    * it has not earned. It needs `view` and nothing more — exporting is reading.
    */
@@ -238,7 +238,7 @@ export async function projectRoutes(request, response, segments, url) {
     if (request.method === 'POST' && segments[5] === 'test') {
       authorize(manifest, request, 'admin')
       const input = await body(request)
-      const record = { id: 'test-record', test: true, message: 'BO automation test' }
+      const record = { id: 'test-record', test: true, message: 'Wesify automation test' }
       const run = await executeManagedAutomation(workspaceId, automation, 'test', automation.trigger.entityId, record, input.dryRun !== false)
       await audit(workspaceId, 'automation.tested', request, { automationId: automation.id, status: run.status })
       return send(response, 200, run)
@@ -285,7 +285,7 @@ export async function projectRoutes(request, response, segments, url) {
     if (request.method === 'POST' && segments.length === 5) {
       authorize(manifest, request, 'create')
       // Counted across the whole workspace, not per entity: what a plan sells is room for a business,
-      // and a business does not care which table its thousandth row landed in. Notifications are BO's
+      // and a business does not care which table its thousandth row landed in. Notifications are Wesify's
       // own bookkeeping and are not charged for.
       if (databaseAvailable() && caller?.user) {
         const held = Object.entries(data).filter(([id]) => id !== '_notifications').reduce((total, [, rows]) => total + (Array.isArray(rows) ? rows.length : 0), 0)

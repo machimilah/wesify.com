@@ -1,7 +1,7 @@
 /**
- * BO's light and dark themes, as one set of tokens.
+ * Wesify's light and dark themes, as one set of tokens.
  *
- * These are not invented colors. BO already had two complete, hand-tuned palettes living in
+ * These are not invented colors. Wesify already had two complete, hand-tuned palettes living in
  * different screens — a light one (Dashboard, Home) and a dark one (Builder's chat panel, the
  * sidebar, dark preview surfaces) — nobody had ever unified them into something a person could
  * switch between. This file names both palettes as one token set and lets every screen draw from
@@ -38,7 +38,7 @@
    * Brand accent — graphite, not a hue.
    *
    * This was a green, and green was therefore everywhere: every selected chip, every progress bar,
-   * every number BO wanted to draw the eye to. An accent that is a neutral several steps darker than
+   * every number Wesify wanted to draw the eye to. An accent that is a neutral several steps darker than
    * the text does the same job — it separates "this one" from "the rest" by weight rather than by
    * colour — and it leaves the only coloured things on screen the ones that are coloured on purpose.
    */
@@ -58,7 +58,7 @@
      depending on the room lighting. */
   --solid-fill: #202420;
   /* The one place a hue is doing work no neutral can: "running" against "needs you". Kept as an
-     amber rather than the usual green, because nothing else in BO is a hue any more and a lone
+     amber rather than the usual green, because nothing else in Wesify is a hue any more and a lone
      green dot would read as the brand rather than as a state. */
   --online: #c99a3f;
   --notify: #b4472f;
@@ -92,7 +92,7 @@
 /**
  * Where the keyboard is.
  *
- * Several inputs across BO set `outline: 0` to get the border they wanted, and nothing put a focus
+ * Several inputs across Wesify set `outline: 0` to get the border they wanted, and nothing put a focus
  * style back. For anyone navigating by keyboard — by preference, by injury, or because their mouse
  * just died — that meant moving through the product completely blind, with no way to tell which
  * field would receive the next keystroke.

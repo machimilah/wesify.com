@@ -1,12 +1,12 @@
 /**
- * Sending mail, of which BO sends exactly one kind.
+ * Sending mail, of which Wesify sends exactly one kind.
  *
  * Written against Resend's HTTP API rather than SMTP, because SMTP would mean a dependency and a
  * connection pool for a product that sends one transactional message. Any provider with an HTTP API
  * fits behind the same two functions; only `deliver` would change.
  *
  * With no provider configured, the link is written to the server log instead. That keeps local
- * development working with no account anywhere — the same bargain the rest of BO makes with
+ * development working with no account anywhere — the same bargain the rest of Wesify makes with
  * `DATABASE_URL` — and it is why `mailAvailable()` exists: a deployment that can reset passwords but
  * cannot mail anybody is a thing the operator should be told about at start, not discover from a
  * confused customer.
@@ -38,9 +38,9 @@ async function deliver({ to, subject, text }) {
  * password" into "give me anyone's account".
  */
 export async function sendPasswordReset(to, link) {
-  const subject = 'Reset your BO password'
+  const subject = 'Reset your Wesify password'
   const text = [
-    'Someone asked to reset the password for this BO account.',
+    'Someone asked to reset the password for this Wesify account.',
     '',
     link,
     '',
@@ -49,7 +49,7 @@ export async function sendPasswordReset(to, link) {
   ].join('\n')
 
   if (!mailAvailable()) {
-    console.log(`BO has no mail provider configured (set RESEND_API_KEY and BO_MAIL_FROM), so the reset link for ${to} was not sent. It is: ${link}`)
+    console.log(`Wesify has no mail provider configured (set RESEND_API_KEY and BO_MAIL_FROM), so the reset link for ${to} was not sent. It is: ${link}`)
     return { delivered: false }
   }
   await deliver({ to, subject, text })

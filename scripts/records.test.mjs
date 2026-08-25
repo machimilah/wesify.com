@@ -140,7 +140,7 @@ try {
 
   // 8. Everything the workspace holds comes back out in one file.
   //
-  //    BO's billing screen tells people their records stay "readable and exportable" if a plan
+  //    Wesify's billing screen tells people their records stay "readable and exportable" if a plan
   //    lapses. That sentence is only true if this endpoint exists and returns everything, so this
   //    checks the promise rather than the handler: the records, and the field definitions without
   //    which a pile of rows is not the same thing as having your data.

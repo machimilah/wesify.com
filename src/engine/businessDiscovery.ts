@@ -45,7 +45,7 @@ export interface DiscoveryQuestion {
  * A field the architect asked for on one entity.
  *
  * `relatedTo` is another entity's name rather than an id, because the architect is working in the
- * company's language and has not been told what BO will slug things to. It is resolved — and
+ * company's language and has not been told what Wesify will slug things to. It is resolved — and
  * discarded if it points at nothing — where the workspace is compiled.
  */
 export const architectureFieldTypes = ['text', 'long-text', 'number', 'currency', 'date', 'boolean', 'email', 'phone', 'select', 'relation', 'file'] as const
@@ -63,7 +63,7 @@ export interface ArchitectureEntity {
   name: string
   module: ModuleId
   purpose: string
-  /** Absent when the model did not offer any, which is the in-browser path. BO infers them then. */
+  /** Absent when the model did not offer any, which is the in-browser path. Wesify infers them then. */
   fields?: ArchitectureField[]
 }
 
@@ -187,7 +187,7 @@ export function isArchitectureContext(value: unknown): value is ArchitectureCont
 
 /**
  * Fields are optional, and anything malformed makes the whole entity untrusted rather than being
- * quietly patched. A half-read field list is worse than none: BO would build a record form around a
+ * quietly patched. A half-read field list is worse than none: Wesify would build a record form around a
  * shape nobody chose, and the operator has no way to tell that is what happened.
  */
 function isArchitectureFields(value: unknown): boolean {
@@ -228,9 +228,9 @@ function normalizeWord(word: string) {
 const normalizedWords = (value: string) => new Set(value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 3 && !['what', 'when', 'where', 'which', 'your', 'does', 'normally', 'company', 'business', 'each'].includes(word)).map(normalizeWord))
 
 /**
- * The operator did not answer — they asked BO something back.
+ * The operator did not answer — they asked Wesify something back.
  *
- * Every message was read as an answer, which is what a form does. Say "what do you mean?" and BO
+ * Every message was read as an answer, which is what a form does. Say "what do you mean?" and Wesify
  * took it as the answer, could not re-ask (the question it wanted to repeat is by definition a
  * duplicate of the one it just asked), and so changed the subject — leaving somebody who had said
  * plainly that they did not understand with a different question and no reply. That is the single
@@ -256,7 +256,7 @@ export function lastOperatorMessage(session: DiscoverySession) {
   return [...session.messages].reverse().find(message => message.role === 'user')?.content ?? ''
 }
 
-/** BO is allowed to ask again when it was not answered. Repeating yourself is right, here. */
+/** Wesify is allowed to ask again when it was not answered. Repeating yourself is right, here. */
 export function awaitingClarification(session: DiscoverySession) {
   return asksForClarification(lastOperatorMessage(session))
 }
@@ -280,8 +280,8 @@ export function applyAgentResponse(session: DiscoverySession, response: Discover
    * Asking the same thing again in plainer words is not a new question.
    *
    * It matters because the interview has a ceiling. Somebody who says "what do you mean?" three
-   * times should not lose three of their questions to a misunderstanding that was BO's fault, and
-   * the ceiling should still mean what it says: how many things BO asked about.
+   * times should not lose three of their questions to a misunderstanding that was Wesify's fault, and
+   * the ceiling should still mean what it says: how many things Wesify asked about.
    *
    * Recognised by the operator not having answered, rather than by the two questions looking alike.
    * A re-ask that works is deliberately worded differently from the one that confused them — which

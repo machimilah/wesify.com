@@ -31,7 +31,7 @@ interface BuilderProps {
   onComplete: () => void
 }
 
-/** The four things BO does, named so the wait is legible without reading the journal. */
+/** The four things Wesify does, named so the wait is legible without reading the journal. */
 const stages = ['Understanding you', 'Researching', 'Designing', 'Ready to build']
 
 const buildLabels = ['Creating data model', 'Building operational pages', 'Connecting workflows', 'Adding controls', 'Testing Wesify', 'Command Center ready']
@@ -50,7 +50,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const [loading, setLoading] = useState(false)
   const [activity, setActivity] = useState('')
   /**
-   * The one thing the journal said that an operator has to act on: BO is answering from somewhere
+   * The one thing the journal said that an operator has to act on: Wesify is answering from somewhere
    * weaker than it should be. It survives as its headline only — "Falling back to Wesify's built-in
    * questions" is the actionable part; the paragraph explaining the model cascade was not.
    */
@@ -68,8 +68,8 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   /**
    * Which model asked the question on screen.
    *
-   * BO falls back through three paths, and they ask visibly different questions — so an operator who
-   * met a blunt built-in question had no way to tell whether BO was thinking or whether the key had
+   * Wesify falls back through three paths, and they ask visibly different questions — so an operator who
+   * met a blunt built-in question had no way to tell whether Wesify was thinking or whether the key had
    * never been picked up. Naming the source is one line of screen and answers it outright.
    */
   const [askedBy, setAskedBy] = useState('')
@@ -83,14 +83,14 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
   /**
    * Runs alongside the interview rather than blocking it: external research takes far longer than a
-   * question, and its conclusions are additive. If it is unavailable, BO keeps its built-in researcher.
+   * question, and its conclusions are additive. If it is unavailable, Wesify keeps its built-in researcher.
    */
   const runFrontierResearch = async (base: DiscoverySession) => {
     if (frontierStarted.current) return
     frontierStarted.current = true
     const status = await frontierResearchStatus()
     // `available` covers the interview, which a free Gemini key alone turns on. Web research is the
-    // Anthropic path only, and announcing a search BO cannot run is worse than not mentioning it.
+    // Anthropic path only, and announcing a search Wesify cannot run is worse than not mentioning it.
     if (!(status.research ?? status.available)) return
     setFrontierModel(status.model)
     setResearching(true)
@@ -100,7 +100,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       if (!result) return
       setFrontier(result)
     } catch {
-      // BO's built-in researcher still runs, so a missing web pass costs detail, not the build.
+      // Wesify's built-in researcher still runs, so a missing web pass costs detail, not the build.
     } finally {
       setResearching(false)
     }
@@ -176,7 +176,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
    * A dependency list cannot do this job: the thread grows from a dozen places — a question arriving,
    * the thinking panel opening, streamed text getting longer, the proposal rendering — and any list
    * that tries to name them all lands a frame early and stops short of the bottom. Watching the DOM
-   * catches every one of them, and the near-bottom check is what keeps BO from yanking the view back
+   * catches every one of them, and the near-bottom check is what keeps Wesify from yanking the view back
    * down while somebody is reading their own third answer.
    */
   useEffect(() => {
@@ -257,7 +257,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
   const currentAssistantId = session?.currentQuestion ? session.messages.at(-1)?.id : null
   /**
-   * What BO said alongside the question, without the question itself.
+   * What Wesify said alongside the question, without the question itself.
    *
    * The message carries both. Subtracting blindly meant that when the wording drifted even slightly,
    * nothing was removed and the question was printed twice — once as prose and once as the question.
@@ -269,7 +269,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     : ''
   const architecture = session?.architecture
   // The research stage only appears when a researcher is actually configured, so the tracker never
-  // shows a step BO is not taking.
+  // shows a step Wesify is not taking.
   const activeStages = frontierModel ? stages : stages.filter(stage => stage !== 'Researching')
   const stageName = architecture ? 'Ready to build'
     : researching ? 'Researching'
@@ -298,7 +298,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
         <ThemeToggle/>
       </header>
 
-      {/* One thread, oldest first. The question BO is asking is simply the newest thing in it. */}
+      {/* One thread, oldest first. The question Wesify is asking is simply the newest thing in it. */}
       <div className="bo-thread" ref={chat} data-testid="build-thread">
         {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><span className="bo-turn__text">Tell me how your company works.</span></div></div>}
 
@@ -307,11 +307,11 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           : <div className="bo-turn bo-turn--bo" key={message.id}><span><Sparkles size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
 
         {/**
-         * What BO is doing, and nothing about how it is doing it.
+         * What Wesify is doing, and nothing about how it is doing it.
          *
          * This was an expandable journal: every fact re-stated, every capability decision explained,
-         * a paragraph per research finding. It was written to show BO's working, and what it actually
-         * showed was that BO had a great deal to say while somebody was waiting to answer a question.
+         * a paragraph per research finding. It was written to show Wesify's working, and what it actually
+         * showed was that Wesify had a great deal to say while somebody was waiting to answer a question.
          * The reasoning still happens and still decides what gets built — it is simply not the
          * operator's reading material.
          *
@@ -333,7 +333,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             {/**
              * The end of the interview is a decision, not a document.
              *
-             * BO used to answer twelve questions with a wall of its own reasoning and put the button
+             * Wesify used to answer twelve questions with a wall of its own reasoning and put the button
              * at the bottom of it. Somebody who already trusts what they have been told should reach
              * their workspace in one click; the plan is there for anyone who wants to read it first,
              * and that is one click too.

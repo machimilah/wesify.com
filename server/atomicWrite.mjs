@@ -6,7 +6,7 @@ import path from 'node:path'
  * Writing a file so a reader never sees half of one.
  *
  * The pattern is the usual one — write a uniquely named candidate, then rename it over the target,
- * because rename is atomic and a truncated write is not. Five places in BO had their own copy of it.
+ * because rename is atomic and a truncated write is not. Five places in Wesify had their own copy of it.
  *
  * The retry is what the copies were missing. On Windows, renaming onto a file that another handle
  * has open fails outright with EPERM or EBUSY rather than waiting, and "another handle" includes a

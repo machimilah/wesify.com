@@ -6,7 +6,7 @@ import path from 'node:path'
 import './noSpend.mjs'
 
 /**
- * BO must not be free to run up its owner's model bill.
+ * Wesify must not be free to run up its owner's model bill.
  *
  * One endpoint here cannot ask for a workspace token, because it is the call that creates the
  * workspace — which means the address of a deployment is enough to reach it. Until there are accounts,

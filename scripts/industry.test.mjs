@@ -6,7 +6,7 @@ import path from 'node:path'
 import './noSpend.mjs'
 
 /**
- * BO learns what an industry needs from what companies in it actually did.
+ * Wesify learns what an industry needs from what companies in it actually did.
  *
  * The taxonomy classifies a business but holds no operating facts, so questions like "does a social
  * media agency need timesheets" used to be settled by whoever wrote the ontology. These checks cover
@@ -107,7 +107,7 @@ try {
   assert.ok(!Object.keys(sanitised.observed).some(id => /[^a-z0-9.-]/.test(id)), 'malformed capability ids must never be stored')
 
   /**
-   * The loop is the only thing BO has that a competitor cannot copy, so writing to it is guarded.
+   * The loop is the only thing Wesify has that a competitor cannot copy, so writing to it is guarded.
    *
    * An open endpoint means anyone can invent companies until the industry says whatever they want,
    * and the threshold that makes the verdict trustworthy becomes the thing that makes it forgeable.
@@ -157,7 +157,7 @@ try {
   const rejectedPatterns = await readIndustryProfile('486')
   assert.deepEqual(rejectedPatterns.patterns, {}, 'free text and unknown pattern kinds must not enter shared learning')
 
-  // Reading stays open: the knowledge is aggregate and belongs to everyone using BO.
+  // Reading stays open: the knowledge is aggregate and belongs to everyone using Wesify.
   assert.equal((await fetch(`http://127.0.0.1:${port}/api/industries/541`)).status, 200)
 
   /**

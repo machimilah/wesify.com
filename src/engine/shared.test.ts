@@ -53,7 +53,7 @@ describe('humanize and moduleLabel', () => {
     expect(humanize('bills_of_materials')).toBe('Bills Of Materials')
   })
 
-  it('calls a module what an operator calls it, not what BO calls it', () => {
+  it('calls a module what an operator calls it, not what Wesify calls it', () => {
     expect(moduleLabel('finance')).toBe('Money')
     expect(moduleLabel('processes')).toBe('Operations')
     expect(moduleLabel('inventory')).toBe('Stock')

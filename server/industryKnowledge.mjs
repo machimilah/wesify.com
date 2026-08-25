@@ -1,28 +1,28 @@
 import { allProfiles, checkSubsector, readProfile, writeProfile } from './industryStore.mjs'
 
 /**
- * What BO knows about an industry, rather than what BO assumes about it.
+ * What Wesify knows about an industry, rather than what Wesify assumes about it.
  *
  * The taxonomy classifies a business; it contains no operating facts. Nothing in NAICS says whether a
- * social media agency bills by the hour, so BO's own ontology had to guess — and a guess is exactly
+ * social media agency bills by the hour, so Wesify's own ontology had to guess — and a guess is exactly
  * what should not decide the product.
  *
  * This store holds two better sources, keyed by NAICS subsector and shared across every company:
  *
  * - **researched** — what the frontier researcher found on the open web, with its sources.
- * - **observed** — what companies in this industry actually did with the workspace BO gave them:
- *   kept a system, removed it, or added one BO had missed.
+ * - **observed** — what companies in this industry actually did with the workspace Wesify gave them:
+ *   kept a system, removed it, or added one Wesify had missed.
  *
  * Observation outranks research, and research outranks the ontology. Only aggregate counts are
  * stored: never a company name, never a record, never anything that identifies who did what.
  *
- * Where any of it is kept is industryStore.mjs's problem rather than this file's: Postgres when BO
+ * Where any of it is kept is industryStore.mjs's problem rather than this file's: Postgres when Wesify
  * has a database, JSON files when it does not. What is decided from it is decided here, and is pure.
  */
 
 /** Enough companies that a pattern is a pattern and not one opinionated operator. */
 export const MIN_COMPANIES = 5
-/** How lopsided the split must be before BO changes what it builds. */
+/** How lopsided the split must be before Wesify changes what it builds. */
 export const VERDICT_SHARE = 0.6
 
 /**
@@ -100,11 +100,11 @@ export function researchIsFresh(profile, now = Date.now()) {
 }
 
 /**
- * What the evidence says BO should build for this industry.
+ * What the evidence says Wesify should build for this industry.
  *
  * Pure so it can be reasoned about and tested. Each verdict carries why it was reached, so the
  * interface can show an operator that a system is there because other companies like theirs kept it —
- * not because BO decided.
+ * not because Wesify decided.
  */
 export function industryVerdict(profile) {
   const include = []
@@ -163,7 +163,7 @@ export function industryVerdict(profile) {
   }
 }
 
-/** Every industry BO has learned something about, for inspection. */
+/** Every industry Wesify has learned something about, for inspection. */
 export async function listIndustries() {
   return (await allProfiles()).map(profile => ({
     subsector: profile.subsector,

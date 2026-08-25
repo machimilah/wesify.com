@@ -4,7 +4,7 @@ import { subsectorArchetypes } from '../data/industryTaxonomy'
 /**
  * Resolves a company description to a place in the industry taxonomy.
  *
- * BO's signal lists recognise the businesses someone thought to write a signal for. The taxonomy
+ * Wesify's signal lists recognise the businesses someone thought to write a signal for. The taxonomy
  * recognises every business there is: 1,923 industry titles, from "Nail Salons" to "Title Abstract
  * and Settlement Offices". Matching against those titles is what lets an unusual company still land
  * on a real operating model instead of a generic base.
@@ -86,7 +86,7 @@ const totalWeight = new Map(indexed.map(entry => [entry.code, [...entry.terms].r
  * "Dairy Product Manufacturing" (three words, one hit) than against "Dairy Cattle and Milk
  * Production" (four words, one hit) — and lands a farm in a factory. Pooling every title in a
  * subsector fixes it, because "farm" and "dairy" both appear somewhere under Animal Production while
- * only "dairy" appears under Food Manufacturing. It is also the level BO maps at, so nothing is lost.
+ * only "dairy" appears under Food Manufacturing. It is also the level Wesify maps at, so nothing is lost.
  */
 const subsectorTerms = new Map<string, Set<string>>()
 for (const entry of indexed) {

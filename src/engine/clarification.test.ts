@@ -8,8 +8,8 @@ import { businessDiscoveryModel, type DiscoveryModelRequest } from './discoveryM
  *
  * Every message the operator sent was read as an answer, which is what a form does and not what a
  * conversation does. Somebody who said plainly that they did not understand got no reply and a new
- * subject, because the question BO wanted to repeat is by definition a duplicate of the one it had
- * just asked — so the guard that stops BO asking the same thing twice also stopped it ever asking
+ * subject, because the question Wesify wanted to repeat is by definition a duplicate of the one it had
+ * just asked — so the guard that stops Wesify asking the same thing twice also stopped it ever asking
  * again in plainer words.
  */
 
@@ -32,7 +32,7 @@ function sessionAfterConfusion(said: string): DiscoverySession {
   }
 }
 
-describe('asking BO a question back', () => {
+describe('asking Wesify a question back', () => {
   it('tells an answer from a question back', () => {
     for (const said of ['What do you mean?', 'I do not understand', "I don't understand that", 'Can you explain?', 'Why do you need that?', 'what do you mean by warehouse']) {
       expect(asksForClarification(said), `"${said}" should read as a question back`).toBe(true)
@@ -43,9 +43,9 @@ describe('asking BO a question back', () => {
     }
   })
 
-  it('lets BO ask the same thing again in easier words', async () => {
+  it('lets Wesify ask the same thing again in easier words', async () => {
     const session = sessionAfterConfusion('What do you mean?')
-    // The premise: the re-ask is a duplicate, which is exactly why BO used to be unable to send it.
+    // The premise: the re-ask is a duplicate, which is exactly why Wesify used to be unable to send it.
     expect(isDuplicateQuestion(plainer, session)).toBe(true)
 
     const mock = (request: DiscoveryModelRequest): DiscoveryAgentResponse => ({
@@ -63,7 +63,7 @@ describe('asking BO a question back', () => {
     expect(response.nextQuestion.text).toBe(plainer)
 
     const next = applyAgentResponse(session, response)
-    // They are told what BO meant, in the same turn as the question.
+    // They are told what Wesify meant, in the same turn as the question.
     expect(asked(next).at(-1)?.content).toContain('Sorry')
     expect(asked(next).at(-1)?.content).toContain(plainer)
     // And a misunderstanding does not spend one of the questions the interview is allowed.

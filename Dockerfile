@@ -1,4 +1,4 @@
-# BO, as one image.
+# Wesify, as one image.
 #
 # Two stages, because the frontend build needs the whole toolchain — vite, typescript, every dev
 # dependency — and the running server needs none of it. Shipping one stage would mean shipping a
@@ -27,10 +27,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 # Nothing outside the container can reach a port bound to loopback, so the container overrides the
-# host BO uses on a laptop. `PORT` is what most platforms inject; 8787 is the fallback.
+# host Wesify uses on a laptop. `PORT` is what most platforms inject; 8787 is the fallback.
 ENV BO_HOST=0.0.0.0
 ENV PORT=8787
-# Everything BO still keeps on disk — the generated Command Center, connection credentials, industry
+# Everything Wesify still keeps on disk — the generated Command Center, connection credentials, industry
 # knowledge — lives under one path, so a single volume covers all of it. Records live in Postgres.
 ENV BO_GENERATED_ROOT=/data
 
@@ -64,6 +64,6 @@ EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# No npm in front of node: npm forwards neither SIGTERM nor the exit code faithfully, and BO closes
+# No npm in front of node: npm forwards neither SIGTERM nor the exit code faithfully, and Wesify closes
 # its server on SIGTERM so in-flight requests finish before the process goes.
 CMD ["node", "server/index.mjs"]

@@ -6,7 +6,7 @@ import { runGeminiJson } from './gemini.mjs'
  * What the workspace already knows on the day it is handed over.
  *
  * An operator answers twelve questions — "one supplier, about five regular shops, we invoice thirty
- * days after delivery" — and then BO used to open a workspace with empty tables and a button that
+ * days after delivery" — and then Wesify used to open a workspace with empty tables and a button that
  * says "Add your first client". Everything they said existed in the transcript and nowhere in the
  * software, so the first thing the product asked them to do was type it all again.
  *
@@ -16,7 +16,7 @@ import { runGeminiJson } from './gemini.mjs'
  * empty while a fabricated one has to be found and deleted before it corrupts somebody's first week.
  */
 
-const system = `You are BO's recorder. An operator has just been interviewed about their company, and BO has built them a workspace. Your job is to write down what they already told you, as records in that workspace, so they do not have to type it all again.
+const system = `You are Wesify's recorder. An operator has just been interviewed about their company, and Wesify has built them a workspace. Your job is to write down what they already told you, as records in that workspace, so they do not have to type it all again.
 
 You are recording, not imagining.
 
@@ -88,8 +88,8 @@ export async function proposeOpeningRecords({ conversation = [], businessState =
   const providers = interviewProviders()
   if (!providers.length) return { summary: '', records: [] }
 
-  const known = businessState ? `What BO recorded during the interview:\n${JSON.stringify(businessState)}` : 'BO recorded nothing structured during the interview.'
-  const prompt = `${known}\n\nThe conversation:\n${conversationText(conversation) || '(nothing)'}\n\nThe workspace BO just built for them holds:\n${entityBrief(entities)}\n\nWrite down what they already told you.`
+  const known = businessState ? `What Wesify recorded during the interview:\n${JSON.stringify(businessState)}` : 'Wesify recorded nothing structured during the interview.'
+  const prompt = `${known}\n\nThe conversation:\n${conversationText(conversation) || '(nothing)'}\n\nThe workspace Wesify just built for them holds:\n${entityBrief(entities)}\n\nWrite down what they already told you.`
 
   const askProvider = async provider => {
     if (provider === 'gemini') {
@@ -104,7 +104,7 @@ export async function proposeOpeningRecords({ conversation = [], businessState =
       },
       [{ role: 'user', content: prompt }],
     )
-    const declined = refusal(message, 'BO opened the workspace empty instead.')
+    const declined = refusal(message, 'Wesify opened the workspace empty instead.')
     if (declined) throw declined
     return textOf(message)
   }
@@ -112,7 +112,7 @@ export async function proposeOpeningRecords({ conversation = [], businessState =
   /**
    * The same cascade the interview uses: a key that cannot be used is not a reason to stop when
    * another one is configured. Opening a workspace empty is a worse outcome here than elsewhere,
-   * because the operator has already told BO everything the records would have been written from.
+   * because the operator has already told Wesify everything the records would have been written from.
    */
   let raw
   let lastError
@@ -128,7 +128,7 @@ export async function proposeOpeningRecords({ conversation = [], businessState =
   }
   if (raw === undefined) throw lastError ?? Object.assign(new Error('No provider answered.'), { status: 502 })
 
-  try { return JSON.parse(raw) } catch { throw Object.assign(new Error('The recorder returned output BO could not read.'), { status: 502 }) }
+  try { return JSON.parse(raw) } catch { throw Object.assign(new Error('The recorder returned output Wesify could not read.'), { status: 502 }) }
 }
 
 /**

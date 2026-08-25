@@ -5,11 +5,11 @@ import { capabilityCatalogPrompt, capabilityIds } from './capabilityCatalog'
 import { workspaceAccessHeaders } from './workspaceAccess'
 
 /**
- * Client for BO's server-side frontier researcher.
+ * Client for Wesify's server-side frontier researcher.
  *
  * The local researcher in `businessResearch.ts` always runs and never leaves the browser. This adds
  * the second tier: a frontier model that searches the open web before deciding what the company
- * needs. It is optional by design — when the server has no API key, everything below no-ops and BO
+ * needs. It is optional by design — when the server has no API key, everything below no-ops and Wesify
  * behaves exactly as it does today.
  */
 
@@ -50,7 +50,7 @@ export async function requestFrontierResearch(workspaceId: string, description: 
   const status = await frontierResearchStatus()
   // The web-search researcher is the Anthropic path only. `available` now covers the interview too,
   // which a free Gemini key alone turns on, so asking for research on that key would be a 503 the
-  // operator sees as BO failing rather than as a tier it does not have.
+  // operator sees as Wesify failing rather than as a tier it does not have.
   if (!(status.research ?? status.available)) return null
   const response = await fetch(apiUrl('/api/research'), {
     method: 'POST',
@@ -73,8 +73,8 @@ export function mergeFrontierResearch(local: BusinessResearch, frontier: Frontie
   const researched: ResearchFinding[] = frontier.findings.map(item => ({
     id: `frontier:${item.conclusion.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
     conclusion: item.conclusion,
-    // The conclusion and the reason travel; the address BO read them at does not. What convinces an
-    // operator is that BO understood their trade, and a link only invites them to audit a citation.
+    // The conclusion and the reason travel; the address Wesify read them at does not. What convinces an
+    // operator is that Wesify understood their trade, and a link only invites them to audit a citation.
     because: item.because,
     implication: item.implication,
     basis: item.basis,
@@ -95,7 +95,7 @@ export function mergeFrontierResearch(local: BusinessResearch, frontier: Frontie
   }
 }
 
-/** Applies researched capability decisions to the architecture BO is about to compile. */
+/** Applies researched capability decisions to the architecture Wesify is about to compile. */
 export function applyFrontierArchitecture(architecture: ArchitectureContext, frontier: FrontierResearch | null): ArchitectureContext {
   if (!frontier) return architecture
   const excluded = new Set(frontier.excludedCapabilityIds)

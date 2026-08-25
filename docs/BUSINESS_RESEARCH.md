@@ -1,7 +1,7 @@
 # Business research engine
 
-`src/engine/businessResearch.ts` is the part of BO that decides what a company needs. The capability
-catalog knows what BO *can* build; the researcher decides what this specific company *should* get,
+`src/engine/businessResearch.ts` is the part of Wesify that decides what a company needs. The capability
+catalog knows what Wesify *can* build; the researcher decides what this specific company *should* get,
 and can show its work.
 
 ## Why it exists
@@ -18,7 +18,7 @@ operator said, and capabilities fall out of that model as consequences.
 |---|---|
 | `archetype` | The closest known operating base, with the signal that matched it |
 | `readings` | One conclusion per operating-model dimension, with basis and evidence |
-| `findings` | Business-facing conclusions: what BO concluded, the quote it came from, what it changes |
+| `findings` | Business-facing conclusions: what Wesify concluded, the quote it came from, what it changes |
 | `questions` | Unresolved dimensions, ranked by how many capability decisions they would settle |
 | `include` / `exclude` | Capability decisions with the reason behind each one |
 | `coverage` | Share of the operating model that is actually resolved, 0 to 1 |
@@ -40,12 +40,12 @@ questionnaire would traditionally ask it.
 
 ## Basis, and why it matters
 
-Every reading carries how BO knows it:
+Every reading carries how Wesify knows it:
 
 - `stated` — the operator said it. Only stated readings select or exclude capabilities.
 - `inferred` — implied by something stated.
 - `domain-default` — typical for the archetype. It lets the live preview build, it is labelled as
-  unconfirmed, and it never selects a capability. This is what stops BO from quietly inventing an
+  unconfirmed, and it never selects a capability. This is what stops Wesify from quietly inventing an
   operating model and presenting it as knowledge.
 
 ## Question selection
@@ -55,16 +55,16 @@ undecided when no resolved dimension has already included or excluded it. The hi
 unresolved dimension becomes the next question, which is why the interview is short and why two
 different companies get different questions in a different order.
 
-BO refuses to architect while an **essential** dimension is unresolved, because a wrong guess there
+Wesify refuses to architect while an **essential** dimension is unresolved, because a wrong guess there
 produces the wrong product. Non-essential dimensions fall back to the archetype default and can be
 added later by prompting the workspace.
 
 ## Where it is used
 
 - `planCapabilities` (`capabilityCatalog.ts`) merges research includes and excludes into the plan and
-  keeps the reason for each, which the workspace shows under Settings → "Why BO built this".
+  keeps the reason for each, which the workspace shows under Settings → "Why Wesify built this".
 - `criticalDiscoveryQuestion` (`discoveryModel.ts`) uses it to choose the next question and to decide
-  when BO has enough to build — replacing the old fixed question ladder.
+  when Wesify has enough to build — replacing the old fixed question ladder.
 - `Builder.tsx` renders findings as the live reasoning journal and as the evidence list on the
   approval screen.
 

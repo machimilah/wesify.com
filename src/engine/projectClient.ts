@@ -115,7 +115,7 @@ export function loadWorkspaceAudit(workspaceId: string) {
 /**
  * Downloads everything the workspace holds, as one file.
  *
- * BO tells people their records stay theirs even if they stop paying. This is what makes that a
+ * Wesify tells people their records stay theirs even if they stop paying. This is what makes that a
  * fact rather than a reassurance — and it is fetched rather than linked because the request needs
  * the workspace headers, which a plain anchor cannot send.
  */

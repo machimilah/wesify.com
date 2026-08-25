@@ -8,7 +8,7 @@ import { generateWorkspaceConfigurationFromDiscovery } from './workspaceSchema'
  *
  * This is the product's whole claim, and nothing else tests it. A planner regression that quietly
  * fell back to one generic base for everybody would pass every other suite in this repo while
- * destroying the reason BO exists. So: build several very different companies and compare.
+ * destroying the reason Wesify exists. So: build several very different companies and compare.
  *
  * The shell is meant to be identical — Home, Today, Analytics, Links, Settings. Everything
  * between those is meant to differ.
@@ -78,7 +78,7 @@ describe('every company gets its own Command Center', () => {
   })
 
   it('shares only a small universal core', () => {
-    // The pages every business genuinely has. If this grows, BO has started bloating everyone.
+    // The pages every business genuinely has. If this grows, Wesify has started bloating everyone.
     const all = Object.values(built).map(config => new Set(pagesOf(config)))
     const everywhere = [...all[0]].filter(page => all.every(pages => pages.has(page)))
     expect(everywhere.sort()).toEqual(['Clients', 'Invoices', 'Team'])
@@ -121,7 +121,7 @@ describe('every company gets its own Command Center', () => {
    * Loose signal matching once gave a social media agency twenty-three pages including a till and a
    * chart of accounts, while a solo consultant got three and nowhere to record the work. Both are the
    * same failure — the planner reacting to letters rather than to what the business does — and both
-   * destroy the only promise BO makes.
+   * destroy the only promise Wesify makes.
    */
   it('never builds a workspace too big to learn or too small to use', () => {
     const awkward = {
@@ -143,6 +143,6 @@ describe('every company gets its own Command Center', () => {
     const agency = pagesOf(workspaceFor('We are a social media agency. We manage client accounts, plan content calendars, publish posts and report on engagement.'))
     expect(agency, 'an agency that publishes posts is not a shop with a till').not.toContain('Point of sale')
     expect(agency, 'managing client accounts is not holding client money in trust').not.toContain('Client accounts')
-    expect(agency.some(page => /chart of accounts|journal entries/i.test(page)), 'an agency does not keep its own ledger in BO').toBe(false)
+    expect(agency.some(page => /chart of accounts|journal entries/i.test(page)), 'an agency does not keep its own ledger in Wesify').toBe(false)
   })
 })

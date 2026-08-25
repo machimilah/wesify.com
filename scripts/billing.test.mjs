@@ -13,7 +13,7 @@ import './noSpend.mjs'
 /**
  * Taking money, and what happens when it stops arriving.
  *
- * Billing is the one part of BO where a bug is not a bug but a loss: an entitlement check in the
+ * Billing is the one part of Wesify where a bug is not a bug but a loss: an entitlement check in the
  * wrong place gives the product away, and a webhook handler that trusts its caller gives it away to
  * anyone who knows the URL. So this test is mostly about the ways it can go wrong.
  *
@@ -37,7 +37,7 @@ process.env.BO_STRIPE_BILLING_API_URL = `http://127.0.0.1:${stripePort}/v1`
 process.env.BO_PUBLIC_URL = 'https://bo.example.com'
 delete process.env.SENTRY_DSN
 
-// Stands in for Stripe, and records what BO asked it for.
+// Stands in for Stripe, and records what Wesify asked it for.
 const asked = []
 const stripe = createServer((request, response) => {
   const chunks = []
@@ -74,11 +74,11 @@ const errors = []
 async function openPage() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   /**
-   * Only BO's own pages count.
+   * Only Wesify's own pages count.
    *
    * Choosing a plan hands off to Stripe's hosted checkout, and this test's stand-in returns the real
    * checkout.stripe.com URL — so the browser genuinely goes there. Scripts on somebody else's page
-   * throwing somebody else's errors is not a fault in BO, and letting them into this list makes the
+   * throwing somebody else's errors is not a fault in Wesify, and letting them into this list makes the
    * suite fail depending on what Stripe shipped that morning.
    */
   const mine = () => page.url().includes('127.0.0.1')
@@ -145,7 +145,7 @@ try {
   assert.equal(state.payload.limits.workspaces, 1)
 
   // 2. Building the first Command Center is free. This is the whole sales pitch, and putting it
-  //    behind a card would mean nobody ever sees what BO does.
+  //    behind a card would mean nobody ever sees what Wesify does.
   const built = await post('/api/builds', { workspaceId: 'ws-billing', specification }, auth('ws-billing'))
   assert.equal(built.status, 201)
   assert.equal(built.payload.buildStatus, 'HEALTHY')
@@ -272,7 +272,7 @@ try {
   assert.equal(await page.getByTestId('billing-on-free').count(), 1)
   assert.equal(await page.getByTestId('billing-choose-pro').count(), 1)
 
-  // Choosing a plan hands off to Stripe rather than asking for a card here. BO must never see one.
+  // Choosing a plan hands off to Stripe rather than asking for a card here. Wesify must never see one.
   const cardFields = await page.locator('input[autocomplete*="cc-"], input[name*="card"]').count()
   assert.equal(cardFields, 0, 'the billing page asks for card details, which must only ever happen on Stripe')
   const before = asked.length

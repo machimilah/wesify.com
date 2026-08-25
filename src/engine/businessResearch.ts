@@ -4,7 +4,7 @@ import { evaluateOperatingKnowledge, type BusinessGap, type KnowledgeRequirement
 import { saysSignal } from './shared'
 
 /**
- * BO's business researcher.
+ * Wesify's business researcher.
  *
  * The capability catalog knows which systems exist. This module decides which of them a specific
  * company actually needs, by reading the operating model out of what the company said instead of
@@ -14,7 +14,7 @@ import { saysSignal } from './shared'
  * software decisions they would settle, which is what makes the interview short and non-generic.
  */
 
-/** How BO knows something: the operator said it, an external source said it, BO reasoned to it, or it is a domain default. */
+/** How Wesify knows something: the operator said it, an external source said it, Wesify reasoned to it, or it is a domain default. */
 export type ResearchBasis = 'stated' | 'researched' | 'inferred' | 'domain-default'
 
 export interface DimensionReading {
@@ -58,7 +58,7 @@ export interface BusinessResearch {
 export interface ResearchInput {
   /** Everything the company has said, in its own words. */
   text: string
-  /** Questions BO has already put to the operator, so it never asks twice. */
+  /** Questions Wesify has already put to the operator, so it never asks twice. */
   asked?: string[]
 }
 
@@ -78,9 +78,9 @@ interface DimensionSpec {
   label: string
   weight: number
   /**
-   * BO refuses to architect while an essential dimension is unknown, because a wrong guess there
+   * Wesify refuses to architect while an essential dimension is unknown, because a wrong guess there
    * produces the wrong product. Non-essential dimensions only add or remove supporting systems, so
-   * BO proceeds on a domain default and lets the operator add them later.
+   * Wesify proceeds on a domain default and lets the operator add them later.
    */
   essential: boolean
   options: OptionSpec[]
@@ -189,7 +189,7 @@ export const researchDimensions: DimensionSpec[] = [
 ]
 
 /**
- * What BO assumes about an operating model before the operator has said it. These are provisional:
+ * What Wesify assumes about an operating model before the operator has said it. These are provisional:
  * they let the preview build, they never count as answers, and they never select a capability.
  */
 const archetypeDefaults: Record<string, Record<string, string>> = {

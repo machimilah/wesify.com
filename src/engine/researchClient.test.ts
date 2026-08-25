@@ -9,8 +9,8 @@ const frontier: FrontierResearch = {
   archetype: { id: 'field-service', label: 'Field service', confidence: 0.9 },
   summary: 'Dispatch-led plumbing operation billing on completion.',
   findings: [
-    { conclusion: 'Technicians are dispatched to customer sites', because: 'Trade association guidance on dispatch operations', implication: 'BO is connecting work orders, technicians, and the assets they service.', basis: 'researched', confidence: 0.85, sourceUrl: 'https://example.org/field-service', capabilityIds: ['service.field-work', 'work.scheduling'] },
-    { conclusion: 'Parts are bought per job rather than stocked', because: 'You said parts are ordered when a job is booked', implication: 'BO is connecting suppliers and purchase orders to the work that consumes them.', basis: 'stated', confidence: 0.95, sourceUrl: '', capabilityIds: ['procurement.purchasing'] },
+    { conclusion: 'Technicians are dispatched to customer sites', because: 'Trade association guidance on dispatch operations', implication: 'Wesify is connecting work orders, technicians, and the assets they service.', basis: 'researched', confidence: 0.85, sourceUrl: 'https://example.org/field-service', capabilityIds: ['service.field-work', 'work.scheduling'] },
+    { conclusion: 'Parts are bought per job rather than stocked', because: 'You said parts are ordered when a job is booked', implication: 'Wesify is connecting suppliers and purchase orders to the work that consumes them.', basis: 'stated', confidence: 0.95, sourceUrl: '', capabilityIds: ['procurement.purchasing'] },
   ],
   capabilityIds: ['service.field-work', 'work.scheduling', 'procurement.purchasing'],
   excludedCapabilityIds: ['manufacturing.production'],
@@ -45,7 +45,7 @@ describe('frontier research client', () => {
     expect(merged.exclude.map(item => item.capabilityId)).toContain('manufacturing.production')
   })
 
-  it('merges researched capability decisions into the architecture BO compiles', () => {
+  it('merges researched capability decisions into the architecture Wesify compiles', () => {
     const architecture = { ...emptyArchitecture(), capabilityIds: ['crm.contacts', 'manufacturing.production'], excludedCapabilityIds: ['people.payroll'] }
     const applied = applyFrontierArchitecture(architecture, frontier)
     expect(applied.capabilityIds).toEqual(expect.arrayContaining(['crm.contacts', 'service.field-work', 'work.scheduling', 'procurement.purchasing']))

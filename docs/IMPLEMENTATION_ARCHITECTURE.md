@@ -2,7 +2,7 @@
 
 ## Architectural Rule
 
-BO compiles a Command Center from a versioned company model. The model, runtime data and credentials belong to one workspace. Platform knowledge contains only definitions, public research and anonymous thresholded counts.
+Wesify compiles a Command Center from a versioned company model. The model, runtime data and credentials belong to one workspace. Platform knowledge contains only definitions, public research and anonymous thresholded counts.
 
 The machine-readable layer registry is `implementationArchitecture` in `src/data/platformEvolution.ts`.
 

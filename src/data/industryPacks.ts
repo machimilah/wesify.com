@@ -1,7 +1,7 @@
 import type { IndustryCapabilityPack } from '../engine/capabilityCatalog'
 
 /**
- * Operating archetypes for the sectors BO's original packs did not reach.
+ * Operating archetypes for the sectors Wesify's original packs did not reach.
  *
  * Together with the packs in `capabilityCatalog.ts` these cover all 20 NAICS sectors, so any business
  * a person can describe resolves to an operating model rather than falling through to a generic base.

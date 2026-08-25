@@ -20,7 +20,7 @@ export function humanize(value: string) {
   return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
-/** What a module is called in the sidebar, in the operator's words rather than BO's internal id. */
+/** What a module is called in the sidebar, in the operator's words rather than Wesify's internal id. */
 const MODULE_LABELS: Record<string, string> = {
   customers: 'Customers', sales: 'Sales', marketing: 'Marketing', commerce: 'Products',
   subscriptions: 'Subscriptions', projects: 'Projects', processes: 'Operations', scheduling: 'Schedule',

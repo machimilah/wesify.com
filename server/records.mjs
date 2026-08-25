@@ -13,7 +13,7 @@ import { projectPaths } from './project-builder.mjs'
  * that had to change to gain real persistence was these two functions.
  *
  * With `DATABASE_URL` set, records live in Postgres — see migrations/002_records.sql. Without one,
- * they fall back to the JSON file BO always used, so local development still needs no infrastructure.
+ * they fall back to the JSON file Wesify always used, so local development still needs no infrastructure.
  */
 
 async function readDataFile(workspaceId) {
@@ -47,7 +47,7 @@ export async function writeWorkspaceData(workspaceId, value) {
     /**
      * The workspace row is made here rather than demanded from elsewhere.
      *
-     * `records` references `workspaces`, and BO's whole promise is that you describe a company and
+     * `records` references `workspaces`, and Wesify's whole promise is that you describe a company and
      * get a workspace before signing up for anything — so with a database configured, the first
      * record written to an unclaimed workspace failed on a foreign key nobody was in a position to
      * satisfy. Migration 006 made the owner optional; this fills the row in, and signing in later

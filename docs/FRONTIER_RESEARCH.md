@@ -1,6 +1,6 @@
 # Frontier research tier
 
-BO decides what a company needs in two tiers. The first always runs; the second runs when you give
+Wesify decides what a company needs in two tiers. The first always runs; the second runs when you give
 it an API key.
 
 | Tier | Where it runs | What it knows | Availability |
@@ -9,7 +9,7 @@ it an API key.
 | Frontier researcher (`server/reasoning.mjs`) | Your machine, server-side | The open web, read live by Claude with web search and web fetch | Only with an API key |
 
 The second tier never replaces the first. It produces conclusions in the same evidence-carrying shape
-and they are merged, so if the key is missing, the request fails, or safety review declines it, BO
+and they are merged, so if the key is missing, the request fails, or safety review declines it, Wesify
 keeps working exactly as it does without it — and says so in the reasoning journal.
 
 ## Enabling it
@@ -45,7 +45,7 @@ research, decide, and emit schema-valid JSON at once does all three worse.
 
 Both passes opt into server-side refusal fallbacks (`fallbacks: "default"`), so a safety decline is
 re-run on the recommended fallback model rather than lost. A refusal that survives that is surfaced
-to the user as a normal, non-fatal message and BO continues on tier one.
+to the user as a normal, non-fatal message and Wesify continues on tier one.
 
 ## How the two tiers combine
 
@@ -58,13 +58,13 @@ deliberately conservative:
 - Local questions, readings, and coverage are untouched — question selection stays with the local
   information-gain engine, so the interview does not depend on the network.
 
-`applyFrontierArchitecture` folds the same decisions into the `ArchitectureContext` before BO
+`applyFrontierArchitecture` folds the same decisions into the `ArchitectureContext` before Wesify
 compiles the workspace, so researched conclusions reach the actual product and not just the journal.
 
 ## What the user sees
 
 - Live reasoning journal entries with the conclusion, the evidence, and the source URL.
-- The sources BO opened, listed on the approval screen and linked.
+- The sources Wesify opened, listed on the approval screen and linked.
 - `Researching` in the builder header while pass one runs, then `researched` once it lands.
 - An explicit, non-fatal note if research was unavailable — never a silent downgrade.
 
@@ -94,6 +94,6 @@ loop, and malformed output on demand, which a real call will not do reliably.
 
 ## Deliberate limits
 
-BO does not let the researcher write to the workspace. It selects capabilities, states conclusions,
+Wesify does not let the researcher write to the workspace. It selects capabilities, states conclusions,
 and cites sources; record creation and structural changes still go through the existing tested-preview
 approval path. Nothing researched is presented as an operational fact about the company's own data.

@@ -134,9 +134,9 @@ export interface WorkspaceConfiguration {
   governanceArchitecture?: GovernanceArchitecture
   workflows: WorkflowDefinition[]
   roles: RoleDefinition[]
-  /** Capabilities another app owns. BO shows these pages but does not hold the records. */
+  /** Capabilities another app owns. Wesify shows these pages but does not hold the records. */
   connections?: WorkspaceConnection[]
-  /** Where this company sits in the industry taxonomy, so BO can learn per industry. */
+  /** Where this company sits in the industry taxonomy, so Wesify can learn per industry. */
   industrySubsector?: string
   industryLabel?: string
   /** Additive operating intelligence. Version-1 workspaces remain valid without this field. */
@@ -265,7 +265,7 @@ function inferredStatuses(name: string, architecture: ArchitectureContext) {
 }
 
 /**
- * The fields the architect asked for, turned into a record shape BO will actually build.
+ * The fields the architect asked for, turned into a record shape Wesify will actually build.
  *
  * Nothing here trusts the model. Labels become ids by the same slug every other id uses; a relation
  * whose target does not exist is dropped rather than pointed at nothing; a select with no options is
@@ -292,7 +292,7 @@ function architectedFields(proposed: ArchitectureField[], entityIds: string[], s
     }
 
     const options = (item.options ?? []).map(option => option.trim()).filter(Boolean)
-    // A dropdown with nothing in it is worse than a text box: it looks like a decision BO made and
+    // A dropdown with nothing in it is worse than a text box: it looks like a decision Wesify made and
     // then failed to follow through on.
     const type = item.type === 'select' && options.length < 2 ? 'text' : item.type
     fields.push({ id, label: item.label, type, ...(type === 'select' ? { options } : {}), ...(item.required ? { required: true } : {}) })
@@ -317,7 +317,7 @@ function customEntity(name: string, module: string, purpose: string, architectur
     const singularName = name.replace(/s$/i, '') || name
     const primary = architected.find(item => item.required && item.type === 'text') ?? architected.find(item => item.type === 'text') ?? architected[0]
     // Every record needs somewhere to put the thing that did not fit a field, and a status is what
-    // every board, filter and workflow in BO groups by.
+    // every board, filter and workflow in Wesify groups by.
     const withStatus = architected.some(item => item.id === 'status') ? architected : [...architected, statuses(...inferredStatuses(name, architecture))]
     const withNotes = withStatus.some(item => item.type === 'long-text') ? withStatus : [...withStatus, field('notes', 'Notes', 'long-text')]
     return { id, label: singularName, pluralLabel: name, module, primaryField: primary.id, fields: withNotes }

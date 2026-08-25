@@ -142,4 +142,4 @@ Entregables:
 5. Diff y rollback de una corrección.
 6. Dataset inicial de evaluación con 50 casos.
 
-Este sprint es el punto en que BO deja de ser una demostración convincente y comienza a convertirse en infraestructura empresarial.
+Este sprint es el punto en que Wesify deja de ser una demostración convincente y comienza a convertirse en infraestructura empresarial.

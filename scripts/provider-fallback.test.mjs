@@ -7,7 +7,7 @@ import { createServer } from 'node:http'
  *
  * This is the failure as it actually reached an operator: two keys set, Anthropic preferred because
  * it is the one the research pass also uses, and the Anthropic account out of credit. The API
- * answers 400 "Your credit balance is too low", BO reported that the interview could not continue,
+ * answers 400 "Your credit balance is too low", Wesify reported that the interview could not continue,
  * and the free Gemini key that would have answered sat unused a line away in the same config.
  *
  * The distinction being tested is the one that makes this safe: an unusable *key* moves to the next
@@ -84,7 +84,7 @@ try {
   const anthropicCallsSoFar = state.anthropicCalls
   const second = await ask()
   assert.equal(second.nextQuestion.text, turn.nextQuestion.text)
-  assert.equal(state.anthropicCalls, anthropicCallsSoFar, 'BO asked the exhausted account again instead of remembering')
+  assert.equal(state.anthropicCalls, anthropicCallsSoFar, 'Wesify asked the exhausted account again instead of remembering')
   assert.deepEqual(interviewProviders(), ['gemini'], 'the parked provider is still being offered')
 
   // 3. A 400 about the request is not a billing problem and must not be treated as one.

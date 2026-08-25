@@ -8,7 +8,7 @@ import { evaluateOperatingKnowledge, knowledgeRequirementsFor } from './knowledg
 /**
  * The interview, asked of the server.
  *
- * BO's own model runs in the browser, which is private and free and costs the operator a one-gigabyte
+ * Wesify's own model runs in the browser, which is private and free and costs the operator a one-gigabyte
  * download before the first question appears. When a frontier model is configured, the interview goes
  * to the server instead: it starts instantly, works in any browser, and — because the model already
  * knows what a plumbing company is — asks about this company rather than asking it to define itself.
@@ -39,7 +39,7 @@ function conversationOf(session: DiscoverySession) {
  * Falling back is silent by design — the interview must never stop — but silent was indistinguishable
  * from broken: a spent free-tier quota, a server started before the key was set, and a model refusal
  * all looked identical from the screen, which simply started asking its built-in questions again. The
- * reason is recorded here and shown in BO's working, so "why is it asking me this?" has an answer.
+ * reason is recorded here and shown in Wesify's working, so "why is it asking me this?" has an answer.
  */
 let lastIssue = ''
 export function lastInterviewIssue() { return lastIssue }

@@ -11,9 +11,9 @@ import './noSpend.mjs'
  * Signing in, from the browser.
  *
  * `accounts.test.mjs` proves the routes refuse a stranger. This proves the part a person actually
- * meets: that BO asks who they are before showing them anything, that the session survives a reload,
+ * meets: that Wesify asks who they are before showing them anything, that the session survives a reload,
  * that signing out puts them back, and — the point of the whole exercise — that signing in on what
- * amounts to a second browser reaches the same account rather than a fresh empty BO.
+ * amounts to a second browser reaches the same account rather than a fresh empty Wesify.
  */
 
 const apiPort = 8959
@@ -96,7 +96,7 @@ try {
   if (await page.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
   await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('app-grid').count()) throw new Error('BO showed a workspace before anyone signed in.')
+  if (await page.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
 
   // 2. Describing a company asks who you are before building anything — and keeps what was typed,
@@ -105,15 +105,15 @@ try {
   await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
   await page.getByTestId('start-building').click()
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('build-thread').count()) throw new Error('BO started building for someone with no account.')
+  if (await page.getByTestId('build-thread').count()) throw new Error('Wesify started building for someone with no account.')
 
-  // 3. A password BO will not accept is refused, and says why.
+  // 3. A password Wesify will not accept is refused, and says why.
   await page.getByTestId('signin-email').fill('owner@example.com')
   await page.getByTestId('signin-password').fill('short')
   await page.getByTestId('signin-password').evaluate(node => node.setAttribute('minlength', '1'))
   await page.getByTestId('signin-submit').click()
   await page.getByTestId('signin-error').waitFor()
-  if (!/at least/i.test(await page.getByTestId('signin-error').innerText())) throw new Error('BO refused a weak password without saying what it wanted.')
+  if (!/at least/i.test(await page.getByTestId('signin-error').innerText())) throw new Error('Wesify refused a weak password without saying what it wanted.')
 
   // 4. Signing up gets in — and straight on with what they already typed, rather than back to an
   //    empty box asking them to describe their company a second time to prove they have an account.

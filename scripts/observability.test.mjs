@@ -8,9 +8,9 @@ import { useDatabase, migrate, query } from '../server/db.mjs'
 import './noSpend.mjs'
 
 /**
- * Finding out that BO broke, without being told by the person it broke for.
+ * Finding out that Wesify broke, without being told by the person it broke for.
  *
- * A 500 used to be answered with "BO could not complete the operation." and then dropped: not logged,
+ * A 500 used to be answered with "Wesify could not complete the operation." and then dropped: not logged,
  * not counted, not reported. This proves the replacement does the three things that matter — the
  * failure is reported, it carries enough context to find, and it carries nothing that would be a
  * breach to send.
@@ -29,7 +29,7 @@ process.env.BO_GENERATED_ROOT = generatedRoot
 process.env.BO_SENTRY_URL = `http://127.0.0.1:${sentryPort}/api/1/envelope/`
 process.env.SENTRY_DSN = `http://key@127.0.0.1:${sentryPort}/1`
 
-// Stands in for Sentry, and records exactly what BO sends it.
+// Stands in for Sentry, and records exactly what Wesify sends it.
 const received = []
 const sentry = createServer((request, response) => {
   const chunks = []
@@ -89,8 +89,8 @@ try {
   assert.equal(healthLog.path, '/api/health')
   assert.equal(typeof healthLog.ms, 'number', 'the log line does not say how long the request took')
 
-  // 2. A 4xx is not reported. It is BO telling the caller they got it wrong, which is the endpoint
-  //    working, and reporting it would bury the failures that are BO's fault.
+  // 2. A 4xx is not reported. It is Wesify telling the caller they got it wrong, which is the endpoint
+  //    working, and reporting it would bury the failures that are Wesify's fault.
   const before = received.length
   const unauthorized = await call('/api/auth/me', { headers: { authorization: 'Bearer nonsense' } })
   assert.equal(unauthorized.status, 401)
@@ -112,7 +112,7 @@ try {
   const reference = broken.payload.reference
   assert.ok(reference, 'a 500 gave the caller nothing to quote')
   assert.equal(reference, broken.headers.get('x-bo-request-id'))
-  assert.equal(broken.payload.error, 'BO could not complete the operation.')
+  assert.equal(broken.payload.error, 'Wesify could not complete the operation.')
   assert.equal(broken.payload.detail, undefined, 'the internal error message was returned to the caller')
 
   // 5. It reached the monitor, in the shape the monitor expects, with the context needed to find it.
@@ -140,20 +140,20 @@ try {
   assert.ok(errorLog.stack, 'the logged failure has no stack trace')
   assert.equal(JSON.stringify(errorLog).includes(password), false, 'a password was written to the log')
 
-  // 8. A monitor that is down cannot take BO with it, and must not make BO slow either. Reporting
+  // 8. A monitor that is down cannot take Wesify with it, and must not make Wesify slow either. Reporting
   //    happens after the answer, so an unreachable monitor costs the caller nothing — which is the
   //    whole point, because the monitor is unreachable exactly when something is already wrong.
   await new Promise(resolve => sentry.close(resolve))
   const startedAt = Date.now()
   const stillBroken = await call('/api/auth/me', { headers: { authorization: 'Bearer anything' } })
   const took = Date.now() - startedAt
-  assert.equal(stillBroken.status, 500, 'BO stopped answering when its error monitor went down')
+  assert.equal(stillBroken.status, 500, 'Wesify stopped answering when its error monitor went down')
   assert.ok(stillBroken.payload.reference)
   assert.ok(took < 1000, `the answer waited ${took}ms on an unreachable error monitor`)
   await waitFor(() => structured().some(entry => entry.event === 'error-reporting-failed'), 'the failed report to be logged')
 
   console.log = realLog
-  console.log('Observability test passed: every response carries a traceable id, every request is logged as structured JSON with its duration, 4xx answers are not reported as failures, a 500 reaches the monitor with its stack and enough context to find it, the caller gets a reference and nothing else, no password or session token or header ever reaches the monitor or the log, and a monitor that is down neither hides the failure nor takes BO with it.')
+  console.log('Observability test passed: every response carries a traceable id, every request is logged as structured JSON with its duration, 4xx answers are not reported as failures, a 500 reaches the monitor with its stack and enough context to find it, the caller gets a reference and nothing else, no password or session token or header ever reaches the monitor or the log, and a monitor that is down neither hides the failure nor takes Wesify with it.')
 } finally {
   console.log = realLog
   await new Promise(resolve => server.close(resolve))

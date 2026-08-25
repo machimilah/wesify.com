@@ -5,7 +5,7 @@ import './noSpend.mjs'
 /**
  * Night mode, end to end.
  *
- * BO had no theme system at all: the workspace people actually work in was permanently light, while
+ * Wesify had no theme system at all: the workspace people actually work in was permanently light, while
  * the interview and sign-in screens were permanently dark, with no way to change either. Retrofitting
  * a toggle onto ~600 already-hardcoded colors is exactly the kind of change that looks fine in a diff
  * and breaks in the browser — a background and its text independently landing on the same color, or
@@ -92,9 +92,9 @@ try {
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 
-  // 1. Light is the default. Nobody's first visit should ever look different from today's BO.
+  // 1. Light is the default. Nobody's first visit should ever look different from today's Wesify.
   await page.getByTestId('theme-toggle').waitFor()
-  if (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) throw new Error('BO opened in dark mode with no stored preference.')
+  if (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) throw new Error('Wesify opened in dark mode with no stored preference.')
 
   const firstVisitOffenders = await invisibleElements()
   if (firstVisitOffenders.length) throw new Error(`Invisible text in light mode on the home page: ${firstVisitOffenders.join(', ')}`)
@@ -137,7 +137,7 @@ try {
   await page.getByTestId('company-brief').fill('We run a plumbing service business.')
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
-  // Opened deliberately: the proposal is the densest thing BO renders, so it is where a colour
+  // Opened deliberately: the proposal is the densest thing Wesify renders, so it is where a colour
   // that vanishes into its own background shows up first.
   await page.getByTestId('check-proposal').click({ timeout: 20_000 })
   await page.getByTestId('architecture-proposal').waitFor({ timeout: 20_000 })
@@ -154,7 +154,7 @@ try {
   /**
    * Where the keyboard is.
    *
-   * Several inputs across BO set `outline: 0` to get the border they wanted, and for a long time
+   * Several inputs across Wesify set `outline: 0` to get the border they wanted, and for a long time
    * nothing put a focus style back. Anyone navigating by keyboard — by preference, by injury, or
    * because their mouse died — moved through the product blind, unable to tell which field would
    * receive the next keystroke. This walks the workspace by Tab and insists every stop is visible.
@@ -219,7 +219,7 @@ try {
     .map(node => `${node.tagName.toLowerCase()}.${String(node.className || '').split(' ')[0]}`))
   if (unnamed.length) throw new Error(`These controls have no accessible name: ${[...new Set(unnamed)].join(', ')}`)
 
-  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, no element on the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme, every control BO can reach by keyboard shows where the focus is, none of them is left without an accessible name, and nothing pushes the page sideways on a phone or a tablet.')
+  console.log('Theme test passed: light is the default, the toggle flips the document, the choice survives a reload, follows the operator into the product, no element on the home page, the build proposal, or the finished Command Center renders with its own background color as its text or icon color in either theme, every control Wesify can reach by keyboard shows where the focus is, none of them is left without an accessible name, and nothing pushes the page sideways on a phone or a tablet.')
 } finally {
   await browser.close()
   vite.kill()

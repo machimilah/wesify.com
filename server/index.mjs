@@ -1,4 +1,4 @@
-// First: configuration has to be in place before any module decides what BO can do.
+// First: configuration has to be in place before any module decides what Wesify can do.
 import './env.mjs'
 import { createServer } from 'node:http'
 import { corsHeaders, handlePreflight } from './cors.mjs'
@@ -21,7 +21,7 @@ import { industryRoutes } from './routes/industries.mjs'
 import { buildRoutes, projectRoutes } from './routes/projects.mjs'
 
 /**
- * BO's server: what listens, and in what order it asks.
+ * Wesify's server: what listens, and in what order it asks.
  *
  * This file used to be the whole server — every route, every helper, nine hundred lines of it. It is
  * now only the arrangement: which module gets asked about a request, what happens when one throws,
@@ -30,10 +30,10 @@ import { buildRoutes, projectRoutes } from './routes/projects.mjs'
  */
 
 const requestedPort = Number(process.argv[process.argv.indexOf('--port') + 1])
-// `PORT` is what every container host injects, and it is not BO's to choose there; `BO_API_PORT` stays
+// `PORT` is what every container host injects, and it is not Wesify's to choose there; `BO_API_PORT` stays
 // ahead of it so a local `.env.local` still wins over whatever a shell happens to export.
 const port = Number.isFinite(requestedPort) ? requestedPort : Number(process.env.BO_API_PORT || process.env.PORT || 8787)
-// Loopback by default, so running BO on a laptop does not quietly publish it to the local network.
+// Loopback by default, so running Wesify on a laptop does not quietly publish it to the local network.
 // A container has to bind every interface or nothing outside it can reach the port at all.
 const host = process.env.BO_HOST || '127.0.0.1'
 const distRoot = path.resolve(process.cwd(), 'dist')
@@ -68,7 +68,7 @@ async function api(request, response, url) {
         connections: Boolean(process.env.BO_CONNECTION_SECRET),
       },
       // Empty on a laptop, in a container with a volume, and anywhere with a database. Present only
-      // where BO would otherwise lose work silently — see durability.mjs.
+      // where Wesify would otherwise lose work silently — see durability.mjs.
       warnings: durabilityWarnings(),
     })
   }
@@ -94,7 +94,7 @@ async function staticFile(response, url) {
   } catch {
     // Any unknown path is the single-page app's to route, which is why this is not a 404.
     try { return send(response, 200, await readFile(path.join(distRoot, 'index.html')), 'text/html; charset=utf-8') }
-    catch { return send(response, 404, 'BO frontend is not built.', 'text/plain; charset=utf-8') }
+    catch { return send(response, 404, 'Wesify frontend is not built.', 'text/plain; charset=utf-8') }
   }
 }
 
@@ -117,7 +117,7 @@ function isNoisyPath(pathname) {
  * The alternative is a second copy of this on the serverless path, and the copy that drifts is the
  * one that stops shaping errors the way the interface expects.
  */
-for (const warning of durabilityWarnings()) console.warn(`BO: ${warning.message}`)
+for (const warning of durabilityWarnings()) console.warn(`Wesify: ${warning.message}`)
 
 export async function handleRequest(request, response) {
   const requestId = newRequestId()
@@ -140,8 +140,8 @@ export async function handleRequest(request, response) {
     if (await api(request, response, url) === false) await staticFile(response, url)
   } catch (error) {
     const status = Number(error?.status) || 500
-    // A 4xx is BO telling the caller they got it wrong, which is the endpoint working. Reporting those
-    // would bury the failures that are BO's fault under the ones that are not.
+    // A 4xx is Wesify telling the caller they got it wrong, which is the endpoint working. Reporting those
+    // would bury the failures that are Wesify's fault under the ones that are not.
     //
     // Not awaited. The caller is owed an answer about their request, not a wait on a third party that
     // has nothing to do with it — and the monitor being slow or unreachable is precisely the case.
@@ -150,7 +150,7 @@ export async function handleRequest(request, response) {
       void captureError(error, { requestId, method: request.method, path: url.pathname, status, workspaceId: String(request.headers['x-bo-workspace-id'] ?? '') || undefined })
     }
     send(response, status, {
-      error: status === 500 ? 'BO could not complete the operation.' : error.message,
+      error: status === 500 ? 'Wesify could not complete the operation.' : error.message,
       // The reference is not the error: it says nothing about what broke, and is only useful to
       // someone holding the log. That is exactly what makes it safe to show.
       reference: status >= 500 ? requestId : undefined,
@@ -181,29 +181,29 @@ const startedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fil
  *
  * A migration that fails is not something to serve around: the alternative is answering requests
  * against a half-built schema and writing data that will not fit it. Without a database configured
- * there is nothing to migrate and BO starts as it always did.
+ * there is nothing to migrate and Wesify starts as it always did.
  */
 if (startedDirectly) {
-  // Only when BO is the process. Imported by a test, it must not install handlers that call
+  // Only when Wesify is the process. Imported by a test, it must not install handlers that call
   // process.exit on the test runner.
   watchProcess()
   if (databaseAvailable()) {
     try {
       const ran = await migrate()
-      if (ran.length) console.log(`BO applied ${ran.length} migration${ran.length === 1 ? '' : 's'}: ${ran.join(', ')}`)
+      if (ran.length) console.log(`Wesify applied ${ran.length} migration${ran.length === 1 ? '' : 's'}: ${ran.join(', ')}`)
     } catch (error) {
       // Reported before exiting: a deployment that dies on boot restarts in a loop, and the log of the
       // container that failed is the first thing a platform throws away.
       await captureError(error, { fatal: true, failed: 'migration' })
-      console.error('BO could not prepare its database:', error?.message ?? error)
+      console.error('Wesify could not prepare its database:', error?.message ?? error)
       process.exit(1)
     }
   }
   // Said at start rather than left to be discovered from a customer who never got their reset link.
-  if (databaseAvailable() && !mailAvailable()) console.warn('BO has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
-  if (!monitoringAvailable()) console.warn('BO has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when BO breaks.')
-  if (databaseAvailable() && !billingAvailable()) console.warn('BO has no billing configured (STRIPE_SECRET_KEY and BO_STRIPE_PRICE_PRO), so every account stays on the free plan and nobody can pay.')
-  server.listen(port, host, () => console.log(`BO project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
+  if (databaseAvailable() && !mailAvailable()) console.warn('Wesify has no mail provider configured (RESEND_API_KEY and BO_MAIL_FROM), so password reset links will be written to this log instead of being sent.')
+  if (!monitoringAvailable()) console.warn('Wesify has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when Wesify breaks.')
+  if (databaseAvailable() && !billingAvailable()) console.warn('Wesify has no billing configured (STRIPE_SECRET_KEY and BO_STRIPE_PRICE_PRO), so every account stays on the free plan and nobody can pay.')
+  server.listen(port, host, () => console.log(`Wesify project service listening on ${host}:${port}${databaseAvailable() ? ' with accounts' : ' without accounts (no DATABASE_URL)'}`))
 }
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))

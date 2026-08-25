@@ -23,7 +23,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
  * .bo-home__hero, which is what lets the explanation below it scroll rather than being clipped.
  *
  * Light, and theme-aware, where this was once permanently dark with white text painted over media.
- * The hero was the only screen in BO that ignored the theme somebody had chosen.
+ * The hero was the only screen in Wesify that ignored the theme somebody had chosen.
  */
 .bo-home { min-height: 100vh; color: var(--text); background: var(--bg); }
 .bo-home__hero { min-height: 100vh; position: relative; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; background: var(--bg); }
@@ -54,8 +54,8 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 /**
  * The bottom strip, where a company with customers would put their logos.
  *
- * BO has none yet, and a row of borrowed or invented marks is the one thing on a landing page that
- * cannot be walked back. What is true instead is the trades BO already recognises before the first
+ * Wesify has none yet, and a row of borrowed or invented marks is the one thing on a landing page that
+ * cannot be walked back. What is true instead is the trades Wesify already recognises before the first
  * question — so that is what the strip carries, and the chevron that admits there is more below.
  */
 .bo-home__proof { position: relative; z-index: 1; border-top: 1px solid var(--border); background: var(--bg); }
@@ -77,9 +77,9 @@ button:disabled { cursor: not-allowed; opacity: .38; }
  * A bento grid of big cards, each carrying a picture of the thing it claims.
  *
  * Sized so the mockup, not the sentence, is what a person meets first: a wide tile and a narrow one,
- * then three even ones, then one full-width. Every shot inside is built from BO's own interface —
+ * then three even ones, then one full-width. Every shot inside is built from Wesify's own interface —
  * the real prompt box, a real interview turn, a real record row, the real workspace chrome — because
- * a picture of the product is the only illustration that cannot promise something BO does not do.
+ * a picture of the product is the only illustration that cannot promise something Wesify does not do.
  */
 .bo-bento { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
 .bo-bento__card { grid-column: span 4; }
@@ -144,7 +144,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-shot--modules span.off { color: var(--text-3); background: transparent; border: 1px dashed var(--border-strong); }
 .bo-shot--modules small { width: 100%; margin-top: 6px; color: var(--text-3); font-size: 11px; }
 
-/* 4. Records BO wrote from the interview, in the table the workspace really uses. */
+/* 4. Records Wesify wrote from the interview, in the table the workspace really uses. */
 .bo-shot__table { display: grid; }
 .bo-shot__table > div { padding: 11px 12px; display: grid; grid-template-columns: 1.4fr 1fr; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); color: var(--text); font-size: 12px; }
 .bo-shot__table > div.head { color: var(--text-3); font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
@@ -442,7 +442,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
    with the conversation on the whole page there is room to show somebody the shape of what is
    coming rather than only where they are. */
 
-/* The way in, when BO has accounts. */
+/* The way in, when Wesify has accounts. */
 .bo-signin { min-height: 100vh; position: relative; display: grid; place-items: center; padding: 24px; background: var(--bg); }
 .bo-signin form { width: 100%; max-width: 360px; display: grid; gap: 14px; padding: 30px 28px 26px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-alt); }
 .bo-signin .brand { justify-self: start; color: var(--text); }
@@ -492,7 +492,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-billing__on { margin-top: 8px; display: block; color: var(--text-3); font-size: 12px; font-weight: 600; }
 
 
-/* The one control for BO's whole light/dark theme, styled once and placed on every screen header. */
+/* The one control for Wesify's whole light/dark theme, styled once and placed on every screen header. */
 .bo-theme-toggle { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); background: transparent; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
 /* On the home page it sits on a plain field, so it keeps the same readable surface treatment as the prompt. */

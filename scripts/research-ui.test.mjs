@@ -18,7 +18,7 @@ const compiled = {
   archetype: { id: 'field-service', label: 'Field service', confidence: 0.9 },
   summary: 'Dispatch-led plumbing operation billing on completion.',
   findings: [
-    { conclusion: 'Technicians are dispatched to customer sites', because: 'Industry guidance on dispatch operations', implication: 'BO is connecting work orders, technicians, and the assets they service.', basis: 'researched', confidence: 0.9, sourceUrl: 'https://example.org/dispatch', capabilityIds: ['service.field-work', 'work.scheduling'] },
+    { conclusion: 'Technicians are dispatched to customer sites', because: 'Industry guidance on dispatch operations', implication: 'Wesify is connecting work orders, technicians, and the assets they service.', basis: 'researched', confidence: 0.9, sourceUrl: 'https://example.org/dispatch', capabilityIds: ['service.field-work', 'work.scheduling'] },
   ],
   capabilityIds: ['service.field-work', 'work.scheduling', 'procurement.purchasing'],
   excludedCapabilityIds: ['manufacturing.production'],
@@ -110,7 +110,7 @@ try {
   const status = await page.evaluate(async () => (await fetch('/api/research/status')).json())
   if (status.available !== true) throw new Error(`The frontier tier should be available in this run: ${JSON.stringify(status)}`)
 
-  // Every essential operating-model dimension is stated, so BO has enough to architect without asking.
+  // Every essential operating-model dimension is stated, so Wesify has enough to architect without asking.
   await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business. Technicians visit customer homes. Customers pay on completion. We have a small team.')
   await page.getByTestId('start-building').click()
@@ -122,7 +122,7 @@ try {
   /**
    * The interview ends on a decision, and the plan waits to be asked for.
    *
-   * Two buttons: build it, or read what BO is proposing first. The wall of reasoning that used to
+   * Two buttons: build it, or read what Wesify is proposing first. The wall of reasoning that used to
    * greet everyone made the last step of an interview feel like the start of a document, and buried
    * the button somebody had spent twelve questions earning.
    */
@@ -137,18 +137,18 @@ try {
   if (await page.getByTestId('research-sources').count()) throw new Error('The proposal still credits its sources.')
 
   /**
-   * What BO researched reaches the operator as a conclusion inside the plan, not as reasoning in the thread.
+   * What Wesify researched reaches the operator as a conclusion inside the plan, not as reasoning in the thread.
    *
    * This used to be proved against the journal, which no longer exists. The proposal is now the only
    * place research surfaces, so it is the only place worth guarding: the conclusions are shown, and
-   * where BO read them is not. Printing the URLs only invites an audit of one, and tells anyone
+   * where Wesify read them is not. Printing the URLs only invites an audit of one, and tells anyone
    * looking over the operator's shoulder exactly how the workspace was arrived at.
    */
   await proposal.getByText('Technicians are dispatched to customer sites', { exact: true }).waitFor({ timeout: 30_000 })
   const settled = await proposal.innerText()
-  if (/https?:\/\//.test(settled)) throw new Error(`BO is still showing where it read things: ${settled.match(/https?:\/\/\S+/)?.[0]}`)
-  if (settled.includes('Sources BO read')) throw new Error('The plan still lists the sources BO opened.')
-  if (/https?:\/\//.test(proposalText)) throw new Error('The proposal still carries a link to where BO researched.')
+  if (/https?:\/\//.test(settled)) throw new Error(`Wesify is still showing where it read things: ${settled.match(/https?:\/\/\S+/)?.[0]}`)
+  if (settled.includes('Sources Wesify read')) throw new Error('The plan still lists the sources Wesify opened.')
+  if (/https?:\/\//.test(proposalText)) throw new Error('The proposal still carries a link to where Wesify researched.')
   if (await page.evaluate(() => localStorage.getItem('bo-workspace-config') !== null)) throw new Error('Reading the proposal built a workspace nobody approved.')
 
   // It closes again, because an operator who has read it wants their two buttons back.

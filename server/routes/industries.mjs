@@ -10,7 +10,7 @@ import platformPatternIds from '../../src/data/platformPatternIds.json' with { t
  * Reading needs nothing — there is nothing in it belonging to any one company. Writing needs a real
  * workspace, because the count of companies is what decides whether an industry has spoken, and an
  * open write endpoint means anyone can invent five hundred companies and change what every genuine
- * one is given. It is the only defensible thing BO has, so it is the thing worth protecting first.
+ * one is given. It is the only defensible thing Wesify has, so it is the thing worth protecting first.
  *
  * The "already counted" marker lives with the company, not with the industry, so the shared store
  * still holds no trace of who contributed to it.

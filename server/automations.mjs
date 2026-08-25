@@ -7,8 +7,8 @@ import { writeJsonAtomic } from './atomicWrite.mjs'
 /**
  * Managed automations: when a record changes, tell another system.
  *
- * The only action is an outbound webhook, and that is deliberate. BO sending a POST somewhere cannot
- * damage the workspace it came from, while an automation that writes back into BO could — and
+ * The only action is an outbound webhook, and that is deliberate. Wesify sending a POST somewhere cannot
+ * damage the workspace it came from, while an automation that writes back into Wesify could — and
  * automations are written by an operator experimenting, not by someone who will test them first.
  */
 
@@ -28,7 +28,7 @@ export async function writeAutomationWorkspace(workspaceId, value) {
 }
 
 /**
- * Refuses a webhook target that would make BO into somebody's port scanner.
+ * Refuses a webhook target that would make Wesify into somebody's port scanner.
  *
  * A server that will POST to any URL it is given is a way to reach things only that server can
  * reach — a cloud metadata endpoint, a database admin page on a private network. HTTPS only, no
@@ -72,8 +72,8 @@ export async function executeManagedAutomation(workspaceId, automation, event, e
     try {
       const response = await fetch(connector.endpointUrl, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'user-agent': 'BO-Automation/1.0' },
-        body: JSON.stringify({ source: 'BO', workspaceId, automation: { id: automation.id, name: automation.name }, event: { type: event, entityId, occurredAt: startedAt }, record }),
+        headers: { 'content-type': 'application/json', 'user-agent': 'Wesify-Automation/1.0' },
+        body: JSON.stringify({ source: 'Wesify', workspaceId, automation: { id: automation.id, name: automation.name }, event: { type: event, entityId, occurredAt: startedAt }, record }),
         signal: AbortSignal.timeout(12_000),
       })
       run.responseStatus = response.status

@@ -40,7 +40,7 @@ const call = (route, { method = 'GET', token = '', workspaceId = '', body: paylo
 })
 
 try {
-  // 1. BO says whether it has accounts at all, so the interface never guesses.
+  // 1. Wesify says whether it has accounts at all, so the interface never guesses.
   assert.equal((await (await call('/api/health')).json()).accounts, true)
 
   // 2. Signing up returns a session token exactly once.

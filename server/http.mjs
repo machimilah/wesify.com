@@ -7,20 +7,20 @@
  */
 
 /**
- * What a browser is told about BO on every single response.
+ * What a browser is told about Wesify on every single response.
  *
  * Set in one place because the alternative is remembering them per route, which nobody does. Each
  * one closes something specific:
  *
  *   nosniff       a JSON error is never executed as script if it is fetched into the wrong place
- *   DENY          BO cannot be framed by a page collecting clicks on top of it
+ *   DENY          Wesify cannot be framed by a page collecting clicks on top of it
  *   no-referrer   a workspace URL never leaks to a site someone follows a link to
  *   no-store      workspace data stays out of shared caches
  *   HSTS          a later visit cannot be downgraded to http and read in transit. Browsers ignore
  *                 it over plain http, so it costs local development nothing
  *
  * The CSP is the widest of them and the one worth reading. `wasm-unsafe-eval`, `blob:` workers and
- * `https:` connections are all there for one reason: without an API key BO runs its interview on a
+ * `https:` connections are all there for one reason: without an API key Wesify runs its interview on a
  * model inside the browser, which is WebAssembly in a worker fetching weights from a CDN. Removing
  * any of those three silently breaks the no-key path. `unsafe-inline` covers only styles, which the
  * animation library sets on elements directly; script has no such allowance.
@@ -56,19 +56,19 @@ export function send(response, status, value, type = 'application/json; charset=
 /**
  * The request body as text, capped.
  *
- * The cap is the point: without it, a single request can ask BO to hold as much memory as the sender
+ * The cap is the point: without it, a single request can ask Wesify to hold as much memory as the sender
  * feels like sending. Stripe's webhook needs the raw text rather than the parsed object, because a
  * re-serialised body no longer matches the signature computed over the original bytes.
  */
 export async function rawBody(request) {
   /**
-   * A serverless platform may have read the body before BO ever sees the request.
+   * A serverless platform may have read the body before Wesify ever sees the request.
    *
    * Vercel's Node runtime parses JSON into `request.body` and leaves the stream drained, so iterating
    * it here returns nothing and every POST arrives looking empty — a build with no specification, an
    * interview turn with no conversation. Reading what was already parsed is the only way to see what
    * the caller actually sent. Stripe's webhook still needs the exact bytes it signed, so a platform
-   * that hands back a string is preferred over one that hands back an object BO would re-serialise.
+   * that hands back a string is preferred over one that hands back an object Wesify would re-serialise.
    */
   if (request.body !== undefined && request.body !== null) {
     if (typeof request.body === 'string') return request.body
@@ -81,7 +81,7 @@ export async function rawBody(request) {
   for await (const chunk of request) {
     size += chunk.length
     if (size > 2_000_000) {
-      // 413, not a bare throw. Without a status this surfaced as a 500 — BO reporting its own fault
+      // 413, not a bare throw. Without a status this surfaced as a 500 — Wesify reporting its own fault
       // for something the sender did — which also meant every oversized request woke the monitor.
       throw Object.assign(new Error('Request is too large.'), { status: 413 })
     }
@@ -119,5 +119,5 @@ export function originOf(request) {
   return `${protocol}://${host}`
 }
 
-/** The request id BO put on the response, for anything that wants to report against it. */
+/** The request id Wesify put on the response, for anything that wants to report against it. */
 export const requestIdOf = response => String(response.getHeader('x-bo-request-id') ?? '')
