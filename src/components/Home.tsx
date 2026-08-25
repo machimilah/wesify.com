@@ -27,8 +27,9 @@ const cardImage = (image: string) => ({ '--bo-card-image': `url("${image}")` }) 
  * landing page is gone and this is what `/` serves.
  *
  * That makes the front door and the workbench the same door, which is the honest arrangement for a
- * product whose entire pitch is the thing it builds from one sentence. A stranger types; Wesify asks who
- * they are afterwards, at the moment there is something worth signing in for.
+ * product whose entire pitch is the thing it builds from one sentence. A stranger can read all of it
+ * and scroll all of it; what needs an account is starting something, so "Get started" is where the
+ * asking happens.
  *
  * What follows below the fold is not the landing page come back. It answers the one question the
  * prompt itself cannot — "and then what happens?" — by showing it. Every card carries a picture of
@@ -86,6 +87,19 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
   const center = useRef<HTMLElement>(null)
   const promptStage = useRef<HTMLDivElement>(null)
   const [promptOpen, setPromptOpen] = useState(false)
+
+  /**
+   * The front door, and where it leads depends on whether Wesify knows who is knocking.
+   *
+   * Signed in, it opens the box: describe the company, and building starts. Signed out, it asks who
+   * they are first. The box used to open for everybody and the account was asked for at the moment
+   * they pressed build — which reads well and cost people their sentence at the worst moment, one
+   * keystroke from the thing they came to see.
+   *
+   * Below the fold is untouched by this. The page still argues for Wesify to anybody who scrolls; it is
+   * only the one button that starts something which now needs an account behind it.
+   */
+  const getStarted = () => (accounts && !signedIn ? onSignIn?.() : setPromptOpen(true))
   // Stable across re-renders so React never treats "the same handler" as a prop change on six cards.
   const card = useMemo(() => ({ onMouseMove: tiltCard, onMouseLeave: settleCard }), [])
 
@@ -137,7 +151,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
           <span>in one place.</span>
         </h1>
         {!promptOpen && <div className="bo-home__actions">
-          <button type="button" className="bo-home__get-started" onClick={() => setPromptOpen(true)} data-testid="get-started">
+          <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
             Get started <ArrowRight size={17}/>
           </button>
           <button type="button" className="bo-home__learn-more" onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })} data-testid="learn-more">

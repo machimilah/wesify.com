@@ -99,32 +99,28 @@ try {
   const stranger = await open()
 
   /**
-   * 1. The home page is public, and so is the box on it.
+   * 1. The page is public. Starting something is not.
    *
-   * There is one page now — `/`, and nothing else — and describing a company on it needs no
-   * account. What stays gated is the workspace that describing one produces, so the check is not
-   * "can a stranger see a prompt" but "can a stranger reach a Command Center".
+   * A stranger can read every word of the home page and scroll all of it — that is the entire
+   * argument for the product, and hiding it behind a sign-in would mean asking people to buy
+   * something they have not seen. What needs an account is the button that begins work, so this
+   * checks the two halves separately: the page renders, and the door asks who is knocking.
    */
   await stranger.getByTestId('get-started').waitFor({ timeout: 20_000 })
-  await stranger.getByTestId('get-started').click()
-  await stranger.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await stranger.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
+  await stranger.getByTestId('learn-more').waitFor({ timeout: 20_000 })
+  await stranger.getByTestId('get-started').click()
+  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  if (await stranger.getByTestId('company-brief').count()) throw new Error('A stranger was handed the prompt without being asked who they are.')
+
+  // 2. And the workspace itself stays gated however it is reached, not only through that button.
   await stranger.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
   await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await stranger.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
 
-  // 2. Describing a company asks who you are before building anything — and keeps what was typed, so
-  //    it is not asked for twice once they are back.
-  await stranger.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await stranger.getByTestId('get-started').click()
-  await stranger.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
-  await stranger.getByTestId('start-building').click()
-  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await stranger.getByTestId('build-thread').count()) throw new Error('Wesify started building for someone with no account.')
-
-  // 3. Signed in, the same sentence goes straight through to a finished Command Center. Everything
-  //    after this uses a real one on purpose: a workspace still mid-build proves nothing about
-  //    whether a second device can open one.
+  // 3. Signed in, the same button opens the box, and the sentence goes straight through to a
+  //    finished Command Center. Everything after this uses a real one on purpose: a workspace still
+  //    mid-build proves nothing about whether a second device can open one.
   const page = await open({ signedIn: true })
   await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
@@ -185,18 +181,20 @@ try {
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out reload of the workspace URL still showed the workspace.')
 
-  // The public home page still offers the way back in, and a legacy flat link is gated the same way.
+  // The public home page is readable again and offers the way back in — from the header, and from
+  // the start button, which asks the same question of somebody who has just lost their session as
+  // it does of somebody who never had one.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await page.getByTestId('get-started').click()
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   await page.getByTestId('open-signin').waitFor({ timeout: 20_000 })
+  await page.getByTestId('get-started').click()
+  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
 
   await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: one public home page whose prompt anyone can type in, the workspace still gated behind an account, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload and returning them to their workspace rather than the prompt, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
+  console.log('Sign-in test passed: a home page anybody can read, its start button asking who they are first, the workspace gated however it is reached, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload and returning them to their workspace rather than the prompt, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
 } finally {
   await browser.close()
   vite.kill()
