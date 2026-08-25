@@ -19,7 +19,7 @@ import { moduleLabel } from '../engine/shared'
 import { connectionFor, providerOf, type WorkspaceConnection } from '../engine/connections'
 import { recordIndustryObservations } from '../engine/industryClient'
 import { connectStripe, disconnectApp, loadConnectedApps, syncConnectedApp, syncSummary, type ConnectedApp } from '../engine/connectionClient'
-import { createAutomationConnector, createManagedAutomation, loadAutomationWorkspace, setManagedAutomationEnabled, testManagedAutomation, type AutomationWorkspace, type ConnectorType } from '../engine/automationClient'
+import { createAutomationConnector, createManagedAutomation, loadAutomationWorkspace, respondToAutomationApproval, setManagedAutomationEnabled, testManagedAutomation, type AutomationWorkspace, type ConnectorType } from '../engine/automationClient'
 import { humanize, readStorage } from '../engine/shared'
 import { faceFor, faceForNavigation } from './faces'
 import { Brand } from './Brand'
@@ -28,7 +28,7 @@ import { evaluateActionControl } from '../engine/governanceArchitecture'
 import { planWorkspaceMutation } from '../engine/mutationArchitecture'
 import { refreshWorkspaceIntelligence } from '../engine/operatingArchitecture'
 
-const emptyAutomationWorkspace: AutomationWorkspace = { connectors: [], automations: [], runs: [] }
+const emptyAutomationWorkspace: AutomationWorkspace = { connectors: [], automations: [], approvals: [], runs: [] }
 
 function routeId(config: WorkspaceConfiguration, basePath: string) {
   const id = window.location.pathname.slice(basePath.length).split('/').filter(Boolean)[0] ?? 'home'
@@ -696,18 +696,30 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
   }
   const loadLink = (automationId: string) => {
     const automation = workspace.automations.find(item => item.id === automationId)
-    if (!automation) return
+    if (!automation || automation.action.type !== 'webhook') return
     setLinkName(automation.name)
     setNodes([
-      { id: 'trigger', kind: 'trigger', entityId: automation.trigger.entityId, event: automation.trigger.event, x: 90, y: 170 },
+      { id: 'trigger', kind: 'trigger', entityId: automation.trigger.entityId, event: automation.trigger.event === 'updated' ? 'updated' : 'created', x: 90, y: 170 },
       { id: 'action', kind: 'action', connectorId: automation.action.connectorId, x: 560, y: 170 },
     ])
     canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
+  const generatedAutomations = workspace.automations.filter(item => item.origin === 'generated')
+  const savedLinks = workspace.automations.filter(item => item.action.type === 'webhook')
+  const pendingApprovals = workspace.approvals.filter(item => item.status === 'pending')
   return <>
     <div className="bo-schema-heading"><h1>Links</h1></div>
     {message ? <div className="bo-automation-message" role="status">{message}</div> : null}
     <ConnectedApps workspaceId={manifest?.workspaceId ?? ''} onSynced={refresh}/>
+    <section className="bo-generated-automations" data-testid="generated-automation-plan">
+      <header><div><small>BUILT FROM YOUR COMPANY INTERVIEW</small><h2>Wesify automation plan</h2></div><span>{generatedAutomations.filter(item => item.enabled).length} running</span></header>
+      <div>{generatedAutomations.map(item => <article key={item.id} data-testid="generated-automation">
+        <span className={`bo-automation-risk ${item.risk ?? 'low'}`}>{humanize(item.risk ?? 'low')} risk</span>
+        <div><strong>{item.name}</strong><small>{item.summary}</small><em>{item.rationale}</em><span>{item.steps?.join(' / ')}</span></div>
+        <aside><small>{item.action.type === 'approval' ? 'Stops for human approval' : 'Runs automatically'}</small><button disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => testManagedAutomation(manifest.workspaceId, item.id), 'Simulation passed. No business data was changed.')}>Simulate</button><button className={item.enabled ? 'enabled' : ''} disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => setManagedAutomationEnabled(manifest.workspaceId, item.id, !item.enabled), item.enabled ? 'Automation paused.' : 'Automation is running.')}>{item.enabled ? 'Running' : 'Paused'}</button></aside>
+      </article>)}{!generatedAutomations.length && <div className="bo-empty-state">No supported automation was inferred from this command center yet.</div>}</div>
+    </section>
+    {pendingApprovals.length ? <section className="bo-automation-approvals" data-testid="automation-approvals"><header><div><small>ACTION REQUIRED</small><h2>Pending approvals</h2></div><span>{pendingApprovals.length}</span></header>{pendingApprovals.map(item => <article key={item.id}><ShieldCheck size={16}/><div><strong>{item.automationName}</strong><small>{item.message}</small><span>{humanize(item.entityId)} / requested {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(item.requestedAt))}</span></div><button disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => respondToAutomationApproval(manifest.workspaceId, item.id, 'rejected'), 'Request rejected and recorded.')}>Reject</button><button className="approve" disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => respondToAutomationApproval(manifest.workspaceId, item.id, 'approved'), 'Request approved and recorded.')}>Approve</button></article>)}</section> : null}
     <section className="bo-links-toolbar"><label><span>LINK NAME</span><input value={linkName} onChange={input => setLinkName(input.target.value)} placeholder="Send new leads to Make" data-testid="link-name"/></label><button onClick={() => { setLinkName(''); setNodes([]); setMessage('') }}>New canvas</button><button className="primary" disabled={working || !manifest || !trigger || !action} onClick={() => void saveLink()}><Link2 size={15}/> Save Link</button></section>
     <section className="bo-links-studio">
       <aside>
@@ -734,7 +746,7 @@ function LinksView({ config, manifest, workspace, refresh }: { config: Workspace
         <button disabled={working || !manifest}><Plus size={15}/> Save connection</button>
       </form>
     </section>
-    <section className="bo-automation-list"><header><div><h2>Saved Links</h2></div><span>{workspace.automations.filter(item => item.enabled).length} active</span></header>{workspace.automations.map(item => <article key={item.id} data-testid="saved-link" data-trigger={item.trigger.entityId}><span className={item.enabled ? 'on' : ''}><Link2 size={15}/></span><div><strong>{item.name}</strong><small>{humanize(item.trigger.entityId)} · {item.trigger.event}</small></div><button disabled={working} onClick={() => loadLink(item.id)}>View graph</button><button disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => testManagedAutomation(manifest.workspaceId, item.id), 'Simulation passed. No external data was sent.')}>Simulate</button><button className={item.enabled ? 'enabled' : ''} disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => setManagedAutomationEnabled(manifest.workspaceId, item.id, !item.enabled), item.enabled ? 'Link paused.' : 'Link is live.')}>{item.enabled ? 'On' : 'Off'}</button></article>)}{!workspace.automations.length && <div className="bo-empty-state">No Links saved yet.</div>}</section>
+    <section className="bo-automation-list"><header><div><h2>Saved Links</h2></div><span>{savedLinks.filter(item => item.enabled).length} active</span></header>{savedLinks.map(item => <article key={item.id} data-testid="saved-link" data-trigger={item.trigger.entityId}><span className={item.enabled ? 'on' : ''}><Link2 size={15}/></span><div><strong>{item.name}</strong><small>{humanize(item.trigger.entityId)} / {item.trigger.event}</small></div><button disabled={working} onClick={() => loadLink(item.id)}>View graph</button><button disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => testManagedAutomation(manifest.workspaceId, item.id), 'Simulation passed. No external data was sent.')}>Simulate</button><button className={item.enabled ? 'enabled' : ''} disabled={working || !manifest} onClick={() => manifest && void withRefresh(() => setManagedAutomationEnabled(manifest.workspaceId, item.id, !item.enabled), item.enabled ? 'Link paused.' : 'Link is live.')}>{item.enabled ? 'On' : 'Off'}</button></article>)}{!savedLinks.length && <div className="bo-empty-state">No external Links saved yet.</div>}</section>
     {workspace.runs.length ? <section className="bo-automation-runs"><header><h2>Run history</h2></header>{workspace.runs.slice(0, 8).map(run => <div key={run.id}><span className={run.status}>{humanize(run.status)}</span><strong>{run.automationName}</strong><small>{humanize(run.event)} · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(run.finishedAt))}</small></div>)}</section> : null}
     <section className="bo-built-in-workflows"><header><h2>Built-in notifications</h2></header>{config.workflows.map(item => <div key={item.id}><strong>{item.name}</strong><span>{item.trigger.event}{item.trigger.field ? ` · ${item.trigger.field} = ${item.trigger.equals}` : ''}</span><small>{item.enabled ? 'Active' : 'Paused'}</small></div>)}{config.workflows.length === 0 && <div className="bo-empty-state">Ask Wesify to add a notification rule in the assistant.</div>}</section>
   </>

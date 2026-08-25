@@ -7,7 +7,7 @@ import {
   parseDiscoveryResponse,
   type BusinessState,
 } from './businessDiscovery'
-import { assessDiscoveryReadiness, LocalBusinessDiscoveryModel, resilientArchitecture } from './discoveryModel'
+import { assessDiscoveryReadiness, interviewQuestionProgress, LocalBusinessDiscoveryModel, MAX_INTERVIEW_QUESTIONS, resilientArchitecture } from './discoveryModel'
 
 const state: BusinessState = {
   companySummary: 'A construction company renovating offices', industry: 'Construction',
@@ -86,5 +86,10 @@ describe('AI business discovery contract', () => {
   it('refuses to invent a question when no model can be reached', async () => {
     const session = createDiscoverySession('workspace-1234', 'I run a marketing agency.')
     await expect(new LocalBusinessDiscoveryModel().generate({ session, mode: 'DISCOVER' })).rejects.toThrow()
+  })
+
+  it('makes the final allowed question exactly 100% complete', () => {
+    expect(interviewQuestionProgress(1)).toEqual({ current: 2, total: 15, percent: 13 })
+    expect(interviewQuestionProgress(MAX_INTERVIEW_QUESTIONS)).toEqual({ current: 15, total: 15, percent: 100 })
   })
 })

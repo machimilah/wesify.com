@@ -30,12 +30,12 @@ const entities = [
   entity('suppliers', 'Supplier', 'Suppliers', 'inventory', [text('name', 'Supplier', true), text('contact', 'Contact')]),
   entity('materials', 'Material', 'Materials', 'inventory', [text('name', 'Material', true), relation('supplier', 'Supplier', 'suppliers'), { id: 'stock', label: 'Stock', type: 'number' }]),
   entity('invoices', 'Invoice', 'Invoices', 'finance', [text('number', 'Invoice number', true), relation('customer', 'Client', 'customers'), { id: 'amount', label: 'Amount', type: 'currency' }, status('Draft', 'Sent', 'Paid', 'Overdue')]),
-  entity('expenses', 'Expense', 'Expenses', 'finance', [text('description', 'Description', true), { id: 'amount', label: 'Amount', type: 'currency' }]),
+  entity('expenses', 'Expense', 'Expenses', 'finance', [text('description', 'Description', true), { id: 'amount', label: 'Amount', type: 'currency' }, status('Draft', 'Submitted', 'Approved', 'Paid', 'Rejected')]),
   entity('project-costs', 'Project cost', 'Project Costs', 'finance', [text('description', 'Description', true), relation('project', 'Project', 'projects'), { id: 'amount', label: 'Amount', type: 'currency' }]),
 ]
 const views = entities.map(item => ({ id: `${item.id}-table`, label: item.pluralLabel, entityId: item.id, type: item.id === 'projects' ? 'kanban' : 'table', groupBy: item.id === 'projects' ? 'status' : undefined, columns: item.fields.slice(0, 4).map(field => field.id) }))
 const navigation = [{ id: 'home', label: 'Dashboard', kind: 'home' }, ...views.map(view => ({ id: view.entityId, label: view.label, kind: 'entity', viewId: view.id, module: entities.find(item => item.id === view.entityId).module })), { id: 'analytics', label: 'Analytics', kind: 'analytics' }, { id: 'links', label: 'Links', kind: 'links' }, { id: 'assistant', label: 'AI Assistant', kind: 'assistant' }, { id: 'settings', label: 'Settings', kind: 'settings' }]
-const specification = { version: 1, id: workspaceId, profile: { companyName: 'BuildCo', description: 'Small construction company with seven employees, suppliers, and milestone invoices.', archetype: 'construction', industry: 'Construction Company', businessModel: 'Projects', revenueModel: 'Milestone invoices', teamStructure: 'Seven employees', customers: 'Clients', productsAndServices: 'Construction projects', operatingProcesses: ['Plan', 'Build', 'Inspect', 'Handover'], suppliers: 'Material suppliers', locations: '', goals: [], terminology: {} }, modules: ['customers', 'projects', 'team', 'inventory', 'finance'], capabilities: ['work.projects', 'finance.invoicing'], entities, views, navigation, metrics: [], workflows: [], roles: [{ id: 'owner', label: 'Owner', permissions: ['view', 'create', 'edit', 'delete', 'approve', 'financial', 'people', 'admin'] }] }
+const specification = { version: 1, id: workspaceId, profile: { companyName: 'BuildCo', description: 'Small construction company with seven employees, suppliers, and milestone invoices.', archetype: 'construction', industry: 'Construction Company', businessModel: 'Projects', revenueModel: 'Milestone invoices', teamStructure: 'Seven employees', customers: 'Clients', productsAndServices: 'Construction projects', operatingProcesses: ['Plan', 'Build', 'Inspect', 'Handover'], suppliers: 'Material suppliers', locations: '', goals: [], terminology: {} }, modules: ['customers', 'projects', 'team', 'inventory', 'finance'], capabilities: ['work.projects', 'finance.invoicing', 'finance.expenses'], entities, views, navigation, metrics: [], workflows: [], roles: [{ id: 'owner', label: 'Owner', permissions: ['view', 'create', 'edit', 'delete', 'approve', 'financial', 'people', 'admin'] }] }
 
 async function api(pathname, init = {}) {
   const response = await fetch(`${base}${pathname}`, { ...init, headers: { 'x-bo-workspace-id': workspaceId, 'x-bo-access-token': accessToken, 'x-bo-role': 'owner', ...(init.body ? { 'content-type': 'application/json' } : {}) } })
@@ -52,6 +52,8 @@ try {
   if (first.version !== 1 || first.buildStatus !== 'HEALTHY') throw new Error('Initial generated project was not healthy.')
   if (duplicate.version !== 1 || duplicate.buildStatus !== 'HEALTHY') throw new Error('Concurrent initial build was not deduplicated.')
   if (!first.specializedComponents.some(item => item.id === 'receivables')) throw new Error('Capability-specific runtime component was not generated.')
+  const generatedPlan = await api(`/api/projects/${workspaceId}/automations`)
+  if (!generatedPlan.automations.some(item => item.planKey === 'collections-escalation' && item.enabled) || !generatedPlan.automations.some(item => item.planKey === 'expense-approval' && item.enabled)) throw new Error('Initial build did not start its inferred automation plan.')
   await stat(path.join(generatedRoot, workspaceId, 'versions', 'v1', 'runtime.mjs'))
   await stat(path.join(generatedRoot, workspaceId, 'versions', 'v1', 'database', 'schema.json'))
   await stat(path.join(generatedRoot, workspaceId, 'versions', 'v1', 'services', 'projects.mjs'))
@@ -83,6 +85,19 @@ try {
   const readNotification = await api(`/api/projects/${workspaceId}/notifications/${notifications[0].id}`, { method: 'PATCH', body: JSON.stringify({ read: true }) })
   if (!readNotification.read) throw new Error('Notification acknowledgement failed.')
 
+  const invoice = await api(`/api/projects/${workspaceId}/records/invoices`, { method: 'POST', body: JSON.stringify({ number: 'INV-100', amount: 2500, status: 'Sent' }) })
+  await api(`/api/projects/${workspaceId}/records/invoices/${invoice.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'Overdue' }) })
+  const automatedNotifications = await api(`/api/projects/${workspaceId}/notifications`)
+  if (!automatedNotifications.some(item => item.automationId === 'generated-collections-escalation')) throw new Error('Generated receivables automation did not execute its condition-aware notification.')
+
+  const expense = await api(`/api/projects/${workspaceId}/records/expenses`, { method: 'POST', body: JSON.stringify({ description: 'Site materials', amount: 650, status: 'Draft' }) })
+  await api(`/api/projects/${workspaceId}/records/expenses/${expense.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'Submitted' }) })
+  const approvalWorkspace = await api(`/api/projects/${workspaceId}/automations`)
+  const pendingApproval = approvalWorkspace.approvals.find(item => item.automationId === 'generated-expense-approval' && item.recordId === expense.id && item.status === 'pending')
+  if (!pendingApproval) throw new Error('Generated expense automation did not pause for human approval.')
+  const decidedApproval = await api(`/api/projects/${workspaceId}/automations/approvals/${pendingApproval.id}`, { method: 'PATCH', body: JSON.stringify({ decision: 'approved', comment: 'Within project budget.' }) })
+  if (decidedApproval.status !== 'approved' || decidedApproval.comment !== 'Within project budget.') throw new Error('Automation approval decision was not persisted.')
+
   const connector = await api(`/api/projects/${workspaceId}/connectors`, { method: 'POST', body: JSON.stringify({ name: 'Make operations', type: 'make-webhook', endpointUrl: 'https://hook.eu2.make.com/bo-test-endpoint' }) })
   if (connector.endpointHost !== 'hook.eu2.make.com' || connector.endpointUrl) throw new Error('Webhook connector was not created with its secret URL redacted.')
   const automation = await api(`/api/projects/${workspaceId}/automations`, { method: 'POST', body: JSON.stringify({ name: 'Send new clients to Make', entityId: 'customers', event: 'created', connectorId: connector.id }) })
@@ -98,10 +113,10 @@ try {
   const denied = await fetch(`${base}/api/projects/${workspaceId}/automations`, { headers: { 'x-bo-workspace-id': workspaceId, 'x-bo-access-token': 'wrong_workspace_access_token_123456789', 'x-bo-role': 'owner' } })
   if (denied.status !== 403) throw new Error('A different workspace session token was not rejected.')
   const audit = await api(`/api/projects/${workspaceId}/audit`)
-  if (!audit.some(item => item.event === 'record.updated') || !audit.some(item => item.event === 'notification.updated') || !audit.some(item => item.event === 'connector.created') || !audit.some(item => item.event === 'automation.tested')) throw new Error('Security audit history failed.')
+  if (!audit.some(item => item.event === 'record.updated') || !audit.some(item => item.event === 'notification.updated') || !audit.some(item => item.event === 'connector.created') || !audit.some(item => item.event === 'automation.tested') || !audit.some(item => item.event === 'automation.approval.approved')) throw new Error('Security audit history failed.')
   const history = await api(`/api/projects/${workspaceId}/versions`)
   if (history.length !== 3) throw new Error('Generated project version history failed.')
-  console.log('Project service test passed: workspace access, code generation, CRUD, workflow alerts, webhook connectors, automation simulation, audit history, versioned changes, and cross-module query.')
+  console.log('Project service test passed: generated automation plans, approval gates, workspace access, code generation, CRUD, workflow alerts, webhook connectors, audit history, versioned changes, and cross-module query.')
 } finally {
   server.kill()
 }

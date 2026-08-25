@@ -473,7 +473,7 @@ def page_value(doc):
     add_callout(
         doc,
         "Core promise",
-        "Business managing in one place.",
+        "You prompt, I build",
         "BO is not trying to recreate every specialist system. It is the operating layer that decides what belongs in the company, builds what is missing, and connects what should remain elsewhere.",
     )
 

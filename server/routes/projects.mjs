@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { audit, authorize, readAudit, tenant } from '../access.mjs'
-import { executeManagedAutomation, publicAutomationWorkspace, readAutomationWorkspace, safeWebhookUrl, triggerManagedAutomations, writeAutomationWorkspace } from '../automations.mjs'
+import { ensureGeneratedAutomations, executeManagedAutomation, publicAutomationWorkspace, readAutomationWorkspace, safeWebhookUrl, triggerManagedAutomations, writeAutomationWorkspace } from '../automations.mjs'
 import { recordRebuild, requireRebuildRoom, requireRecordRoom } from '../billing.mjs'
 import { databaseAvailable } from '../db.mjs'
 import { body, send } from '../http.mjs'
@@ -104,6 +104,7 @@ export async function buildRoutes(request, response, segments) {
     const project = await buildProject({ workspaceId: input.workspaceId, specification: input.specification, changeDescription: input.changeDescription, changeType: 'initial' })
     await audit(input.workspaceId, 'project.created', request, { version: project.version })
     await openWorkspaceWithWhatTheySaid(input.workspaceId, project, request)
+    await ensureGeneratedAutomations(input.workspaceId, project.specification)
     return project
   })()
   initialBuilds.set(input.workspaceId, build)
@@ -206,7 +207,7 @@ export async function projectRoutes(request, response, segments, url) {
   if (segments[3] === 'automations') {
     if (request.method === 'GET' && segments.length === 4) {
       authorize(manifest, request, 'view')
-      return send(response, 200, publicAutomationWorkspace(await readAutomationWorkspace(workspaceId)))
+      return send(response, 200, publicAutomationWorkspace(await ensureGeneratedAutomations(workspaceId, manifest.specification)))
     }
     if (request.method === 'POST' && segments.length === 4) {
       authorize(manifest, request, 'admin')
@@ -224,6 +225,24 @@ export async function projectRoutes(request, response, segments, url) {
     }
 
     const state = await readAutomationWorkspace(workspaceId)
+
+    if (request.method === 'PATCH' && segments[4] === 'approvals' && segments[5]) {
+      authorize(manifest, request, 'approve')
+      const input = await body(request)
+      if (!['approved', 'rejected'].includes(input.decision)) return send(response, 400, { error: 'Choose approve or reject.' })
+      const approval = state.approvals.find(item => item.id === segments[5])
+      if (!approval) return send(response, 404, { error: 'Approval request not found.' })
+      if (approval.status !== 'pending') return send(response, 409, { error: 'This approval request has already been decided.' })
+      const updated = { ...approval, status: input.decision, comment: String(input.comment ?? '').trim().slice(0, 500), decidedAt: new Date().toISOString() }
+      await writeAutomationWorkspace(workspaceId, { ...state, approvals: state.approvals.map(item => item.id === updated.id ? updated : item) })
+      const data = await readWorkspaceData(workspaceId)
+      const notifications = data._notifications ?? []
+      notifications.push({ id: randomUUID(), message: `${approval.automationName}: ${input.decision}.`, entityId: approval.entityId, recordId: approval.recordId, automationId: approval.automationId, createdAt: updated.decidedAt, read: false })
+      await writeWorkspaceData(workspaceId, { ...data, _notifications: notifications })
+      await audit(workspaceId, `automation.approval.${input.decision}`, request, { approvalId: approval.id, automationId: approval.automationId, recordId: approval.recordId })
+      return send(response, 200, updated)
+    }
+
     const automation = state.automations.find(item => item.id === segments[4])
     if (!automation) return send(response, 404, { error: 'Automation not found.' })
 

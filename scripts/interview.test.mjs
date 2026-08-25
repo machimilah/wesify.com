@@ -165,8 +165,8 @@ try {
   const progress = page.getByTestId('question-progress')
   await progress.waitFor()
   const progressText = await progress.innerText()
-  if (!/Question 2/i.test(progressText)) throw new Error(`The interview does not say how far in it is: ${progressText}`)
-  if (!/\d+% understood/.test(progressText)) throw new Error(`The interview shows no measure of progress: ${progressText}`)
+  if (!/Question 2 of 15/i.test(progressText)) throw new Error(`The interview does not say how far in it is: ${progressText}`)
+  if (!/13% complete/.test(progressText)) throw new Error(`The interview shows no question-based measure of progress: ${progressText}`)
 
   // It reads as a conversation: what Wesify said, then the question, then the box you answer in. The
   // question being anywhere but last is what made the old build feel like a form with a log stapled

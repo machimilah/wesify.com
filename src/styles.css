@@ -1,7 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap');
-
-:root { font-family: 'Ubuntu', Arial, sans-serif; color: var(--text); background: var(--bg); font-synthesis: none; text-rendering: optimizeLegibility; }
+:root { --bo-font-family: 'Century Gothic', CenturyGothic, AppleGothic, 'URW Gothic L', Arial, sans-serif; font-family: var(--bo-font-family); color: var(--text); background: var(--bg); font-synthesis: none; text-rendering: optimizeLegibility; }
 * { box-sizing: border-box; }
+#root, #root *, #root *::before, #root *::after { font-family: var(--bo-font-family) !important; }
 html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
 button, textarea, input { font: inherit; }
 button { cursor: pointer; }
@@ -25,10 +24,17 @@ button:disabled { cursor: not-allowed; opacity: .38; }
  * Light, and theme-aware, where this was once permanently dark with white text painted over media.
  * The hero was the only screen in Wesify that ignored the theme somebody had chosen.
  */
-.bo-home { min-height: 100vh; color: var(--text); background: var(--bg); }
-.bo-home__hero { min-height: 100vh; position: relative; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; background: var(--bg); }
+.bo-home { min-height: 100vh; overflow-x: clip; color: var(--text); background: var(--bg); }
+.bo-home__hero { min-height: 100vh; position: relative; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; background: #212121; }
+.bo-home__molten { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; overflow: hidden; pointer-events: none; }
+.bo-home__molten-frame { width: 100%; height: 100%; position: relative; }
+.molten-metal-container { width: 100%; height: 100%; position: relative; overflow: hidden; }
+.molten-metal-container canvas { width: 100%; height: 100%; display: block; }
 
 .bo-home__hero > header { width: min(1180px, calc(100% - 48px)); height: 82px; position: relative; z-index: 2; margin: 0 auto; display: flex; align-items: center; }
+.bo-home__hero .brand { color: #ffffff; }
+.bo-home__hero .brand em { color: #a8ada9; }
+.bo-home__hero .brand-logo { filter: invert(1); }
 .bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 20px; display: inline-flex; align-items: center; border: 0; border-radius: 99px; color: white; background: var(--solid-fill); font-size: 13px; font-weight: 600; }
 .bo-home__signin:hover { background: var(--accent-strong); }
 /* The way back into a workspace from the home page, which no longer redirects there on its own.
@@ -42,18 +48,27 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__hero h1 { max-width: 880px; margin: 0 auto 34px; font: 600 clamp(34px, 4.4vw, 58px)/1.08 'Ubuntu', sans-serif; letter-spacing: -.045em; }
 /* Two tones, one size: the claim, then the sentence that explains it, exactly as a person would say
    both in a row without pausing to change voice. */
-.bo-home__hero h1 span { color: var(--text); }
-.bo-home__hero h1 span + span { color: var(--text-2); }
-.bo-home__actions { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-.bo-home__actions button { min-height: 46px; padding: 0 19px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-.bo-home__get-started { border: 1px solid var(--solid-fill); color: white; background: var(--solid-fill); }
-.bo-home__get-started:hover { border-color: var(--accent-strong); background: var(--accent-strong); }
-.bo-home__learn-more { border: 1px solid var(--border-strong); color: var(--text); background: var(--surface-2); }
-.bo-home__learn-more:hover { border-color: var(--text-2); background: var(--surface-hover); }
-.bo-home__prompt-stage { width: 100%; }
+.bo-home__hero h1 span { color: #ffffff; }
+.bo-home__hero h1 span + span { color: #aeb4af; }
+.bo-home__actions { min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; }
+.bo-home__get-started-wrap .glass-surface__content { padding: 0; }
+.bo-home__get-started-wrap .glass-surface:hover { opacity: .88; }
+.bo-home__get-started { width: 100%; height: 100%; padding: 0 19px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: inherit; color: #ffffff; background: transparent; font-size: 13px; font-weight: 600; text-shadow: 0 1px 5px rgba(0,0,0,.42); }
+.bo-home__get-started:focus-visible { outline: 2px solid #ffffff; outline-offset: -3px; }
+.bo-home__learn-more { min-height: 28px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 0; color: rgba(255,255,255,.78); background: transparent; font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-color: rgba(255,255,255,.34); text-underline-offset: 4px; }
+.bo-home__learn-more:hover { color: #ffffff; text-decoration-color: rgba(255,255,255,.8); }
+.bo-home__learn-more:focus-visible { outline: 2px solid #ffffff; outline-offset: 4px; }
+.bo-home__prompt-stage { width: 100%; animation: bo-home-prompt-in .42s ease-out both; }
+.bo-home__prompt-loading { width: min(620px, 100%); min-height: 126px; margin: 0 auto; border: 1px solid rgba(255,255,255,.22); border-radius: 18px; background: rgba(255,255,255,.08); }
+@keyframes bo-home-prompt-in { from { opacity: 0; transform: translateY(14px); } }
 .bo-home__center .bo-prompt { max-width: 620px; margin-right: auto; margin-left: auto; }
 .bo-prompt__guidance { max-width: 620px; margin: 14px auto 0; color: var(--text-3); font-size: 13px; line-height: 1.5; text-align: center; }
 .bo-home__center > small { display: block; margin-top: 13px; color: var(--text-2); font-size: 11px; }
+.bo-home__trusted { padding-top: clamp(34px, 4vw, 48px); color: var(--text); background: var(--bg); border-top: 1px solid var(--border); }
+.bo-home__trusted h2 { margin: 0 auto 24px; text-align: center; font: 600 clamp(26px, 3.6vw, 38px)/1.15 'Ubuntu', sans-serif; letter-spacing: -.03em; }
+.bo-home__logo-loop { min-height: 104px; position: relative; z-index: 1; display: flex; align-items: center; overflow: hidden; color: var(--text-2); background: var(--bg); }
+.bo-home__logo-loop .logoloop { width: 100%; }
+.bo-home__logo-placeholder { display: inline-block; color: var(--text-2); font-size: 16px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 
 /**
  * The bottom strip, where a company with customers would put their logos.
@@ -77,6 +92,13 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__explain-intro { max-width: 640px; margin: 0 auto 52px; text-align: center; }
 .bo-home__explain-intro small { display: block; color: var(--text-3); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
 .bo-home__explain-intro h2 { margin: 10px 0 0; font: 600 clamp(26px, 3.6vw, 38px)/1.15 'Ubuntu', sans-serif; letter-spacing: -.03em; color: var(--text); }
+.bo-home__footer { min-height: 320px; position: relative; overflow: hidden; display: flex; align-items: flex-end; color: #ffffff; background: #101110; border-top: 1px solid rgba(255,255,255,.1); }
+.bo-home__footer-aurora { position: absolute; inset: 0; }
+.bo-home__footer-content { width: min(1180px, calc(100% - 48px)); min-height: 88px; position: relative; z-index: 1; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid rgba(255,255,255,.2); }
+.bo-home__footer .brand { color: #ffffff; }
+.bo-home__footer .brand em { color: #b6bbb7; }
+.bo-home__footer .brand-logo { filter: invert(1); }
+.bo-home__footer small { color: #d0d2d0; font-size: 11px; }
 /**
  * A bento grid of big cards, each carrying a picture of the thing it claims.
  *
@@ -91,22 +113,13 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-bento__card--full { grid-column: span 12; }
 @media (max-width: 1080px) { .bo-bento__card, .bo-bento__card--wide { grid-column: span 6; } }
 
-/**
- * The spotlight and the tilt are two different mechanisms sharing one pointer position.
- *
- * The glow is CSS alone: --mx/--my are pixel offsets Home.tsx writes on pointer move, read by a
- * radial gradient on ::before that is invisible until :hover, so a card that has never been pointed
- * at paints nothing extra. The tilt is a real transform, set directly in JS because CSS has no way
- * to compute an angle from a cursor position — but only on a screen that actually has a mouse:
- * Home.tsx checks (hover: hover) and (pointer: fine) and reduced-motion before ever setting it, so a
- * touch device gets the glow with no transform fighting its own scroll.
- */
-.bo-bento__card { --bo-card-veil: rgba(255,255,255,.42); --bo-card-frame: rgba(255,255,255,.82); min-height: 520px; position: relative; overflow: hidden; padding: 34px 34px 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; background-color: var(--surface); background-image: linear-gradient(var(--bo-card-veil), var(--bo-card-veil)), var(--bo-card-image); background-position: center; background-size: cover; transition: transform .14s ease-out, border-color .2s ease, box-shadow .2s ease; }
+.bo-bento__card { --bo-card-veil: rgba(255,255,255,.42); --bo-card-frame: rgba(255,255,255,.82); min-height: 520px; transition: border-color .2s ease, box-shadow .2s ease; }
 :root[data-theme='dark'] .bo-bento__card { --bo-card-veil: rgba(21,23,21,.76); --bo-card-frame: rgba(28,32,29,.88); }
 .bo-bento__card:hover { border-color: var(--border-strong); box-shadow: 0 26px 60px rgba(25,29,26,.12); }
-.bo-bento__card::before { content: ''; position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none; transition: opacity .3s ease; background: radial-gradient(380px circle at var(--mx, 50%) var(--my, 50%), var(--accent-soft), transparent 72%); }
-.bo-bento__card:hover::before { opacity: 1; }
-.bo-bento__card > * { position: relative; z-index: 1; }
+.bo-bento__card .border-glow-inner { padding: 34px 34px 0; overflow: hidden; background-color: var(--surface); }
+.bo-bento__card .border-glow-inner::before { position: absolute; z-index: 1; inset: 0; background: var(--bo-card-veil); pointer-events: none; content: ''; }
+.bo-bento__card-image { width: 100%; height: 100%; position: absolute; z-index: 0; inset: 0; display: block; object-fit: cover; }
+.bo-bento__card .border-glow-inner > :not(.bo-bento__card-image) { position: relative; z-index: 2; }
 .bo-bento__card h3 { max-width: 22ch; margin: 0; color: var(--text); font: 600 clamp(20px, 1.9vw, 26px)/1.2 'Ubuntu', sans-serif; letter-spacing: -.03em; }
 .bo-bento__card > p { max-width: 46ch; margin: 12px 0 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
 .bo-bento__card--full h3 { max-width: none; }
@@ -361,11 +374,12 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 }
 
 @media (max-width: 700px) {
-  .bo-home__hero > header { height: 68px; }.bo-home__hero h1 { max-width: none; font-size: 34px; }.bo-home__actions { flex-wrap: wrap; }.bo-home__actions button { min-width: 140px; }.bo-prompt { padding: 15px 58px 15px 16px; border-radius: 18px; }.bo-prompt textarea { font-size: 15px; }.bo-prompt__example { top: 15px; right: 58px; left: 16px; font-size: 15px; }
+  .bo-home__hero > header { height: 68px; }.bo-home__hero h1 { max-width: none; font-size: 34px; }.bo-prompt { padding: 15px 58px 15px 16px; border-radius: 18px; }.bo-prompt textarea { font-size: 15px; }.bo-prompt__example { top: 15px; right: 58px; left: 16px; font-size: 15px; }
   .bo-home__proof > div { min-height: 0; gap: 10px 18px; }
   .bo-home__proof span { font-size: 13px; }
   /* One card per row, and shorter: a 430px tile is most of a phone screen on its own. */
-  .bo-bento__card, .bo-bento__card--wide { grid-column: span 12; min-height: 430px; padding: 26px 24px 0; }
+  .bo-bento__card, .bo-bento__card--wide { grid-column: span 12; min-height: 430px; }
+  .bo-bento__card .border-glow-inner { padding: 26px 24px 0; }
   .bo-shot--workspace .bo-shot__frame { grid-template-columns: 1fr; }
   .bo-shot__rail { display: none; }
   .bo-shot__kpis { grid-template-columns: 1fr 1fr; }
@@ -376,7 +390,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   .bo-topbar-actions > select { max-width: 110px; }.bo-command-kpis { grid-template-columns: 1fr; }.bo-action-create { grid-template-columns: 90px 1fr 36px; }
 }
 
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }.bo-prompt__example i { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }.bo-prompt__example i { display: none; }.bo-home__prompt-stage { animation: none; } }
 
 .bo-question-progress { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
 .bo-question-progress b { flex: 0 0 auto; color: var(--border-strong); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -499,7 +513,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
 /* On the home page it sits on a plain field, so it keeps the same readable surface treatment as the prompt. */
 .bo-home__account { display: flex; align-items: center; }
-.bo-home__theme-toggle { margin-left: auto; border-color: var(--border-strong); background: var(--surface-2); }
+.bo-home__theme-toggle { margin-left: auto; transform: translateX(-8px); border-color: var(--border-strong); background: var(--surface-2); }
 .bo-signin__theme-toggle { position: absolute; top: 22px; right: 22px; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bo-dashboard__sidebar-head .bo-theme-toggle { border-color: var(--border); color: var(--text-2); }

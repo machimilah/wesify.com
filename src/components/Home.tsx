@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ArrowRight, ArrowUp, ChevronDown, Lock } from 'lucide-react'
-import { useGSAP } from '@gsap/react'
-import gsap from 'gsap'
 import { capabilityIds } from '../engine/capabilityCatalog'
 import { prepareBusinessDiscoveryModel } from '../engine/discoveryModel'
 import { Brand } from './Brand'
-import { CompanyPrompt } from './CompanyPrompt'
 import { AccountButton } from './AccountButton'
 import { ThemeToggle } from './ThemeToggle'
+import { MoltenMetal } from './MoltenMetal'
+import Aurora from './Aurora'
+import GlassSurface from './GlassSurface'
+import LogoLoop from './LogoLoop'
+import BorderGlow from './BorderGlow'
+import GradualBlur from './GradualBlur'
 import wave04 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_04.png'
 import wave05 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_05.png'
 import wave06 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_06.png'
@@ -15,9 +18,57 @@ import wave07 from '../../metallic_wave_webpage_images/varied_positions_and_angl
 import wave08 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_08.png'
 import wave09 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_09.png'
 
-gsap.registerPlugin(useGSAP)
+const CompanyPrompt = lazy(() => import('./CompanyPrompt').then(module => ({ default: module.CompanyPrompt })))
 
-const cardImage = (image: string) => ({ '--bo-card-image': `url("${image}")` }) as React.CSSProperties
+function LazyCardImage({ src }: { src: string }) {
+  const imageRef = useRef<HTMLImageElement>(null)
+  const [shouldLoad, setShouldLoad] = useState(false)
+
+  useEffect(() => {
+    const image = imageRef.current
+    if (!image) return
+    if (!('IntersectionObserver' in window)) {
+      setShouldLoad(true)
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      setShouldLoad(true)
+      observer.disconnect()
+    }, { rootMargin: '250px' })
+    observer.observe(image)
+    return () => observer.disconnect()
+  }, [])
+
+  return <img
+    ref={imageRef}
+    className="bo-bento__card-image"
+    src={shouldLoad ? src : undefined}
+    alt=""
+    loading="lazy"
+    decoding="async"
+    fetchPriority="low"
+  />
+}
+
+const trustedLogoPlaceholders = [
+  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
+  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
+  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
+  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
+]
+
+const howItWorksGlow = {
+  edgeSensitivity: 30,
+  glowColor: '40 80 80',
+  backgroundColor: '#120F17',
+  borderRadius: 28,
+  glowRadius: 40,
+  glowIntensity: 1.0,
+  coneSpread: 25,
+  animated: false,
+  colors: ['#c084fc', '#f472b6', '#38bdf8'],
+}
 
 /**
  * Wesify's home page, signed in or not.
@@ -37,45 +88,6 @@ const cardImage = (image: string) => ({ '--bo-card-image': `url("${image}")` }) 
  * is the only illustration that cannot promise something the product does not do.
  */
 
-/**
- * How far a card tilts toward the cursor, and the ceiling below which Wesify does not try.
- *
- * `(hover: hover) and (pointer: fine)` is a mouse — a trackpad or a real mouse, not a finger — and
- * reduced-motion is a person who has said, at the operating-system level, that they do not want
- * things moving on their behalf. Read once, at module load: neither answer changes during a session,
- * and re-asking on every pointer move would be the one part of this effect actually worth avoiding
- * for performance.
- */
-const MAX_TILT_DEGREES = 4
-const tiltEnabled = typeof window !== 'undefined'
-  && window.matchMedia('(hover: hover) and (pointer: fine)').matches
-  && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-/**
- * One pointer position driving two effects.
- *
- * The glow is CSS alone — `--mx`/`--my` are read by a radial gradient that stays invisible until
- * `:hover`, so this is the only thing that needs to run. The tilt is a real transform, set here
- * because CSS cannot turn a cursor position into an angle; it only runs where `tiltEnabled` says a
- * mouse and a person willing to see motion are both present.
- */
-function tiltCard(event: React.MouseEvent<HTMLElement>) {
-  const card = event.currentTarget
-  const rect = card.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-  card.style.setProperty('--mx', `${x}px`)
-  card.style.setProperty('--my', `${y}px`)
-  if (!tiltEnabled) return
-  const rotateY = ((x / rect.width) - 0.5) * MAX_TILT_DEGREES * 2
-  const rotateX = ((y / rect.height) - 0.5) * -MAX_TILT_DEGREES * 2
-  card.style.transform = `perspective(1200px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg)`
-}
-
-function settleCard(event: React.MouseEvent<HTMLElement>) {
-  event.currentTarget.style.transform = ''
-}
-
 export function Home({ initialValue = '', onSubmit, signedIn = false, accounts = false, onSignIn, onOpenWorkspace }: {
   initialValue?: string
   onSubmit: (brief: string) => void
@@ -86,8 +98,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
   onOpenWorkspace?: () => void
 }) {
   const explain = useRef<HTMLElement>(null)
-  const center = useRef<HTMLElement>(null)
-  const promptStage = useRef<HTMLDivElement>(null)
+  const modelWarmStarted = useRef(false)
   const [promptOpen, setPromptOpen] = useState(false)
 
   /**
@@ -101,35 +112,43 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
    * Below the fold is untouched by this. The page still argues for Wesify to anybody who scrolls; it is
    * only the one button that starts something which now needs an account behind it.
    */
-  const getStarted = () => (accounts && !signedIn ? onSignIn?.() : setPromptOpen(true))
-  // Stable across re-renders so React never treats "the same handler" as a prop change on six cards.
-  const card = useMemo(() => ({ onMouseMove: tiltCard, onMouseLeave: settleCard }), [])
-
-  useGSAP(() => {
-    if (!promptOpen || !promptStage.current) return
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    gsap.fromTo(promptStage.current, { autoAlpha: 0, y: reduceMotion ? 0 : 14 }, {
-      autoAlpha: 1,
-      y: 0,
-      duration: reduceMotion ? 0 : .42,
-      ease: 'power2.out',
-    })
-  }, { dependencies: [promptOpen], scope: center, revertOnUpdate: true })
-
-  /**
-   * Only warmed up for somebody who is already in.
-   *
-   * The in-browser model is a large download, and starting it for every stranger who lands spends
-   * their bandwidth before they have asked Wesify for anything. With no accounts configured there are no
-   * strangers — Wesify is a single-browser prototype — so it warms up then too.
-   */
-  useEffect(() => {
-    if (accounts && !signedIn) return
+  const getStarted = () => {
+    if (accounts && !signedIn) {
+      onSignIn?.()
+      return
+    }
+    setPromptOpen(true)
+    if (modelWarmStarted.current) return
+    modelWarmStarted.current = true
     void prepareBusinessDiscoveryModel().catch(() => undefined)
-  }, [accounts, signedIn])
+  }
 
   return <main className="bo-home">
     <div className="bo-home__hero">
+      <div className="bo-home__molten" aria-hidden="true">
+        <div className="bo-home__molten-frame">
+          <MoltenMetal
+            color1="#ffffff"
+            color2="#ffffff"
+            color3="#ffffff"
+            colorMode="frost"
+            speed={0.1}
+            scale={5}
+            detail={7}
+            glow={2}
+            coreSize={0.08}
+            swirl={1}
+            fold={-0.2}
+            blackPoint={0}
+            brightness={1.3}
+            opacity={1}
+            grain
+            grainIntensity={0}
+            mouseInteraction
+            mouseStrength={0.1}
+          />
+        </div>
+      </div>
       <header>
         <Brand />
         <ThemeToggle className="bo-home__theme-toggle"/>
@@ -141,7 +160,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
         {onOpenWorkspace && <button type="button" className="bo-home__open-workspace" onClick={onOpenWorkspace} data-testid="open-workspace">Open workspace <ArrowRight size={15}/></button>}
         {accounts && signedIn && <div className="bo-home__account" data-testid="home-account"><AccountButton/></div>}
       </header>
-      <section className="bo-home__center" ref={center}>
+      <section className="bo-home__center">
         {/**
          * Counted, not claimed.
          *
@@ -150,44 +169,68 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
          * being a lie the next time a capability is added or removed.
          */}
         <h1>
-          <span>Business managing </span>
-          <span>in one place.</span>
+          <span>You prompt,</span>
+          <span>  I build </span>
         </h1>
         {!promptOpen && <div className="bo-home__actions">
-          <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
-            Get started <ArrowRight size={17}/>
-          </button>
+          <div className="bo-home__get-started-wrap">
+            <GlassSurface
+              displace={15}
+              distortionScale={-150}
+              redOffset={5}
+              greenOffset={15}
+              blueOffset={25}
+              brightness={60}
+              opacity={0.8}
+              mixBlendMode="screen"
+            >
+              <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
+                Get started <ArrowRight size={17}/>
+              </button>
+            </GlassSurface>
+          </div>
           <button type="button" className="bo-home__learn-more" onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })} data-testid="learn-more">
             Learn more <ChevronDown size={17}/>
           </button>
         </div>}
-        {promptOpen && <div className="bo-home__prompt-stage" ref={promptStage} data-testid="prompt-stage">
-          <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
+        {promptOpen && <div className="bo-home__prompt-stage" data-testid="prompt-stage">
+          <Suspense fallback={<div className="bo-home__prompt-loading" aria-hidden="true"/>}>
+            <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
+          </Suspense>
         </div>}
       </section>
       {/* Where a company with customers would put their logos. Wesify has none yet, and a row of
           borrowed or invented marks is the one thing on a landing page that cannot be walked back —
           so this carries what is true instead: the trades Wesify knows before the first question. */}
-      <div className="bo-home__proof">
-        <div>
-          <small>ALREADY KNOWS</small>
-          <span>Field service</span>
-          <span>Agencies</span>
-          <span>Wholesale</span>
-          <span>Manufacturing</span>
-          <span>Clinics</span>
-          <span>Restaurants</span>
-          <button
-            type="button"
-            className="bo-home__scroll-cue"
-            onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })}
-            aria-label="See how it works"
-          >
-            <ChevronDown size={18}/>
-          </button>
-        </div>
-      </div>
+      <GradualBlur
+        target="parent"
+        position="bottom"
+        height="6rem"
+        strength={2}
+        divCount={5}
+        curve="bezier"
+        exponential={true}
+        opacity={1}
+      />
     </div>
+
+    <section className="bo-home__trusted">
+      <h2>Trusted by...</h2>
+      <div className="bo-home__logo-loop">
+        <LogoLoop
+          logos={trustedLogoPlaceholders}
+          speed={120}
+          direction="left"
+          logoHeight={48}
+          gap={40}
+          hoverSpeed={0}
+          scaleOnHover
+          fadeOut
+          fadeOutColor="var(--bg)"
+          ariaLabel="Trusted companies"
+        />
+      </div>
+    </section>
 
     <section className="bo-home__explain" ref={explain}>
       <div className="bo-home__explain-intro">
@@ -196,7 +239,8 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
       </div>
 
       <div className="bo-bento">
-        <article className="bo-bento__card bo-bento__card--wide" style={cardImage(wave04)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card bo-bento__card--wide">
+          <LazyCardImage src={wave04}/>
           <h3>Describe your business in one sentence</h3>
           <div className="bo-shot bo-shot--prompt" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -213,9 +257,10 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               </div>
             </div>
           </div>
-        </article>
+        </BorderGlow>
 
-        <article className="bo-bento__card" style={cardImage(wave05)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card">
+          <LazyCardImage src={wave05}/>
           <h3>It only asks what it cannot work out</h3>
           <div className="bo-shot bo-shot--interview" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -225,9 +270,10 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               <div className="bo-shot__meta"><span>Question 4</span><i/><span>62% understood</span></div>
             </div>
           </div>
-        </article>
+        </BorderGlow>
 
-        <article className="bo-bento__card" style={cardImage(wave06)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card">
+          <LazyCardImage src={wave06}/>
           <h3>Built for your business, not a template</h3>
           <div className="bo-shot bo-shot--modules" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -245,9 +291,10 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               <small>Hidden until this company needs them.</small>
             </div>
           </div>
-        </article>
+        </BorderGlow>
 
-        <article className="bo-bento__card" style={cardImage(wave07)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card">
+          <LazyCardImage src={wave07}/>
           <h3>Already holds what you told it</h3>
           <div className="bo-shot" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -262,9 +309,10 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               </div>
             </div>
           </div>
-        </article>
+        </BorderGlow>
 
-        <article className="bo-bento__card" style={cardImage(wave08)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card">
+          <LazyCardImage src={wave08}/>
           <h3>Nothing you connect writes back</h3>
           <div className="bo-shot bo-shot--access" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -286,9 +334,10 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               </div>
             </div>
           </div>
-        </article>
+        </BorderGlow>
 
-        <article className="bo-bento__card bo-bento__card--full" style={cardImage(wave09)} {...card}>
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card bo-bento__card--full">
+          <LazyCardImage src={wave09}/>
           <h3>Get your Command Center</h3>
           <div className="bo-shot bo-shot--workspace" aria-hidden="true">
             <div className="bo-shot__frame">
@@ -318,8 +367,22 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               </div>
             </div>
           </div>
-        </article>
+        </BorderGlow>
       </div>
     </section>
+    <footer className="bo-home__footer">
+      <div className="bo-home__footer-aurora" aria-hidden="true">
+        <Aurora
+          colorStops={['#a0a0a0', '#ffffff', '#777777']}
+          blend={0.5}
+          amplitude={1.0}
+          speed={0.5}
+        />
+      </div>
+      <div className="bo-home__footer-content">
+        <Brand />
+        <small>&copy; {new Date().getFullYear()} Wesify</small>
+      </div>
+    </footer>
   </main>
 }

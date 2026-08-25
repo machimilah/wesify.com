@@ -96,6 +96,31 @@ try {
   await page.getByTestId('theme-toggle').waitFor()
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) throw new Error('Wesify opened in dark mode with no stored preference.')
 
+  const moltenMetal = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    const hero = document.querySelector('.bo-home__hero')
+    const frame = document.querySelector('.bo-home__molten-frame')
+    const canvas = frame?.querySelector('canvas')
+    const gl = canvas?.getContext('webgl2')
+    if (!hero || !frame || !canvas || !gl) return resolve({ rendered: false })
+
+    const pixels = new Uint8Array(canvas.width * canvas.height * 4)
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    let visiblePixels = 0
+    for (let index = 3; index < pixels.length; index += 16) {
+      if (pixels[index] > 0) visiblePixels += 1
+    }
+    const bounds = frame.getBoundingClientRect()
+    const heroBounds = hero.getBoundingClientRect()
+    resolve({
+      rendered: visiblePixels > 0,
+      fillsHero: Math.abs(bounds.width - heroBounds.width) < 1 && Math.abs(bounds.height - heroBounds.height) < 1,
+      width: bounds.width,
+      height: bounds.height,
+    })
+  })))
+  if (!moltenMetal.rendered) throw new Error('The Molten Metal hero background rendered a blank WebGL canvas.')
+  if (!moltenMetal.fillsHero) throw new Error(`The Molten Metal frame does not fill the hero (${moltenMetal.width}x${moltenMetal.height}).`)
+
   const firstVisitOffenders = await invisibleElements()
   if (firstVisitOffenders.length) throw new Error(`Invisible text in light mode on the home page: ${firstVisitOffenders.join(', ')}`)
 

@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { projectPaths } from './project-builder.mjs'
 import { writeJsonAtomic } from './atomicWrite.mjs'
+import { readWorkspaceData, writeWorkspaceData } from './records.mjs'
+import { compileGeneratedAutomations } from './automationPlanner.mjs'
 
 /**
  * Managed automations: when a record changes, tell another system.
@@ -12,19 +14,42 @@ import { writeJsonAtomic } from './atomicWrite.mjs'
  * automations are written by an operator experimenting, not by someone who will test them first.
  */
 
-export function emptyAutomationWorkspace() { return { connectors: [], automations: [], runs: [] } }
+export function emptyAutomationWorkspace() { return { connectors: [], automations: [], approvals: [], runs: [] } }
+
+function normalizeAutomationWorkspace(value = {}) {
+  return {
+    connectors: Array.isArray(value.connectors) ? value.connectors : [],
+    automations: Array.isArray(value.automations) ? value.automations : [],
+    approvals: Array.isArray(value.approvals) ? value.approvals : [],
+    runs: Array.isArray(value.runs) ? value.runs : [],
+  }
+}
 
 const automationFile = workspaceId => path.join(projectPaths(workspaceId).root, 'automations.json')
 
 export async function readAutomationWorkspace(workspaceId) {
-  try { return JSON.parse(await readFile(automationFile(workspaceId), 'utf8')) } catch (error) {
+  try { return normalizeAutomationWorkspace(JSON.parse(await readFile(automationFile(workspaceId), 'utf8'))) } catch (error) {
     if (error?.code === 'ENOENT') return emptyAutomationWorkspace()
     throw error
   }
 }
 
 export async function writeAutomationWorkspace(workspaceId, value) {
-  await writeJsonAtomic(automationFile(workspaceId), value)
+  await writeJsonAtomic(automationFile(workspaceId), normalizeAutomationWorkspace(value))
+}
+
+export async function ensureGeneratedAutomations(workspaceId, specification) {
+  const state = await readAutomationWorkspace(workspaceId)
+  const existingGenerated = new Map(state.automations.filter(item => item.origin === 'generated').map(item => [item.planKey, item]))
+  const generated = compileGeneratedAutomations(specification).map(planned => {
+    const existing = existingGenerated.get(planned.planKey)
+    return existing ? { ...planned, enabled: existing.enabled, reviewStatus: existing.reviewStatus, createdAt: existing.createdAt, updatedAt: existing.updatedAt } : planned
+  })
+  const automations = [...state.automations.filter(item => item.origin !== 'generated'), ...generated]
+  if (JSON.stringify(automations) === JSON.stringify(state.automations)) return state
+  const next = { ...state, automations }
+  await writeAutomationWorkspace(workspaceId, next)
+  return next
 }
 
 /**
@@ -59,16 +84,31 @@ export function safeWebhookUrl(value) {
 
 /** The endpoint URL never leaves the server: it is a credential in everything but name. */
 export function publicAutomationWorkspace(value) {
-  return { connectors: value.connectors.map(({ endpointUrl, ...connector }) => connector), automations: value.automations, runs: value.runs.slice(-100).reverse() }
+  const state = normalizeAutomationWorkspace(value)
+  return { connectors: state.connectors.map(({ endpointUrl, ...connector }) => connector), automations: state.automations, approvals: state.approvals.slice(-100).reverse(), runs: state.runs.slice(-100).reverse() }
 }
 
 export async function executeManagedAutomation(workspaceId, automation, event, entityId, record, dryRun = false) {
   const state = await readAutomationWorkspace(workspaceId)
-  const connector = state.connectors.find(item => item.id === automation.action.connectorId)
   const startedAt = new Date().toISOString()
-  const run = { id: randomUUID(), automationId: automation.id, automationName: automation.name, status: dryRun ? 'simulated' : 'success', event, entityId, recordId: String(record?.id ?? ''), startedAt, finishedAt: startedAt }
-  if (!connector) { run.status = 'failed'; run.error = 'Connector not found.' }
-  else if (!dryRun) {
+  const idempotencyKey = String(record?.eventId ?? `${automation.id}:${event}:${entityId}:${record?.id ?? ''}:${record?.updatedAt ?? record?.createdAt ?? ''}`)
+  const completed = state.runs.find(item => item.idempotencyKey === idempotencyKey && item.automationId === automation.id && item.status !== 'failed')
+  if (completed) return completed
+  const run = { id: randomUUID(), idempotencyKey, automationId: automation.id, automationName: automation.name, status: dryRun ? 'simulated' : 'success', event, entityId, recordId: String(record?.id ?? ''), startedAt, finishedAt: startedAt }
+  let approval
+
+  if (!dryRun && automation.action.type === 'notification') {
+    const data = await readWorkspaceData(workspaceId)
+    const notifications = data._notifications ?? []
+    notifications.push({ id: randomUUID(), message: automation.action.message, entityId, recordId: String(record?.id ?? ''), severity: automation.risk ?? 'informational', automationId: automation.id, createdAt: startedAt, read: false })
+    await writeWorkspaceData(workspaceId, { ...data, _notifications: notifications })
+  } else if (!dryRun && automation.action.type === 'approval') {
+    approval = { id: randomUUID(), automationId: automation.id, automationName: automation.name, message: automation.action.message, entityId, recordId: String(record?.id ?? ''), status: 'pending', requestedAt: startedAt }
+    run.status = 'waiting'
+  } else if (automation.action.type === 'webhook') {
+    const connector = state.connectors.find(item => item.id === automation.action.connectorId)
+    if (!connector) { run.status = 'failed'; run.error = 'Connector not found.' }
+    else if (!dryRun) {
     try {
       const response = await fetch(connector.endpointUrl, {
         method: 'POST',
@@ -79,15 +119,19 @@ export async function executeManagedAutomation(workspaceId, automation, event, e
       run.responseStatus = response.status
       if (!response.ok) { run.status = 'failed'; run.error = `Webhook returned ${response.status}.` }
     } catch (error) { run.status = 'failed'; run.error = error instanceof Error ? error.message : 'Webhook delivery failed.' }
+    }
   }
   run.finishedAt = new Date().toISOString()
   const latest = await readAutomationWorkspace(workspaceId)
-  await writeAutomationWorkspace(workspaceId, { ...latest, runs: [...latest.runs.slice(-199), run] })
+  await writeAutomationWorkspace(workspaceId, { ...latest, approvals: approval ? [...latest.approvals, approval] : latest.approvals, runs: [...latest.runs.slice(-199), run] })
   return run
 }
 
 export async function triggerManagedAutomations(workspaceId, event, entityId, record) {
   const state = await readAutomationWorkspace(workspaceId)
-  const matching = state.automations.filter(item => item.enabled && item.trigger.event === event && item.trigger.entityId === entityId)
-  await Promise.allSettled(matching.map(item => executeManagedAutomation(workspaceId, item, event, entityId, record)))
+  const matching = state.automations.filter(item => item.enabled && item.trigger.event === event && item.trigger.entityId === entityId && (!item.trigger.field || String(record?.[item.trigger.field] ?? '') === String(item.trigger.equals ?? '')))
+  for (const automation of matching) {
+    try { await executeManagedAutomation(workspaceId, automation, event, entityId, record) }
+    catch (error) { console.warn(`Automation ${automation.id} failed: ${error?.message ?? error}`) }
+  }
 }

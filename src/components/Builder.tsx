@@ -11,7 +11,7 @@ import {
   createDiscoverySession,
   type DiscoverySession,
 } from '../engine/businessDiscovery'
-import { businessDiscoveryModel, researchSession, resilientArchitecture } from '../engine/discoveryModel'
+import { businessDiscoveryModel, interviewQuestionProgress, researchSession, resilientArchitecture } from '../engine/discoveryModel'
 import { resolveIndustry } from '../engine/industryResolver'
 import { applyFrontierArchitecture, frontierResearchStatus, mergeFrontierResearch, requestFrontierResearch, type FrontierResearch } from '../engine/researchClient'
 import { applyIndustryVerdict, loadIndustryVerdict, recordIndustryObservations, type IndustryVerdict } from '../engine/industryClient'
@@ -279,9 +279,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const proposalResearch = useMemo(() => session && architecture ? mergeFrontierResearch(researchSession(session), frontier) : null, [session, architecture, frontier])
   const proposalReasoning = proposalResearch?.findings.slice(0, 5) ?? []
   const proposalGaps = proposalResearch?.gaps.slice(0, 5) ?? []
-  // How much of the operating model is settled. The same number the planner uses to decide whether
-  // another question is worth asking, so the bar cannot claim progress the interview has not made.
-  const coverage = useMemo(() => session ? mergeFrontierResearch(researchSession(session), frontier).coverage : 0, [session, frontier])
+  const questionProgress = interviewQuestionProgress(session?.metrics.questionsAsked ?? 0)
 
   return <main className="bo-builder" ref={root}>
     <section className="bo-builder__conversation">
@@ -369,9 +367,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           different screens rather than a conversation. */}
       <footer className="bo-composer">
         {session?.currentQuestion && <div className="bo-question-progress" data-testid="question-progress">
-          <b>Question {session.metrics.questionsAsked + 1}</b>
-          <i><u style={{ width: `${Math.round(coverage * 100)}%` }}/></i>
-          <span>{Math.round(coverage * 100)}% understood</span>
+          <b>Question {questionProgress.current} of {questionProgress.total}</b>
+          <i><u style={{ width: `${questionProgress.percent}%` }}/></i>
+          <span>{questionProgress.percent}% complete</span>
           {askedBy && <em>asked by {askedBy}</em>}
         </div>}
         <div className="bo-composer__field">

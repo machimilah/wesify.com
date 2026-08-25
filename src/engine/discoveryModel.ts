@@ -317,6 +317,13 @@ export function researchSession(session: DiscoverySession, state: BusinessState 
  */
 export const MAX_INTERVIEW_QUESTIONS = 14
 
+/** The opening company description is the first discovery step shown to the operator. */
+export function interviewQuestionProgress(questionsAsked: number) {
+  const total = MAX_INTERVIEW_QUESTIONS + 1
+  const current = Math.min(total, Math.max(1, Math.floor(questionsAsked) + 1))
+  return { current, total, percent: Math.round((current / total) * 100) }
+}
+
 export function interviewIsOver(session: DiscoverySession) {
   return session.metrics.questionsAsked >= MAX_INTERVIEW_QUESTIONS
 }

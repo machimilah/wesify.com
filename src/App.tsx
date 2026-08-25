@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Builder } from './components/Builder'
-import { Dashboard } from './components/Dashboard'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
 import type { AIBlueprint } from './engine/blueprint'
 import { isWorkspaceConfiguration } from './engine/workspaceSchema'
@@ -8,8 +6,11 @@ import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account, type AccountWorkspace } from './engine/authClient'
 import { AccountWatch, type SignedInAccount } from './components/AccountWatch'
-import { SignIn } from './components/SignIn'
-import { Billing } from './components/Billing'
+
+const Builder = lazy(() => import('./components/Builder').then(module => ({ default: module.Builder })))
+const Dashboard = lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })))
+const SignIn = lazy(() => import('./components/SignIn').then(module => ({ default: module.SignIn })))
+const Billing = lazy(() => import('./components/Billing').then(module => ({ default: module.Billing })))
 
 function activeWorkspaceId() {
   return localStorage.getItem('bo-active-workspace-id') || localStorage.getItem('bo-workspace-id') || readStorage<{ id?: string }>('bo-workspace-config', {}).id || ''
@@ -199,15 +200,15 @@ export default function App() {
     return <main className="bo-home"/>
   }
 
-  if (accounts && !account) return <SignIn unreachable={unreachable}/>
+  if (accounts && !account) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><SignIn unreachable={unreachable}/></Suspense>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.
-  if (path === '/billing') return <Billing onBack={() => navigate(homeFor(workspaces))}/>
+  if (path === '/billing') return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Billing onBack={() => navigate(homeFor(workspaces))}/></Suspense>
   if (path === '/signin') { navigate('/'); return <main className="bo-home"/> }
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
-  if (buildMatch) return <Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate(`/workspace/${buildMatch[1]}/home`) }}/>
+  if (buildMatch) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate(`/workspace/${buildMatch[1]}/home`) }}/></Suspense>
   if (path === '/build') return <main className="bo-home"/>
 
   /**
@@ -226,7 +227,7 @@ export default function App() {
     // what this render shows.
     localStorage.setItem('bo-active-workspace-id', matchedWorkspaceId)
     if (!section || section === 'home' || workspaceSections(matchedWorkspaceId).includes(section)) {
-      return <Dashboard workspaceId={matchedWorkspaceId} answers={answers} blueprint={blueprint}/>
+      return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Dashboard workspaceId={matchedWorkspaceId} answers={answers} blueprint={blueprint}/></Suspense>
     }
     // An unrecognised section under a real workspace still lands inside that workspace, at home,
     // rather than falling all the way through to the public prompt as if the workspace did not exist.

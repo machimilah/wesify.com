@@ -49,6 +49,7 @@
     "@vitejs/plugin-react": "latest",
     "gsap": "^3.15.0",
     "lucide-react": "latest",
+    "ogl": "^1.0.11",
     "pg": "^8.23.0",
     "react": "latest",
     "react-dom": "latest",

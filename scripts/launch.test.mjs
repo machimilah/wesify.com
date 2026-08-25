@@ -43,7 +43,7 @@ await page.addInitScript(() => {
       title: 'Plumbing Command Center', summary: 'Run dispatch and billing together.',
       explanation: 'Work orders connect customers, technicians and invoices.',
       modules: ['customers', 'field-service', 'scheduling', 'finance'], startView: 'field-service',
-      capabilities: ['Work orders'], capabilityIds: ['crm.contacts', 'service.field-work'], excludedCapabilityIds: [],
+      capabilities: ['Work orders', 'Invoicing'], capabilityIds: ['crm.contacts', 'service.field-work', 'finance.invoicing'], excludedCapabilityIds: [],
       pages: ['Dashboard', 'Clients', 'Work orders', 'Invoices'],
       entities: [{ name: 'Work orders', module: 'field-service', purpose: 'Dispatch jobs' }],
       workflows: [], metrics: ['Open work orders'], processStages: ['New', 'Complete'], pipelineStages: [], billingCadence: 'On completion',
@@ -144,8 +144,22 @@ try {
   await page.waitForURL('**/today')
   if (await subSidebar.count()) throw new Error('The nested panel stayed open after moving to a section that has none.')
 
+  await page.getByTestId('schema-nav-links').click()
+  await page.waitForURL('**/links')
+  await page.getByTestId('generated-automation-plan').waitFor()
+  const inferredAutomations = await page.getByTestId('generated-automation').count()
+  if (inferredAutomations < 1) throw new Error('The generated command center did not expose its inferred automation plan.')
+  const automationPlanBox = await page.getByTestId('generated-automation-plan').boundingBox()
+  const linksToolbarBox = await page.locator('.bo-links-toolbar').boundingBox()
+  if (!automationPlanBox || !linksToolbarBox || automationPlanBox.y + automationPlanBox.height > linksToolbarBox.y) throw new Error('The generated automation plan overlaps the manual Links toolbar.')
+  await page.setViewportSize({ width: 390, height: 844 })
+  const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  if (mobileOverflow > 2) throw new Error(`The Links screen overflows the mobile viewport by ${mobileOverflow}px.`)
+  const mobileCards = await page.getByTestId('generated-automation').count()
+  if (mobileCards !== inferredAutomations) throw new Error('Generated automation cards disappeared at the mobile breakpoint.')
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Launch test passed: opening a finished Command Center shows no build overlay and loads a usable workspace.')
+  console.log('Launch test passed: finished workspace launch, navigation, generated automation plan, and Links layout are usable.')
 } finally {
   await browser.close()
   vite.kill()
