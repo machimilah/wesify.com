@@ -97,6 +97,16 @@ export function interviewModel() {
  * about *this* company. The browser model stays as the fallback when no key is configured.
  */
 
+/**
+ * The interview ends.
+ *
+ * Left to itself a model weighs one more question against nothing at all, and one more question wins
+ * every time — which is an interview that never reaches a workspace. Fourteen is the top of the range
+ * the prompt already called a good interview, so it is the ceiling rather than a new idea. The prompt
+ * makes the model arrive here on its own; the client enforces it, because a prompt is a request.
+ */
+export const MAX_INTERVIEW_QUESTIONS = Number(process.env.BO_MAX_INTERVIEW_QUESTIONS || 14)
+
 const consultantSystem = `You are BO's business consultant. You interview one operator about their company so BO can build them a custom Business Command Center — the software they will run their business in.
 
 Behave like an experienced consultant who already knows this industry, not like a form.
@@ -113,8 +123,8 @@ Write the way a person talks. This is the rule that matters most, because an ope
 - It must be answerable in a few words, from what they already know off the top of their head. Never ask for a number they would have to look up.
 - If a question could be misread, ask the simpler half of it first.
 
-Ask plenty. Ten to fourteen questions is a good interview, and more is fine while each one still changes something. A short interview is a cheap-feeling product and a workspace full of guesses, and an operator who answers twelve easy questions understands their new software better than one who answered four hard ones. Cover the ground you actually need: what they sell, who does the work, who they sell to, how a job or order runs from start to finish, how money comes in and when, what they buy or keep in stock, what they schedule, who works there and who is allowed to do what, what they track today and in what, and what goes wrong most often.
-- Stop when more questions would stop changing what gets built, then decide READY_TO_ARCHITECT.
+Ask plenty, but the interview ends. Ten to fourteen questions is a good interview and ${MAX_INTERVIEW_QUESTIONS} is the ceiling. A short interview is a cheap-feeling product and a workspace full of guesses, and an operator who answers twelve easy questions understands their new software better than one who answered four hard ones — but an interview with no end is not thoroughness, it is a product that never delivers anything. Cover the ground you actually need: what they sell, who does the work, who they sell to, how a job or order runs from start to finish, how money comes in and when, what they buy or keep in stock, what they schedule, who works there and who is allowed to do what, what they track today and in what, and what goes wrong most often.
+- Stop when more questions would stop changing what gets built, then decide READY_TO_ARCHITECT. You are told below how many you have asked. Every remaining question has to earn its place against finishing now.
 - If they ask you to just build it, or say they do not know, stop asking immediately and build with stated assumptions.
 - Leave suggestedAnswers empty. The operator answers in their own words; offering choices teaches them BO wants a pick rather than a sentence, and their sentence is worth more.
 
@@ -276,6 +286,24 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
    * rather than something to notice.
    */
   const asked = conversation.filter(item => item.role === 'assistant' && item.content.includes('?')).map(item => item.content.trim())
+  /**
+   * How far into the interview it is, in a number.
+   *
+   * The list below stops the model repeating itself; it does nothing about the model never stopping.
+   * Reading a transcript, a model has no sense of how long it has been going — it weighs one more
+   * question against nothing, and one more question always wins. So it is told the count and the
+   * ceiling, and near the ceiling it is told plainly to finish. The hard stop lives in the client,
+   * because a prompt is a request; this is what makes the model arrive there on its own instead of
+   * being cut off mid-interview.
+   */
+  const remaining = Math.max(0, MAX_INTERVIEW_QUESTIONS - asked.length)
+  const budgetLine = asked.length ? `\n\nYou have asked ${asked.length} of at most ${MAX_INTERVIEW_QUESTIONS} questions. ${
+    remaining <= 2
+      ? 'This is the end of the interview. Decide READY_TO_ARCHITECT now unless something essential to what gets built is still missing, and record the rest as assumptions.'
+      : remaining <= 5
+        ? 'Spend what is left only on what genuinely changes the software, and finish early if nothing does.'
+        : 'Keep going while each question still changes something.'
+  }` : ''
   const askedLine = asked.length ? [
     '',
     '',
@@ -288,7 +316,7 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   const gapLine = businessGaps.length ? `\n\nContextual operating-gap candidates:\n${businessGaps.map(item => `- [${item.classification}, confidence ${item.confidence}] ${item.title}: ${item.rationale} Candidate capabilities: ${item.capabilityIds.join(', ') || 'none'}.`).join('\n')}\nThese are advisory candidates, not automatic features. Reject candidates unsupported by the operator's evidence. During discovery, use a candidate only to choose a high-value question. During architecture, select its capability only when the conversation supports it.` : ''
   const instruction = architecting
     ? `${known}\n\nThe conversation:\n${said}${industryLine}${knowledgeLine}${gapLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
-    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
+    : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${budgetLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
 
   const schema = discoverySchema(capabilityIds, modules, { architecting })
   const system = architecting ? architectSystem : consultantSystem

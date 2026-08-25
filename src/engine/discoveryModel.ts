@@ -299,6 +299,33 @@ export function researchSession(session: DiscoverySession, state: BusinessState 
   return researchBusiness(researchInput(session, state))
 }
 
+/**
+ * The interview ends, whatever the model thinks.
+ *
+ * BO asked questions forever. Two things had to be true at once for that, and both were: the model
+ * is never told how long it has been going, so it weighs one more question against nothing and one
+ * more question always wins; and BO pushes back whenever the model tries to finish before the
+ * readiness heuristic is satisfied. Neither has a counter, so between them the interview had no end
+ * that did not depend on the operator giving up or typing "just build it".
+ *
+ * Fourteen is the top of the range BO's own prompt already calls a good interview, so this is a
+ * ceiling on what was intended rather than a new limit. Reaching it is the same as the operator
+ * asking to stop: the architect is told to build from what it has and write down the rest as
+ * assumptions, which is what it does for "just build it" today. The server prompt counts down to the
+ * same number so the model normally arrives here on its own — this is what happens when it does not.
+ */
+export const MAX_INTERVIEW_QUESTIONS = 14
+
+export function interviewIsOver(session: DiscoverySession) {
+  return session.metrics.questionsAsked >= MAX_INTERVIEW_QUESTIONS
+}
+
+/** Past the ceiling, a discovery turn is a request to finish — the same one "just build it" makes. */
+function withInterviewCeiling(request: DiscoveryModelRequest): DiscoveryModelRequest {
+  if (request.mode !== 'DISCOVER' || request.forceArchitecture || !interviewIsOver(request.session)) return request
+  return { ...request, forceArchitecture: true }
+}
+
 export interface DiscoveryReadiness {
   ready: boolean
   coverage: number
@@ -340,7 +367,8 @@ async function generateOnce(request: DiscoveryModelRequest, stream: DiscoveryStr
 }
 
 export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
-  async generate(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+  async generate(input: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+    const request = withInterviewCeiling(input)
     let repairInstruction = request.repairInstruction ?? ''
     let lastError: unknown
     /**
@@ -425,7 +453,8 @@ function notice(stream: DiscoveryStreamHandlers, turn: DiscoveryAgentResponse | 
 class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
   private readonly local = new LocalBusinessDiscoveryModel()
 
-  async generate(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+  async generate(input: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
+    const request = withInterviewCeiling(input)
     // A mock stands in for the model, not for the pipeline around it: it falls through to the local
     // path so the repair loop and the question BO insists on asking still apply to it.
     if (!window.__BO_DISCOVERY_MODEL_MOCK__ && await serverInterviewAvailable()) {
