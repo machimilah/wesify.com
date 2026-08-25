@@ -14,6 +14,8 @@ import { authRoutes } from './routes/auth.mjs'
 import { billingRoutes } from './routes/billing.mjs'
 import { connectionRoutes } from './routes/connections.mjs'
 import { discoveryRoutes, researchRoutes } from './routes/discovery.mjs'
+import { interviewAvailable } from './discoveryAgent.mjs'
+import { reasoningAvailable } from './reasoning.mjs'
 import { industryRoutes } from './routes/industries.mjs'
 import { buildRoutes, projectRoutes } from './routes/projects.mjs'
 
@@ -39,7 +41,33 @@ const distRoot = path.resolve(process.cwd(), 'dist')
 const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, connectionRoutes, buildRoutes, projectRoutes]
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return send(response, 200, { status: 'healthy', accounts: databaseAvailable() })
+  /**
+   * Health, and what this deployment was actually given.
+   *
+   * `accounts` alone could not answer the question people actually have when a deployment misbehaves:
+   * is the platform passing my configuration at all, or is one variable missing? Those need opposite
+   * fixes, and telling them apart otherwise means adding a log line and redeploying to read it.
+   *
+   * Presence, never values — booleans computed from the same helpers the features use, so this cannot
+   * claim something works that does not. It says no more than the product already reveals by
+   * behaving: `/api/research/status` names the interview model, sign-in shows whether accounts exist,
+   * and a checkout button appears only when billing is configured.
+   */
+  if (request.method === 'GET' && url.pathname === '/api/health') {
+    return send(response, 200, {
+      status: 'healthy',
+      accounts: databaseAvailable(),
+      configured: {
+        database: databaseAvailable(),
+        interview: interviewAvailable(),
+        research: reasoningAvailable(),
+        billing: billingAvailable(),
+        mail: mailAvailable(),
+        monitoring: monitoringAvailable(),
+        connections: Boolean(process.env.BO_CONNECTION_SECRET),
+      },
+    })
+  }
   const segments = url.pathname.split('/').filter(Boolean)
   if (segments[0] !== 'api') return false
 
