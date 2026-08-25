@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { billingAvailable } from './billing.mjs'
 import { databaseAvailable, migrate } from './db.mjs'
+import { durabilityWarnings } from './durability.mjs'
 import { send } from './http.mjs'
 import { mailAvailable } from './mail.mjs'
 import { captureError, logRequest, monitoringAvailable, newRequestId, watchProcess } from './observability.mjs'
@@ -66,6 +67,9 @@ async function api(request, response, url) {
         monitoring: monitoringAvailable(),
         connections: Boolean(process.env.BO_CONNECTION_SECRET),
       },
+      // Empty on a laptop, in a container with a volume, and anywhere with a database. Present only
+      // where BO would otherwise lose work silently — see durability.mjs.
+      warnings: durabilityWarnings(),
     })
   }
   const segments = url.pathname.split('/').filter(Boolean)
@@ -113,6 +117,8 @@ function isNoisyPath(pathname) {
  * The alternative is a second copy of this on the serverless path, and the copy that drifts is the
  * one that stops shaping errors the way the interface expects.
  */
+for (const warning of durabilityWarnings()) console.warn(`BO: ${warning.message}`)
+
 export async function handleRequest(request, response) {
   const requestId = newRequestId()
   const startedAt = Date.now()
