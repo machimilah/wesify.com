@@ -87,6 +87,19 @@ export interface NavigationDefinition {
   module?: string
 }
 
+/**
+ * Section ids the workspace shell owns, and the entity sections that must not take them.
+ *
+ * A business section is named after its module — `customers`, `inventory` — and `analytics` is both
+ * a module a company can genuinely have and one of the shell's own sections. A workspace holding an
+ * analytics module therefore built two navigation entries with the same id: React rendered them with
+ * the same key and warned that one of them may be silently dropped, and any link to that section was
+ * ambiguous. Suffixing the business one keeps both, and keeps the shell's section where people
+ * expect to find it.
+ */
+const RESERVED_NAVIGATION_IDS = new Set(['home', 'today', 'analytics', 'links', 'automations', 'assistant', 'settings'])
+export const navigationId = (id: string) => RESERVED_NAVIGATION_IDS.has(id) ? `${id}-records` : id
+
 export interface WorkflowDefinition {
   id: string
   name: string
@@ -215,7 +228,7 @@ export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBl
     { id: 'today', label: 'Today', kind: 'today' },
     ...modules.flatMap(module => {
       const moduleViews = views.filter(view => entities.find(entity => entity.id === view.entityId)?.module === module)
-      return moduleViews.map((view, index) => ({ id: index === 0 ? module : view.entityId === module ? `${view.entityId}-list` : view.entityId, label: view.label, kind: 'entity' as const, viewId: view.id, module }))
+      return moduleViews.map((view, index) => ({ id: navigationId(index === 0 ? module : view.entityId === module ? `${view.entityId}-list` : view.entityId), label: view.label, kind: 'entity' as const, viewId: view.id, module }))
     }),
     { id: 'analytics', label: 'Analytics', kind: 'analytics' },
     { id: 'links', label: 'Links', kind: 'links' },
@@ -451,14 +464,14 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     const firstInModule = !seenModules.has(entity.module)
     seenModules.add(entity.module); usedEntities.add(entity.id)
     const preferredId = 'id' in page ? String(page.id) : slug(label)
-    const id = firstInModule ? entity.module : preferredId
+    const id = navigationId(firstInModule ? entity.module : preferredId)
     if (businessNavigation.some(item => item.id === id)) continue
     businessNavigation.push({ id, label, kind: 'entity', viewId: view?.id, module: entity.module })
   }
   for (const entity of entities.filter(item => !usedEntities.has(item.id))) {
     const firstInModule = !seenModules.has(entity.module)
     seenModules.add(entity.module)
-    const id = firstInModule ? entity.module : entity.id
+    const id = navigationId(firstInModule ? entity.module : entity.id)
     if (!businessNavigation.some(item => item.id === id)) businessNavigation.push({ id, label: entity.pluralLabel, kind: 'entity', viewId: views.find(view => view.entityId === entity.id && view.type !== 'calendar')?.id, module: entity.module })
   }
   const navigation: NavigationDefinition[] = [

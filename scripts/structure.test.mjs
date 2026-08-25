@@ -101,4 +101,49 @@ const unpinned = suites
   .map(item => item.file)
 assert.deepEqual(unpinned, [], 'these suites stub one provider but let the environment choose another')
 
+/**
+ * Every server import has to exist inside the image that runs the server.
+ *
+ * The runtime stage of the Dockerfile copies `server` and the built `dist`, and nothing else — so a
+ * server module that reaches into `src/` resolves perfectly on a laptop, where the whole repo is
+ * present, and cannot resolve at all in the container. The first time one did, nothing caught it:
+ * every suite passed, the image built, and the failure appeared as a container dying in CI with
+ * ERR_MODULE_NOT_FOUND. This reads the Dockerfile rather than hard-coding what it copies, so adding
+ * a COPY line is all it takes to legitimise a new shared file.
+ */
+const dockerfile = readFileSync(path.join(root, 'Dockerfile'), 'utf8')
+const runtimeStage = dockerfile.slice(dockerfile.indexOf('AS runtime'))
+const shipped = [...runtimeStage.matchAll(/^COPY\s+(?!--from)(.+)$/gm)]
+  .flatMap(match => match[1].trim().split(/\s+/).slice(0, -1))
+  .map(item => item.replace(/\*$/, '').replace(/\\/g, '/'))
+
+/**
+ * Anchored to the start of a line, because BO writes code as well as running it.
+ *
+ * `project-builder.mjs` emits a generated self-test whose source text contains
+ * `import { selfTest } from '../runtime.mjs'`. A regex looking anywhere for `from '...'` reads that
+ * string as an import of the builder itself and reports a file that does not exist. A real import
+ * statement begins its own line; a quoted one inside a template literal does not.
+ */
+const importsOf = text => [
+  // `import x from './y'`, `export * from './y'` — one line, so the match cannot run past its own
+  // statement. A pattern allowed to cross lines walks from `export const BUILD_STATES = …` all the
+  // way to the next quoted `from` it can find, which is exactly the generated string above.
+  ...[...text.matchAll(/^(?:import|export)\s[^\n]*?\sfrom\s+'([^']+)'/gm)].map(match => match[1]),
+  // The braced form, which may span lines — bounded by the closing brace rather than by hope.
+  ...[...text.matchAll(/^(?:import|export)\s*\{[^}]*\}\s*from\s+'([^']+)'/gm)].map(match => match[1]),
+  // A side-effect import: `import './env.mjs'`.
+  ...[...text.matchAll(/^import\s+'([^']+)'/gm)].map(match => match[1]),
+].filter(specifier => specifier.startsWith('.'))
+
+const escapes = []
+for (const item of files.filter(candidate => candidate.file.startsWith('server/'))) {
+  for (const specifier of importsOf(item.text)) {
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(item.file), specifier))
+    if (shipped.some(entry => resolved === entry || resolved.startsWith(`${entry}/`))) continue
+    escapes.push(`${item.file} -> ${specifier}`)
+  }
+}
+assert.deepEqual(escapes, [], 'these server imports are not copied into the runtime image, so the container cannot start')
+
 console.log(`Structure test passed: ${files.length} source files, none over 800 lines, no route module over 400, every route module wired into the server, no unfinished-work markers, no credential-shaped literal committed, and no suite that would spend real money on a live API key.`)

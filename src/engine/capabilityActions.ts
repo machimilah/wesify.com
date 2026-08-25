@@ -1,5 +1,6 @@
 import { capabilityById, type CapabilityDefinition, type CatalogEntity } from './capabilityCatalog'
 import type { WorkspaceAction } from './workspaceActions'
+import { navigationId } from './workspaceSchema'
 import type { EntityDefinition, MetricDefinition, NavigationDefinition, ViewDefinition, WorkflowDefinition, WorkspaceConfiguration, WorkspaceRoleId } from './workspaceSchema'
 
 function compileEntity(definition: CatalogEntity, module: string): EntityDefinition {
@@ -48,7 +49,10 @@ export function createCapabilityActivation(config: WorkspaceConfiguration, capab
     const viewId = `${entity.id}-${type}`
     if (!config.views.some(item => item.id === viewId) && !views.some(item => item.id === viewId)) views.push({ id: viewId, label: entity.pluralLabel, entityId: entity.id, type, groupBy: type === 'kanban' ? catalog?.groupBy ?? 'status' : undefined, dateField: type === 'calendar' ? catalog?.dateField : undefined, columns: entity.fields.slice(0, 5).map(item => item.id) })
     if (config.navigation.some(item => item.viewId === viewId) || navigation.some(item => item.viewId === viewId)) continue
-    let id = occupiedModules.has(definition.module) ? page.id : definition.module
+    // Through navigationId, because 'analytics' is both a module a company can have and one of the
+    // shell's own sections: without it both were built with the same id and React rendered two
+    // sections with the same key.
+    let id = navigationId(occupiedModules.has(definition.module) ? page.id : definition.module)
     if (occupiedNavigation.has(id)) id = page.id
     if (occupiedNavigation.has(id)) id = `${page.id}-${definition.id.split('.').at(-1)}`
     occupiedNavigation.add(id); occupiedModules.add(definition.module)

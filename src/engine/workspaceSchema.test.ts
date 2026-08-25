@@ -94,4 +94,20 @@ describe('schema-driven workspace', () => {
     expect(config.metrics.map(item => item.label)).toEqual(expect.arrayContaining(['Active contracts', 'Outstanding invoices']))
     expect(config.workflows.length).toBeGreaterThanOrEqual(2)
   })
+
+  /**
+   * A company can genuinely have an analytics module, and the shell already owns an analytics
+   * section. Both were built with the id 'analytics', so React rendered two sections with the same
+   * key — warning that one may be silently dropped — and a link to that section was ambiguous.
+   */
+  it('never builds two navigation sections with the same id', () => {
+    const config = generateWorkspaceConfiguration(
+      { companyDescription: 'We run a data agency with dashboards and reporting for clients.' },
+      { modules: ['customers', 'analytics', 'finance'], startView: 'overview', moduleConfig: { pipelineStages: [], processSteps: [], billingCadence: '', inventoryStages: [], supportStages: [] } },
+    )
+    const ids = config.navigation.map(item => item.id)
+    expect(ids).toEqual([...new Set(ids)])
+    // The shell keeps its own section rather than losing it to the module.
+    expect(config.navigation.find(item => item.id === 'analytics')?.kind).toBe('analytics')
+  })
 })

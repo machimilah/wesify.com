@@ -2,6 +2,7 @@ import { generateLocalStructuredJson } from './discoveryModel'
 import { createCapabilityActivation, createCapabilityRemoval } from './capabilityActions'
 import { capabilityCatalog } from './capabilityCatalog'
 import type { BusinessRecord, WorkspaceAction, WorkspaceRecords } from './workspaceActions'
+import { navigationId } from './workspaceSchema'
 import type { EntityDefinition, FieldType, NavigationDefinition, ViewDefinition, WorkflowDefinition, WorkspaceConfiguration } from './workspaceSchema'
 import { slug } from './shared'
 import { agentAllows, selectBusinessAgent, type CompiledBusinessAgent } from './agentArchitecture'
@@ -74,10 +75,27 @@ function parseValue(value: string, type: FieldType) {
 }
 
 
+/**
+ * Changing the shape of the workspace is not a domain agent's job to be scoped out of.
+ *
+ * A business agent's permissions say what it may do on the operator's behalf inside its own domain:
+ * a sales agent creates opportunities, not invoices. Adding a field, activating a module or writing
+ * a workflow is not that kind of act — it changes the workspace itself, for everyone, and it is
+ * already governed where it should be: by the operator's role, which `evaluateActionControl`
+ * checks against an 'admin' permission and routes through an approval preview.
+ *
+ * Scoping these by agent instead meant "Track account tier for clients" was routed to the sales
+ * agent, refused as outside its scope, and no structural change could ever be made through the
+ * assistant — whatever the operator's role.
+ */
+const STRUCTURAL_ACTIONS = new Set(['add_field', 'add_collection', 'add_capability', 'remove_capability', 'create_workflow'])
+const withinAgentScope = (agent: CompiledBusinessAgent | undefined, kind: string) =>
+  !agent || kind === 'none' || STRUCTURAL_ACTIONS.has(kind) || agentAllows(agent, kind as BusinessAgentPermission)
+
 function toWorkspaceAction(result: WorkspaceAgentResponse, config: WorkspaceConfiguration, agent?: CompiledBusinessAgent): WorkspaceAction | undefined {
   const candidate = result.action
   if (!actionKinds.includes(candidate.kind) || candidate.kind === 'none') return undefined
-  if (agent && !agentAllows(agent, candidate.kind)) return undefined
+  if (!withinAgentScope(agent, candidate.kind)) return undefined
   const entity = config.entities.find(item => item.id === candidate.entityId)
   if (candidate.kind === 'navigate') return config.navigation.some(item => item.id === candidate.navigationId) ? { type: 'navigate', navigationId: candidate.navigationId } : undefined
   if (candidate.kind === 'query') return entity ? { type: 'query_business_data', entityId: entity.id } : undefined
@@ -111,7 +129,7 @@ function toWorkspaceAction(result: WorkspaceAgentResponse, config: WorkspaceConf
     const label = candidate.collectionName.replace(/s$/i, '')
     const newEntity: EntityDefinition = { id, label, pluralLabel: candidate.collectionName, module: id, primaryField: 'name', fields: [{ id: 'name', label: 'Name', type: 'text', required: true }, { id: 'status', label: 'Status', type: 'select', options: ['Active', 'Paused', 'Complete'] }, { id: 'notes', label: 'Notes', type: 'long-text' }] }
     const view: ViewDefinition = { id: `${id}-table`, label: newEntity.pluralLabel, entityId: id, type: 'table', columns: ['name', 'status', 'notes'] }
-    const navigation: NavigationDefinition = { id, label: newEntity.pluralLabel, kind: 'entity', viewId: view.id, module: id }
+    const navigation: NavigationDefinition = { id: navigationId(id), label: newEntity.pluralLabel, kind: 'entity', viewId: view.id, module: id }
     return { type: 'activate_module', module: id, entities: [newEntity], views: [view], navigation: [navigation] }
   }
   return undefined
@@ -129,7 +147,7 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
   const authorizingAgent = config.agents?.length ? actingAgent : undefined
   if (window.__BO_WORKSPACE_AGENT_MOCK__) {
     const response = await window.__BO_WORKSPACE_AGENT_MOCK__(command, config, records)
-    const allowed = !authorizingAgent || response.action.kind === 'none' || agentAllows(authorizingAgent, response.action.kind)
+    const allowed = withinAgentScope(authorizingAgent, response.action.kind)
     const guarded = allowed ? response : { ...response, decision: 'CLARIFY' as const, message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }
     const action = toWorkspaceAction(guarded, config, authorizingAgent)
     const control = action ? evaluateActionControl(config, action, { agentApprovalRequired: authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission) }) : undefined

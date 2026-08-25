@@ -1,3 +1,4 @@
+import { navigationId } from './workspaceSchema'
 import type { EntityDefinition, FieldDefinition, MetricDefinition, NavigationDefinition, ViewDefinition, WorkflowDefinition, WorkspaceConfiguration } from './workspaceSchema'
 import { refreshWorkspaceIntelligence } from './operatingArchitecture'
 
@@ -147,7 +148,7 @@ export function interpretWorkspaceCommand(command: string, config: WorkspaceConf
     const maintenance: EntityDefinition = { id: 'maintenance', label: 'Maintenance record', pluralLabel: 'Maintenance', module: 'equipment', primaryField: 'description', fields: [{ id: 'description', label: 'Maintenance', type: 'text', required: true }, { id: 'equipment', label: 'Equipment', type: 'relation', relationEntityId: 'equipment', required: true }, { id: 'project', label: 'Project', type: 'relation', relationEntityId: 'projects' }, { id: 'status', label: 'Status', type: 'select', options: ['Scheduled', 'Due', 'Complete'] }, { id: 'dueDate', label: 'Due date', type: 'date' }, { id: 'cost', label: 'Cost', type: 'currency' }] }
     const entities = [equipment, assignments, maintenance]
     const views: ViewDefinition[] = entities.map(item => ({ id: `${item.id}-table`, label: item.pluralLabel, entityId: item.id, type: 'table', columns: item.fields.slice(0, 5).map(field => field.id) }))
-    const navigation: NavigationDefinition[] = views.map((view, index) => ({ id: index === 0 ? 'equipment' : view.entityId, label: view.label, kind: 'entity', viewId: view.id, module: 'equipment' }))
+    const navigation: NavigationDefinition[] = views.map((view, index) => ({ id: navigationId(index === 0 ? 'equipment' : view.entityId), label: view.label, kind: 'entity', viewId: view.id, module: 'equipment' }))
     const equipmentCostField: FieldDefinition = { id: 'equipment', label: 'Equipment', type: 'relation', relationEntityId: 'equipment' }
     return { action: { type: 'activate_module', module: 'equipment', entities, views, navigation, entityUpdates: config.entities.some(item => item.id === 'project-costs') ? [{ entityId: 'project-costs', fields: [equipmentCostField] }] : [], metrics: [{ id: 'equipment-costs', label: 'Equipment costs', entityId: 'maintenance', operation: 'sum', field: 'cost', roles: ['owner', 'admin', 'manager', 'accountant'], format: 'currency' }] }, needsPreview: true }
   }
@@ -166,7 +167,7 @@ export function interpretWorkspaceCommand(command: string, config: WorkspaceConf
     const singular = pluralLabel.replace(/s$/i, '')
     const customEntity: EntityDefinition = { id, label: singular[0].toUpperCase() + singular.slice(1), pluralLabel: pluralLabel[0].toUpperCase() + pluralLabel.slice(1), module: id, primaryField: 'name', fields: [{ id: 'name', label: 'Name', type: 'text', required: true }, { id: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] }, { id: 'notes', label: 'Notes', type: 'long-text' }] }
     const customView: ViewDefinition = { id: `${id}-table`, label: customEntity.pluralLabel, entityId: id, type: 'table', columns: ['name', 'status', 'notes'] }
-    return { action: { type: 'activate_module', module: id, entities: [customEntity], views: [customView], navigation: [{ id, label: customEntity.pluralLabel, kind: 'entity', viewId: customView.id, module: id }] }, needsPreview: true }
+    return { action: { type: 'activate_module', module: id, entities: [customEntity], views: [customView], navigation: [{ id: navigationId(id), label: customEntity.pluralLabel, kind: 'entity', viewId: customView.id, module: id }] }, needsPreview: true }
   }
 
   if (normalized.includes('what needs') || normalized.includes('worry about') || normalized.includes('today')) return { action: { type: 'navigate', navigationId: 'today' } }

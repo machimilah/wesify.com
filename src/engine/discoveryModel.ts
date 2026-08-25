@@ -343,6 +343,17 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
   async generate(request: DiscoveryModelRequest, stream: DiscoveryStreamHandlers = {}): Promise<DiscoveryAgentResponse> {
     let repairInstruction = request.repairInstruction ?? ''
     let lastError: unknown
+    /**
+     * The last turn rejected only for finishing early, kept rather than thrown away.
+     *
+     * BO pushes back on an interview that ends before the critical operating decisions are settled —
+     * that is the point of the readiness check. What it must not do is push back forever: readiness
+     * is a heuristic scored over the conversation, and the model has read that same conversation. If
+     * it says twice that it has what it needs, the honest move is to defer, because the alternative
+     * is an interview that can never end and an operator staring at "retry" on a question BO will
+     * refuse to accept an answer to.
+     */
+    let heldBack: DiscoveryAgentResponse | null = null
     const maxAttempts = request.mode === 'DISCOVER' ? 2 : 3
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
@@ -352,7 +363,10 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
         }
         if (request.mode === 'DISCOVER' && result.decision === 'READY_TO_ARCHITECT' && !request.forceArchitecture) {
           const readiness = assessDiscoveryReadiness(request.session, result.businessState)
-          if (!readiness.ready) throw new Error(`The interview ended before these critical operating decisions were resolved: ${readiness.unresolvedCritical.map(item => item.objective).join('; ') || `operating-model coverage is ${Math.round(readiness.coverage * 100)}%`}. Ask one natural high-value question instead.`)
+          if (!readiness.ready) {
+            heldBack = result
+            throw new Error(`The interview ended before these critical operating decisions were resolved: ${readiness.unresolvedCritical.map(item => item.objective).join('; ') || `operating-model coverage is ${Math.round(readiness.coverage * 100)}%`}. Ask one natural high-value question instead.`)
+          }
         }
         if (request.mode !== 'DISCOVER' && !hasUsableArchitecture(result.architectureContext)) throw new Error('The architecture is incomplete.')
         console.info('[BO discovery]', { workspaceId: request.session.workspaceId, turn: request.session.metrics.discoveryTurns + 1, decision: result.decision, question: result.decision === 'ASK_QUESTION' ? result.nextQuestion.text : undefined, stateFacts: result.businessState.facts.length, architecturePages: result.architectureContext.pages.length })
@@ -367,6 +381,8 @@ export class LocalBusinessDiscoveryModel implements BusinessDiscoveryModel {
       stream.onActivity?.('Completing the operating architecture')
       return fallbackArchitectureResponse(request)
     }
+    // Asked again and told the same thing: the model keeps its answer. See `heldBack` above.
+    if (heldBack) return heldBack
     /**
      * No question unless a model wrote it.
      *
@@ -464,6 +480,16 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
           `You tried to finish before the operating model was ready. Unresolved critical objectives: ${readiness.unresolvedCritical.map(item => item.objective).join('; ') || `coverage is ${Math.round(readiness.coverage * 100)}%`}. Ask one short natural question that resolves the highest-value objective. Do not return READY_TO_ARCHITECT yet.`,
         )
         if (usable(second)) { stream.onSource?.(lastInterviewModel()); return second as DiscoveryAgentResponse }
+        /**
+         * Pushed back once; now deferred to.
+         *
+         * Readiness is BO's own score over the conversation, and the model has read that same
+         * conversation. Insisting past this point does not produce a better interview — it produces
+         * one that cannot end, because the next turn disagrees exactly as this one did, and the
+         * operator is left retrying a question BO will not accept an answer to.
+         */
+        const settled = second ?? first
+        if (settled && !repeats(settled)) { stream.onSource?.(lastInterviewModel()); return settled }
       }
       notice(stream, first)
       stream.onSource?.('')

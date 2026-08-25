@@ -40,6 +40,17 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY --from=build /app/dist ./dist
 
+# One file from the frontend tree, because one list is the whole point of it.
+#
+# `src/data/platformPatternIds.json` is the vocabulary of process, KPI and pattern ids that the
+# browser offers and the server validates against. A copy kept under `server/` would be a second
+# hand-maintained list, and the drift would surface as the server rejecting a pattern the interface
+# had just shown somebody. So the file stays shared and the runtime image carries it.
+#
+# `structure.test.mjs` fails if any other server import reaches outside what this stage copies: the
+# first time one did, nothing caught it until a container died in CI.
+COPY src/data/platformPatternIds.json ./src/data/platformPatternIds.json
+
 # The image runs as a non-root user. `node` already exists in this base image; /data is created and
 # handed over before dropping to it, because a container that cannot write its own data directory
 # fails at the first build rather than at start.
