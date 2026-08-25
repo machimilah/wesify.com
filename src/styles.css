@@ -31,6 +31,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__hero > header { width: min(1180px, calc(100% - 48px)); height: 82px; position: relative; z-index: 2; margin: 0 auto; display: flex; align-items: center; }
 .bo-home__signin { min-height: 40px; margin-left: 10px; padding: 0 20px; display: inline-flex; align-items: center; border: 0; border-radius: 99px; color: white; background: var(--solid-fill); font-size: 13px; font-weight: 600; }
 .bo-home__signin:hover { background: var(--accent-strong); }
+/* The way back into a workspace from the home page, which no longer redirects there on its own.
+   Quieter than Sign in: it is for somebody already inside, not the one call to action on the page. */
+.bo-home__open-workspace { min-height: 40px; margin-left: 10px; padding: 0 18px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 99px; color: var(--text); background: transparent; font-size: 13px; font-weight: 600; }
+.bo-home__open-workspace:hover { border-color: var(--text-2); background: var(--surface); }
 
 .bo-home__center { width: min(900px, calc(100% - 48px)); position: relative; z-index: 1; margin: 0 auto; padding: clamp(16px, 3vh, 48px) 0; align-self: center; text-align: center; }
 .bo-home__eyebrow { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 24px; color: var(--text-2); font-size: 14px; font-weight: 500; }

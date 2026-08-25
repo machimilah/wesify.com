@@ -89,30 +89,30 @@ export default function App() {
   }, [handleAccount])
 
   /**
-   * Where somebody goes the first time Wesify learns who they are, and only that first time.
+   * The one thing that happens on its own the first time Wesify learns who somebody is.
+   *
+   * There used to be two. The other sent anybody who owned a workspace straight to it from a bare
+   * "/", on the theory that a returning operator should not be shown a prompt they had already
+   * answered. That was true when "/" was only a prompt. It is the home page now — the argument for
+   * the product, the thing a person might want to re-read, and the page they get if they type the
+   * address — and taking it away from the people who use Wesify most made it unreachable to exactly
+   * them. Their workspace is a click away in the header instead.
+   *
+   * What survives is the brief: somebody who described their company and was asked to sign in has
+   * already done the one thing Wesify needs from them, and sending them back to an empty box to prove
+   * they now have an account is how they get lost between two screens.
    *
    * An effect rather than something done inside the callback above, because the two facts it needs —
-   * the account, and the sentence typed before signing in — arrive from different places at times
-   * neither controls. Reading them from state at the moment both exist is the only version of this
-   * that cannot be handed a stale copy of one while holding the other.
-   *
-   * `landed` is what makes it "the first time". Clerk renews tokens, other tabs sign out, and every
-   * one of those is a change here; none of them is an arrival, and hijacking navigation on each
-   * would take somebody off the page they had chosen for themselves.
+   * the account, and that sentence — arrive from different places at times neither controls. Reading
+   * them from state at the moment both exist is the only version that cannot be handed a stale copy
+   * of one while holding the other. `landed` makes it happen once: Clerk renewing a token is a change
+   * here, and none of those is an arrival.
    */
   useEffect(() => {
     if (!account || landed.current) return
     landed.current = true
-    // Somebody who described their company before being asked to sign in has already done the one
-    // thing Wesify needs from them; they go straight on with it rather than back to an empty box.
-    if (pendingBrief) return build(pendingBrief)
-    // A returning operator should not land on the prompt they have already answered. Only on a bare
-    // "/", so this cannot fight an in-app navigation that meant to go there.
-    if (workspaces.length && window.location.pathname === '/') {
-      window.history.replaceState({}, '', homeFor(workspaces))
-      setPath(homeFor(workspaces))
-    }
-  }, [account, workspaces, pendingBrief])
+    if (pendingBrief) build(pendingBrief)
+  }, [account, pendingBrief])
 
   useEffect(() => {
     const handleHistory = () => setPath(window.location.pathname)
@@ -175,6 +175,9 @@ export default function App() {
     signedIn={Boolean(account)}
     accounts={accounts === true}
     onSignIn={() => navigate('/signin')}
+    // Nothing to open until they have one, which is why this is the workspace itself rather than a
+    // button that might lead nowhere.
+    onOpenWorkspace={workspaces.length ? () => navigate(homeFor(workspaces)) : undefined}
   />
 
   // `/start` was Wesify's second home page until there was only one. It is gone rather than duplicated,

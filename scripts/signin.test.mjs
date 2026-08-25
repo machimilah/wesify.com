@@ -135,8 +135,7 @@ try {
   if (!builtWorkspaceId) throw new Error(`Approving the Command Center did not land on a workspace-scoped URL: ${page.url()}`)
 
   // 4. The session survives a reload of the workspace itself. One that has to be re-established on
-  //    refresh is not a session — and a returning operator hitting "/" goes straight back to this
-  //    same workspace rather than the prompt, which is checked here too, in the same reload.
+  //    refresh is not a session.
   // `load` rather than `networkidle`: a finished Command Center keeps talking to the server — it
   // asks what it is, then what is in it — and waiting for the network to fall silent is waiting for
   // something that is not the assertion. What matters is that the workspace renders, which is the
@@ -144,8 +143,20 @@ try {
   await page.reload({ waitUntil: 'load' })
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
+
+  /**
+   * 4b. "/" is the home page for everybody, including the people who use Wesify most.
+   *
+   * It used to redirect somebody who owned a workspace straight to it, which made the page they
+   * would most want to re-read the one page they could not reach. The workspace is a click away in
+   * the header instead — and that click has to actually land there, or this is just a removal.
+   */
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  if (!page.url().endsWith('/')) throw new Error(`Opening "/" redirected somewhere else: ${page.url()}`)
+  await page.getByTestId('open-workspace').click()
   await page.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
+  await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
 
   /**
    * 5. The same account reaches the same workspace from a different browser — the real point of
@@ -156,7 +167,28 @@ try {
    * stuck on "Opening workspace..." forever, because the only copy of what the workspace looked like
    * was sitting in the localStorage of the browser that built it.
    */
+  /**
+   * First, wait for the server to actually hold the build.
+   *
+   * The browser that built it renders from its own cache the moment it has one, which is earlier
+   * than the server finishing and storing the generated project. A second browser has no cache and
+   * nothing to fall back on, so opening one before that point is a race — and one this suite would
+   * lose by reporting a real bug that is not there.
+   */
+  for (let attempt = 0; ; attempt += 1) {
+    const stored = await fetch(`http://127.0.0.1:${apiPort}/api/projects/${builtWorkspaceId}`, {
+      headers: { authorization: `Bearer ${sessionToken}`, 'x-bo-workspace-id': builtWorkspaceId, 'x-bo-role': 'owner' },
+    })
+    if (stored.ok) break
+    if (attempt === 100) throw new Error('The server never stored the build that the browser had already rendered.')
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+
   const second = await open({ signedIn: true })
+  // The workspace is offered to it at all only because the server told it this account owns one —
+  // this browser has never heard of it otherwise.
+  await second.getByTestId('open-workspace').waitFor({ timeout: 20_000 })
+  await second.getByTestId('open-workspace').click()
   await second.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
   await second.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   const secondPages = await second.locator('[data-testid^="schema-nav-"]').count()
@@ -194,7 +226,7 @@ try {
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: a home page anybody can read, its start button asking who they are first, the workspace gated however it is reached, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload and returning them to their workspace rather than the prompt, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
+  console.log('Sign-in test passed: a home page anybody can read, its start button asking who they are first, the workspace gated however it is reached, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload, "/" staying the home page with the workspace one click away in the header, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
 } finally {
   await browser.close()
   vite.kill()
