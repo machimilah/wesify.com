@@ -167,32 +167,35 @@ try {
   if (!/Question 2/i.test(progressText)) throw new Error(`The interview does not say how far in it is: ${progressText}`)
   if (!/\d+% understood/.test(progressText)) throw new Error(`The interview shows no measure of progress: ${progressText}`)
 
-  // It reads as a conversation: BO's working, then the question, then the box you answer in. The
+  // It reads as a conversation: what BO said, then the question, then the box you answer in. The
   // question being anywhere but last is what made the old build feel like a form with a log stapled
   // underneath it.
   const threadShape = await page.evaluate(() => {
     const thread = document.querySelector('[data-testid="build-thread"]')
     const question = document.querySelector('[data-testid="discovery-question"]')
-    const thinking = document.querySelector('[data-testid="agent-thinking"]')
     if (!thread || !question) return null
     return {
       questionIsLast: thread.lastElementChild === question,
-      thinkingBeforeQuestion: !thinking || Boolean(thinking.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING),
       composerAfterThread: Boolean(thread.compareDocumentPosition(document.querySelector('.bo-composer')) & Node.DOCUMENT_POSITION_FOLLOWING),
     }
   })
   if (!threadShape) throw new Error('The build screen is not a single thread.')
   if (!threadShape.questionIsLast) throw new Error('Something is stacked below the question BO is waiting on.')
-  if (!threadShape.thinkingBeforeQuestion) throw new Error('BO shows its working after the question instead of before it.')
   if (!threadShape.composerAfterThread) throw new Error('The reply box is not under the conversation.')
 
-  // BO's working starts collapsed and opens in one click. Shown by default it was the first thing
-  // between the operator and the question, which is exactly what a chat does not do.
-  if (await page.getByTestId('agent-thinking').count()) throw new Error('BO put its working in front of the question by default.')
-  await page.getByRole('button', { name: /Thinking|Thought this through|Understanding|Designing|Researching/ }).first().click()
-  const journalText = await page.getByTestId('agent-thinking').innerText()
-  if (journalText.trim().length < 40) throw new Error(`Opening BO's working showed nothing worth reading: ${journalText}`)
-  if (/Still open:/i.test(journalText)) throw new Error('BO predicted a different next question beside the one it asked.')
+  /**
+   * BO's reasoning is not reading material.
+   *
+   * There used to be an expandable journal here — a paragraph per fact absorbed, per capability
+   * chosen, per research finding. It was built to show BO's working and it read as BO talking to
+   * itself at length while somebody waited to answer a question. The reasoning still decides what
+   * gets built; it is no longer something the operator has to scroll past to reach the question.
+   */
+  if (await page.getByTestId('agent-thinking').count()) throw new Error('The reasoning journal is back on the build screen.')
+  const threadText = await page.getByTestId('build-thread').innerText()
+  for (const leak of [/Updating the operating model/i, /Choosing the business systems/i, /Knitting the Command Center/i, /Thought this through in \d+ step/i]) {
+    if (leak.test(threadText)) throw new Error(`BO is still narrating its reasoning: ${threadText.slice(0, 400)}`)
+  }
 
   const first = turns.find(turn => turn.consultant)
   if (!first) throw new Error(`The interview did not reach the server. Turns seen: ${JSON.stringify(turns.map(turn => turn.asked.slice(0, 60)))}`)

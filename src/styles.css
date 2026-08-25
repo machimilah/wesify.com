@@ -414,15 +414,8 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-typing i:nth-child(2) { animation-delay: .15s; }
 .bo-typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes bo-typing-dot { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
-.bo-thinking-toggle { padding: 0; display: inline-flex; align-items: center; gap: 6px; border: 0; color: var(--text-2); background: transparent; font-size: 12px; }
-.bo-thinking-toggle:hover { color: var(--border-strong); }
-.bo-thinking-toggle svg { transition: transform .15s ease; }
-.bo-thinking-toggle svg.open { transform: rotate(180deg); }
-.bo-thinking { margin-top: 10px; padding-left: 13px; display: grid; gap: 13px; border-left: 1px solid var(--border-strong); }
-.bo-thinking article { display: grid; gap: 4px; }
-.bo-thinking article strong { color: var(--accent); font-size: 12px; font-weight: 600; }
-.bo-thinking article span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; color: var(--text-3); font-size: 12px; line-height: 1.6; }
-.bo-thinking article.active strong { color: var(--accent); }
+.bo-turn__working { color: var(--text-2); }
+.bo-turn__notice { color: var(--text-3); font-size: 12px; }
 .bo-proposal { padding: 16px 17px; display: grid; gap: 10px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-2); }
 .bo-proposal > small { color: var(--text-3); font-size: 8px; font-weight: 800; letter-spacing: .14em; }
 .bo-proposal > strong { font: 600 22px 'Ubuntu', sans-serif; letter-spacing: -.03em; color: var(--text); }

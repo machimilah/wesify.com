@@ -99,7 +99,6 @@ try {
 
   // Scrolling up to re-read must not be undone by the next repaint.
   await page.evaluate(() => { document.querySelector('[data-testid="build-thread"]').scrollTop = 0 })
-  await page.getByRole('button', { name: /Thinking|Thought this through/ }).first().click().catch(() => undefined)
   await page.waitForTimeout(500)
   const held = await page.evaluate(() => document.querySelector('[data-testid="build-thread"]').scrollTop)
   assert.ok(held < 200, `BO pulled the view back down to ${held}px while the operator was reading earlier answers.`)

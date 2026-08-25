@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Eye, RotateCcw, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Eye, RotateCcw, Send, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
@@ -36,47 +36,8 @@ const stages = ['Understanding you', 'Researching', 'Designing', 'Ready to build
 
 const buildLabels = ['Creating data model', 'Building operational pages', 'Connecting workflows', 'Adding controls', 'Testing Wesify', 'Command Center ready']
 
-interface BuildThought { id: string; title: string; body: string }
-
 function asksToSkip(message: string) {
   return /\b(just build|build it|skip (the )?questions|no more questions|go ahead and build)\b/i.test(message)
-}
-
-function stateNarrative(session: DiscoverySession, questionReason = '') {
-  const state = session.businessState
-  const company = state.industry || state.companySummary || 'This company'
-  const offer = state.productsOrServices.slice(0, 3).join(', ') || state.businessModel.slice(0, 2).join(', ') || 'its core offer'
-  const flow = state.operations.slice(0, 4).join(' → ') || state.knownWorkflows.slice(0, 2).join(', ') || 'the operating process still being defined'
-  const money = state.revenueModel.slice(0, 2).join(', ') || 'the payment model still to confirm'
-  const next = questionReason ? ` I’m asking the next question because ${questionReason.replace(/\.$/, '').toLowerCase()}.` : ''
-  return `${company} delivers ${offer}. The operating flow currently looks like ${flow}, with revenue coming through ${money}. I’m using those facts to decide which records, workflows, financial controls, and daily views belong in the Command Center.${next}`
-}
-
-/**
- * Business-facing research conclusions: what BO worked out, the evidence, and what it changes.
- *
- * It deliberately does not announce which question is coming next. The local planner and the server
- * consultant choose differently, so that line could sit beside a question BO never asked — and the
- * progress bar on the question already says how much is settled, in both modes.
- */
-function researchNarrative(session: DiscoverySession, seen: Set<string>, frontier: FrontierResearch | null = null) {
-  const research = mergeFrontierResearch(researchSession(session), frontier)
-  const entries: BuildThought[] = []
-  for (const finding of research.findings) {
-    if (seen.has(finding.id)) continue
-    seen.add(finding.id)
-    // The quote already ends in whatever punctuation the operator typed, so adding a full stop
-    // produced "…plumbing service business..".
-    const quoted = finding.because.replace(/[.\s]+$/, '')
-    entries.push({ id: finding.id, title: finding.conclusion, body: `${finding.implication} Because you said: “${quoted}”.` })
-  }
-  return entries
-}
-
-function architectureNarrative(session: DiscoverySession, architecture: ReturnType<typeof resilientArchitecture>) {
-  const selected = architecture.capabilities.slice(0, 9).join(', ')
-  const excluded = architecture.excludedCapabilityIds.length ? ` Unrelated systems remain hidden until the company needs them.` : ''
-  return `This company needs ${selected || 'a focused operating base'}. Therefore I’m connecting ${architecture.entities.slice(0, 7).map(entity => entity.name).join(', ')} into one workspace, with a focused set of operational pages instead of exposing the entire Wesify platform.${excluded}`
 }
 
 export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBlueprintChange, onExit, onComplete }: BuilderProps) {
@@ -88,11 +49,15 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const [activity, setActivity] = useState('')
-  const [streamedText, setStreamedText] = useState('')
+  /**
+   * The one thing the journal said that an operator has to act on: BO is answering from somewhere
+   * weaker than it should be. It survives as its headline only — "Falling back to Wesify's built-in
+   * questions" is the actionable part; the paragraph explaining the model cascade was not.
+   */
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [launching, setLaunching] = useState(false)
   const [launchPhase, setLaunchPhase] = useState(0)
-  const [thoughts, setThoughts] = useState<BuildThought[]>([])
   const [frontier, setFrontier] = useState<FrontierResearch | null>(null)
   const [industry, setIndustry] = useState<IndustryVerdict | null>(null)
   const [frontierModel, setFrontierModel] = useState('')
@@ -109,20 +74,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
    */
   const [askedBy, setAskedBy] = useState('')
 
-  // BO shows its working by default — that is the product's whole claim — but it collapses in one click.
-  const [thinkingOpen, setThinkingOpen] = useState(false)
-
-  const researched = useRef(new Set<string>())
-  const frontierRef = useRef<FrontierResearch | null>(null)
   const frontierStarted = useRef(false)
-
-  const appendThought = (title: string, body: string) => setThoughts(current => {
-    if (current.at(-1)?.title === title && current.at(-1)?.body === body) return current
-    return [...current, { id: crypto.randomUUID(), title, body }]
-  })
-  const appendThoughts = (entries: BuildThought[]) => {
-    if (entries.length) setThoughts(current => [...current, ...entries])
-  }
 
   const commit = (next: DiscoverySession) => {
     setSession(next)
@@ -142,47 +94,39 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     if (!(status.research ?? status.available)) return
     setFrontierModel(status.model)
     setResearching(true)
-    appendThought('Researching this kind of business', `Wesify is searching external sources with ${status.model} to learn how companies like this actually operate before deciding which systems it needs.`)
     try {
       const description = base.messages.find(message => message.role === 'user')?.content ?? ''
       const result = await requestFrontierResearch(base.workspaceId, description, base.messages.map(message => ({ role: message.role, content: message.content })))
       if (!result) return
-      frontierRef.current = result
       setFrontier(result)
-      appendThoughts(researchNarrative(base, researched.current, result))
-    } catch (reason) {
-      appendThought('External research unavailable', `${reason instanceof Error ? reason.message : 'The researcher could not be reached.'} Wesify continued with its built-in business researcher, so nothing was lost.`)
+    } catch {
+      // BO's built-in researcher still runs, so a missing web pass costs detail, not the build.
     } finally {
       setResearching(false)
     }
   }
 
   const runAgent = async (base: DiscoverySession) => {
-    setLoading(true); setError(''); setStreamedText(''); setActivity('Understanding your business')
+    setLoading(true); setError(''); setNotice(''); setActivity('Understanding your business')
     const latestUser = [...base.messages].reverse().find(message => message.role === 'user')?.content ?? ''
     try {
       const response = await businessDiscoveryModel.generate(
         { mode: 'DISCOVER', session: base, forceArchitecture: asksToSkip(latestUser) },
-        { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
+        { onActivity: setActivity, onNotice: setNotice, onSource: setAskedBy },
       )
-      const responseSession = { ...base, businessState: response.businessState }
-      appendThought('Updating the operating model', stateNarrative(responseSession, response.decision === 'ASK_QUESTION' ? response.nextQuestion.reason : ''))
-      appendThoughts(researchNarrative(responseSession, researched.current, frontierRef.current))
       if (response.decision === 'READY_TO_ARCHITECT') {
         setActivity('Designing your Command Center')
-        appendThought('Choosing the business systems', 'The main actors, work flow, and revenue path are now clear enough to create the first version. I’m selecting the smallest complete set of Wesify capabilities and their required dependencies, while keeping unrelated ERP areas out of view.')
         const architectureResponse = await businessDiscoveryModel.generate(
           { mode: 'ARCHITECT', session: { ...base, phase: 'ARCHITECTING', businessState: response.businessState } },
-          { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
+          { onActivity: setActivity, onNotice: setNotice, onSource: setAskedBy },
         )
-        appendThought('Knitting the Command Center together', architectureNarrative(responseSession, architectureResponse.architectureContext))
         const proposed = applyAgentResponse({ ...base, phase: 'ARCHITECTING' }, architectureResponse)
         let finalResponse = architectureResponse
         try {
-          appendThought('Checking the architecture', 'I’m checking that every page has a real operational purpose, every workflow has the records it depends on, and no adjacent feature has appeared without evidence from the company description or answers.')
+          setActivity('Checking the architecture')
           const reviewed = await businessDiscoveryModel.generate(
             { mode: 'REVIEW_ARCHITECTURE', session: { ...proposed, phase: 'ARCHITECTING' } },
-            { onText: setStreamedText, onActivity: setActivity, onNotice: appendThought, onSource: setAskedBy },
+            { onActivity: setActivity, onNotice: setNotice, onSource: setAskedBy },
           )
           if (reviewed.decision === 'READY_TO_ARCHITECT') {
             finalResponse = reviewed
@@ -194,10 +138,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Wesify could not reach the local AI.'
-      appendThought('The build paused', `${message} No workspace changes were applied. Wesify can retry from the confirmed business facts without losing the conversation.`)
       setError(message)
     } finally {
-      setLoading(false); setActivity(''); setStreamedText('')
+      setLoading(false); setActivity('')
     }
   }
 
@@ -221,10 +164,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
         .then(verdict => {
           if (!verdict) return
           setIndustry(verdict)
-          appendThought(
-            `What ${verdict.companies} other ${verdict.label || 'companies like this'} actually kept`,
-            `Wesify is not guessing here. ${verdict.include.length + verdict.exclude.length} of these decisions come from what real companies in this industry did with the workspace Wesify built them: ${[...verdict.exclude.slice(0, 2).map(item => `dropped ${item.capabilityId}`), ...verdict.include.slice(0, 2).map(item => `kept ${item.capabilityId}`)].join(', ')}.`,
-          )
         })
       const last = initial.messages.at(-1)
       if (initial.phase === 'DISCOVERING' && last?.role === 'user' && !initial.currentQuestion) await runAgent(initial)
@@ -367,18 +306,22 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           ? <div className="bo-turn bo-turn--you" key={message.id}><div><span className="bo-turn__text">{message.content}</span></div></div>
           : <div className="bo-turn bo-turn--bo" key={message.id}><span><Sparkles size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
 
-        {(thoughts.length > 0 || loading) && <div className="bo-turn bo-turn--bo">
+        {/**
+         * What BO is doing, and nothing about how it is doing it.
+         *
+         * This was an expandable journal: every fact re-stated, every capability decision explained,
+         * a paragraph per research finding. It was written to show BO's working, and what it actually
+         * showed was that BO had a great deal to say while somebody was waiting to answer a question.
+         * The reasoning still happens and still decides what gets built — it is simply not the
+         * operator's reading material.
+         *
+         * One line survives, because a wait with no label is a wait that looks broken.
+         */}
+        {notice && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><span className="bo-turn__text bo-turn__notice" data-testid="agent-notice">{notice}</span></div></div>}
+
+        {loading && <div className="bo-turn bo-turn--bo" data-testid="agent-activity">
           <span><Sparkles size={15}/></span>
-          <div>
-            <button type="button" className="bo-thinking-toggle" onClick={() => setThinkingOpen(open => !open)} aria-expanded={thinkingOpen}>
-              <span>{loading ? (activity || 'Thinking') : `Thought this through in ${thoughts.length} step${thoughts.length === 1 ? '' : 's'}`}</span>
-              <ChevronDown size={13} className={thinkingOpen ? 'open' : ''}/>
-            </button>
-            {thinkingOpen && <div className="bo-thinking" data-testid="agent-thinking">
-              {thoughts.map(thought => <article key={thought.id}><strong>{thought.title}</strong><span>{thought.body}</span></article>)}
-              {loading && <article className="active"><strong>{activity || 'Understanding your business'}</strong><span>{streamedText || 'Working through the confirmed business facts and building your Command Center.'}</span></article>}
-            </div>}
-          </div>
+          <div><span className="bo-turn__text bo-turn__working">{activity || 'Working on it'}</span></div>
         </div>}
 
         {error ? <div className="bo-turn bo-turn--bo">

@@ -141,11 +141,8 @@ try {
   await page.waitForURL('**/build/*')
   await page.getByTestId('build-stages').waitFor()
   await page.getByText('How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?', { exact: true }).waitFor()
-  // BO's working is collapsed, the way a chat shows reasoning. It opens in one click and it is real.
-  await page.getByRole('button', { name: /Thinking|Thought this through|Understanding|Designing|Researching/ }).first().click()
-  const thinkingEntries = await page.locator('[data-testid="agent-thinking"] article').count()
-  if (thinkingEntries < 2) throw new Error('BO did not retain a growing build narrative.')
-  await page.getByText('Updating the operating model', { exact: true }).waitFor()
+  // BO asks and waits. Its reasoning is not printed into the thread for the operator to read past.
+  if (await page.locator('[data-testid="agent-thinking"]').count()) throw new Error('The reasoning journal is back on the build screen.')
   // Answers are typed, not picked. BO used to offer two to four buttons under each question, which
   // quietly taught people it wanted a choice rather than a sentence — and a sentence in the
   // operator's own words is what the architecture is actually built from.

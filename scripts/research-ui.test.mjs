@@ -116,21 +116,8 @@ try {
   await page.getByTestId('start-building').click()
   await page.waitForURL('**/build/*')
 
-  // BO's working is collapsed in the thread; open it before reading what it says.
-  await page.getByRole('button', { name: /Thinking|Thought this through|Understanding|Designing|Researching/ }).first().click({ timeout: 30_000 })
-  const journal = page.locator('[data-testid="agent-thinking"]')
-  await journal.getByText('Researching this kind of business', { exact: true }).waitFor({ timeout: 30_000 })
-  await journal.getByText('Technicians are dispatched to customer sites', { exact: true }).waitFor({ timeout: 30_000 })
-  /**
-   * The conclusions are shown; where BO read them is not.
-   *
-   * BO used to print the URLs it opened, in the journal and again under the proposal. What earns an
-   * operator's trust is that BO understood their trade — a citation only invites them to go and audit
-   * one, and tells anyone looking over their shoulder exactly how the workspace was arrived at.
-   */
-  const journalText = await journal.innerText()
-  if (/https?:\/\//.test(journalText)) throw new Error(`BO is still showing where it read things: ${journalText.match(/https?:\/\/\S+/)?.[0]}`)
-  if (journalText.includes('Sources BO read')) throw new Error('The journal still lists the sources BO opened.')
+  // The research pass runs, and it is a stage on the progress rail rather than a narrated journal.
+  await page.getByTestId('build-stages').getByText('Researching', { exact: true }).waitFor({ timeout: 30_000 })
 
   /**
    * The interview ends on a decision, and the plan waits to be asked for.
@@ -148,6 +135,19 @@ try {
   const proposalText = await proposal.innerText()
   if (!/Work orders|Clients|Invoices|Dashboard/i.test(proposalText)) throw new Error(`The proposal did not describe the workspace: ${proposalText.slice(0, 200)}`)
   if (await page.getByTestId('research-sources').count()) throw new Error('The proposal still credits its sources.')
+
+  /**
+   * What BO researched reaches the operator as a conclusion inside the plan, not as reasoning in the thread.
+   *
+   * This used to be proved against the journal, which no longer exists. The proposal is now the only
+   * place research surfaces, so it is the only place worth guarding: the conclusions are shown, and
+   * where BO read them is not. Printing the URLs only invites an audit of one, and tells anyone
+   * looking over the operator's shoulder exactly how the workspace was arrived at.
+   */
+  await proposal.getByText('Technicians are dispatched to customer sites', { exact: true }).waitFor({ timeout: 30_000 })
+  const settled = await proposal.innerText()
+  if (/https?:\/\//.test(settled)) throw new Error(`BO is still showing where it read things: ${settled.match(/https?:\/\/\S+/)?.[0]}`)
+  if (settled.includes('Sources BO read')) throw new Error('The plan still lists the sources BO opened.')
   if (/https?:\/\//.test(proposalText)) throw new Error('The proposal still carries a link to where BO researched.')
   if (await page.evaluate(() => localStorage.getItem('bo-workspace-config') !== null)) throw new Error('Reading the proposal built a workspace nobody approved.')
 
@@ -167,7 +167,7 @@ try {
   if (capabilities.includes('manufacturing.production')) throw new Error('A researched exclusion still reached the workspace.')
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Research UI test passed: live research journal with its conclusions, no sources credited anywhere, a proposal that stays out of the way until asked for and commits nothing when read, and researched capability decisions compiled into the workspace.')
+  console.log('Research UI test passed: the research pass shown as a build stage rather than a narrated journal, its conclusions reaching the plan, no sources credited anywhere, a proposal that stays out of the way until asked for and commits nothing when read, and researched capability decisions compiled into the workspace.')
 } finally {
   await browser.close()
   vite.kill()
