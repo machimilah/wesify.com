@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import type { ArchitectureContext } from './businessDiscovery'
 import type { BusinessResearch, ResearchFinding } from './businessResearch'
 import { capabilityCatalogPrompt, capabilityIds } from './capabilityCatalog'
@@ -39,7 +40,7 @@ export interface FrontierResearch {
 let statusPromise: Promise<{ available: boolean; model: string; research?: boolean }> | null = null
 
 export function frontierResearchStatus() {
-  statusPromise ??= fetch('/api/research/status')
+  statusPromise ??= fetch(apiUrl('/api/research/status'))
     .then(response => response.ok ? response.json() as Promise<{ available: boolean; model: string; research?: boolean }> : { available: false, model: '' })
     .catch(() => ({ available: false, model: '' }))
   return statusPromise
@@ -51,7 +52,7 @@ export async function requestFrontierResearch(workspaceId: string, description: 
   // which a free Gemini key alone turns on, so asking for research on that key would be a 503 the
   // operator sees as BO failing rather than as a tier it does not have.
   if (!(status.research ?? status.available)) return null
-  const response = await fetch('/api/research', {
+  const response = await fetch(apiUrl('/api/research'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
     body: JSON.stringify({ workspaceId, description, conversation, catalog: capabilityCatalogPrompt(), capabilityIds }),

@@ -146,4 +146,18 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/'
 }
 assert.deepEqual(escapes, [], 'these server imports are not copied into the runtime image, so the container cannot start')
 
+/**
+ * No frontend call may assume the API is on the same origin.
+ *
+ * It is, on a laptop and in the container — one process serves both. It is not on a static host,
+ * where the interface is a CDN and the server lives somewhere that can hold a process. A bare
+ * '/api/...' fetch works in every place it is developed and fails only in that deployment, where it
+ * lands on the CDN and comes back as the index page. apiUrl() is the one place that decides, so a
+ * call site that skips it is the bug, not the deployment.
+ */
+const sameOrigin = files
+  .filter(item => item.file.startsWith('src/') && !item.file.endsWith('apiBase.ts') && !item.file.includes('.test.'))
+  .flatMap(item => [...item.text.matchAll(/fetch\(\s*['"`](\/api\/[^'"`]*)/g)].map(match => `${item.file} -> ${match[1]}`))
+assert.deepEqual(sameOrigin, [], 'these calls hard-code the API onto the current origin; route them through apiUrl()')
+
 console.log(`Structure test passed: ${files.length} source files, none over 800 lines, no route module over 400, every route module wired into the server, no unfinished-work markers, no credential-shaped literal committed, and no suite that would spend real money on a live API key.`)

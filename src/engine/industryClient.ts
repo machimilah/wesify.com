@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import type { ArchitectureContext } from './businessDiscovery'
 import { workspaceAccessHeaders } from './workspaceAccess'
 import { automationPatterns, knowledgeRequirementSpecs, kpiPatterns, masterDataTemplates, processPatterns } from '../data/operatingKnowledge'
@@ -33,7 +34,7 @@ export interface IndustryVerdict {
 export async function loadIndustryVerdict(subsector: string | undefined): Promise<IndustryVerdict | null> {
   if (!subsector || !/^\d{3}$/.test(subsector)) return null
   try {
-    const response = await fetch(`/api/industries/${subsector}`)
+    const response = await fetch(apiUrl(`/api/industries/${subsector}`))
     if (!response.ok) return null
     const verdict = await response.json() as IndustryVerdict
     return verdict.include.length || verdict.exclude.length || (verdict.patterns?.length ?? 0) ? verdict : null
@@ -54,7 +55,7 @@ type IndustryPatternKind = NonNullable<IndustryVerdict['patterns']>[number]['kin
 export async function recordIndustryObservations(subsector: string | undefined, workspaceId: string, observations: { kept?: string[]; removed?: string[]; added?: string[]; patterns?: Array<{ kind: IndustryPatternKind; id: string; outcome: 'adopted' | 'removed' }>; label?: string; newCompany?: boolean }) {
   if (!subsector || !/^\d{3}$/.test(subsector) || !workspaceId) return
   try {
-    await fetch(`/api/industries/${subsector}/observations`, {
+    await fetch(apiUrl(`/api/industries/${subsector}/observations`), {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...workspaceAccessHeaders(workspaceId) },
       body: JSON.stringify({ ...observations, workspaceId }),

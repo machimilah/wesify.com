@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import type { WorkspaceAction, WorkspaceRecords } from './workspaceActions'
 import type { WorkspaceConfiguration } from './workspaceSchema'
 import { workspaceAccessHeaders } from './workspaceAccess'
@@ -66,7 +67,7 @@ async function request<T>(workspaceId: string, path: string, init: RequestInit =
 }
 
 export async function ensureGeneratedProject(config: WorkspaceConfiguration) {
-  return request<GeneratedProjectManifest>(config.id, '/api/builds', { method: 'POST', body: JSON.stringify({ workspaceId: config.id, specification: config, changeDescription: 'Initial Command Center' }) })
+  return request<GeneratedProjectManifest>(config.id, apiUrl('/api/builds'), { method: 'POST', body: JSON.stringify({ workspaceId: config.id, specification: config, changeDescription: 'Initial Command Center' }) })
 }
 
 /**
@@ -82,33 +83,33 @@ export async function ensureGeneratedProject(config: WorkspaceConfiguration) {
  * built yet, not that this browser has not seen it before.
  */
 export async function loadGeneratedManifest(workspaceId: string): Promise<GeneratedProjectManifest | null> {
-  try { return await request<GeneratedProjectManifest>(workspaceId, `/api/projects/${workspaceId}`) }
+  try { return await request<GeneratedProjectManifest>(workspaceId, apiUrl(`/api/projects/${workspaceId}`)) }
   catch { return null }
 }
 
 export function buildGeneratedChange(config: WorkspaceConfiguration, action: WorkspaceAction, description: string) {
   const mutationPlan = planWorkspaceMutation(config, action)
-  return request<GeneratedProjectManifest>(config.id, `/api/projects/${config.id}/changes`, { method: 'POST', body: JSON.stringify({ specification: config, changeDescription: description, changeType: action.type, mutationPlan }) })
+  return request<GeneratedProjectManifest>(config.id, apiUrl(`/api/projects/${config.id}/changes`), { method: 'POST', body: JSON.stringify({ specification: config, changeDescription: description, changeType: action.type, mutationPlan }) })
 }
 
 export function promoteGeneratedChange(workspaceId: string, version: number) {
-  return request<GeneratedProjectManifest>(workspaceId, `/api/projects/${workspaceId}/promote`, { method: 'POST', body: JSON.stringify({ version }) })
+  return request<GeneratedProjectManifest>(workspaceId, apiUrl(`/api/projects/${workspaceId}/promote`), { method: 'POST', body: JSON.stringify({ version }) })
 }
 
 export function loadGeneratedRecords(workspaceId: string) {
-  return request<WorkspaceRecords>(workspaceId, `/api/projects/${workspaceId}/records`)
+  return request<WorkspaceRecords>(workspaceId, apiUrl(`/api/projects/${workspaceId}/records`))
 }
 
 export function loadWorkspaceNotifications(workspaceId: string) {
-  return request<WorkspaceNotification[]>(workspaceId, `/api/projects/${workspaceId}/notifications`)
+  return request<WorkspaceNotification[]>(workspaceId, apiUrl(`/api/projects/${workspaceId}/notifications`))
 }
 
 export function markWorkspaceNotificationRead(workspaceId: string, notificationId: string) {
-  return request<WorkspaceNotification>(workspaceId, `/api/projects/${workspaceId}/notifications/${notificationId}`, { method: 'PATCH', body: JSON.stringify({ read: true }) })
+  return request<WorkspaceNotification>(workspaceId, apiUrl(`/api/projects/${workspaceId}/notifications/${notificationId}`), { method: 'PATCH', body: JSON.stringify({ read: true }) })
 }
 
 export function loadWorkspaceAudit(workspaceId: string) {
-  return request<WorkspaceAuditEvent[]>(workspaceId, `/api/projects/${workspaceId}/audit`)
+  return request<WorkspaceAuditEvent[]>(workspaceId, apiUrl(`/api/projects/${workspaceId}/audit`))
 }
 
 /**
@@ -136,16 +137,16 @@ export async function exportWorkspace(workspaceId: string) {
 export async function executeGeneratedRecordAction(workspaceId: string, action: WorkspaceAction) {
   if (action.type === 'create_record') return request<Record<string, unknown>>(workspaceId, `/api/projects/${workspaceId}/records/${action.entityId}`, { method: 'POST', body: JSON.stringify(action.values) })
   if (action.type === 'update_record') return request<Record<string, unknown>>(workspaceId, `/api/projects/${workspaceId}/records/${action.entityId}/${action.recordId}`, { method: 'PATCH', body: JSON.stringify(action.values) })
-  if (action.type === 'delete_record') return request<{ deleted: boolean }>(workspaceId, `/api/projects/${workspaceId}/records/${action.entityId}/${action.recordId}`, { method: 'DELETE' })
+  if (action.type === 'delete_record') return request<{ deleted: boolean }>(workspaceId, apiUrl(`/api/projects/${workspaceId}/records/${action.entityId}/${action.recordId}`), { method: 'DELETE' })
   throw new Error('This is a project change, not a record action.')
 }
 
 export function queryGeneratedProject<T>(workspaceId: string, query: string) {
-  return request<T>(workspaceId, `/api/projects/${workspaceId}/query`, { method: 'POST', body: JSON.stringify({ query }) })
+  return request<T>(workspaceId, apiUrl(`/api/projects/${workspaceId}/query`), { method: 'POST', body: JSON.stringify({ query }) })
 }
 
 export async function loadGeneratedRuntime(manifest: GeneratedProjectManifest): Promise<GeneratedRuntime> {
-  const response = await fetch(`/api/projects/${manifest.workspaceId}/runtime.mjs?version=${manifest.version}`, { headers: headers(manifest.workspaceId) })
+  const response = await fetch(apiUrl(`/api/projects/${manifest.workspaceId}/runtime.mjs?version=${manifest.version}`), { headers: headers(manifest.workspaceId) })
   if (!response.ok) throw new Error('Wesify could not mount the generated workspace runtime.')
   const source = await response.text()
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
@@ -157,5 +158,5 @@ export function listGeneratedVersions(workspaceId: string) {
 }
 
 export function rollbackGeneratedProject(workspaceId: string, version: number) {
-  return request<GeneratedProjectManifest>(workspaceId, `/api/projects/${workspaceId}/rollback`, { method: 'POST', body: JSON.stringify({ version }) })
+  return request<GeneratedProjectManifest>(workspaceId, apiUrl(`/api/projects/${workspaceId}/rollback`), { method: 'POST', body: JSON.stringify({ version }) })
 }

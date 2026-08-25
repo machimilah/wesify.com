@@ -1,6 +1,7 @@
 // First: configuration has to be in place before any module decides what BO can do.
 import './env.mjs'
 import { createServer } from 'node:http'
+import { corsHeaders, handlePreflight } from './cors.mjs'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -82,6 +83,15 @@ export const server = createServer(async (request, response) => {
   // Sent back on every response so a customer reporting a problem can quote something that finds the
   // exact request in the log, rather than describing what they were doing at the time.
   response.setHeader('x-bo-request-id', requestId)
+
+  /**
+   * Set before anything is written, because a header cannot be added to a response already sent.
+   *
+   * Applied to every answer including failures: a browser that cannot read a 401 or a 500 reports it
+   * as an opaque network error, which hides the one thing the operator needed to be told.
+   */
+  for (const [header, value] of Object.entries(corsHeaders(request))) response.setHeader(header, value)
+  if (handlePreflight(request, response)) return
 
   try {
     if (await api(request, response, url) === false) await staticFile(response, url)

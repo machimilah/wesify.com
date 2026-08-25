@@ -31,6 +31,8 @@ La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https:/
 | `BO_INTERVIEW_PROVIDER` | Fuerza `gemini` o `anthropic` cuando hay dos keys |
 | `BO_GEMINI_MODEL` | Modelo de Gemini (por defecto `gemini-3.7-flash`) |
 | `BO_GEMINI_FALLBACK_MODELS` | Modelos a los que BO baja cuando el primero se queda sin cuota gratuita |
+| `VITE_API_URL` | Solo para despliegue partido: dónde vive la API. Se compila en el bundle, así que es una dirección, nunca un secreto |
+| `BO_ALLOWED_ORIGINS` | Qué orígenes de navegador pueden llamar a la API. Sin ella, ninguno |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, BO se niega a guardarlas |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
 | `DATABASE_URL` | Cadena de conexión de Supabase. Con ella BO tiene cuentas; sin ella, funciona como antes y sin cuentas |

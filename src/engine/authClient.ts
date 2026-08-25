@@ -20,7 +20,7 @@ let accountsPromise: Promise<boolean> | null = null
 
 /** Cached for the session: whether the server has accounts cannot change without a restart. */
 export function accountsEnabled(): Promise<boolean> {
-  accountsPromise ??= fetch('/api/health')
+  accountsPromise ??= fetch(apiUrl('/api/health'))
     .then(response => response.ok ? response.json() : { accounts: false })
     .then(health => health.accounts === true)
     .catch(() => false)
@@ -42,7 +42,7 @@ async function readOrThrow(response: Response) {
 }
 
 async function post(route: string, body?: unknown) {
-  return readOrThrow(await fetch(`/api/auth/${route}`, {
+  return readOrThrow(await fetch(apiUrl(`/api/auth/${route}`), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...sessionHeaders() },
     body: body ? JSON.stringify(body) : undefined,
@@ -92,11 +92,12 @@ export async function signOut() {
 export async function currentAccount(): Promise<{ user: Account; workspaces: AccountWorkspace[] } | null> {
   if (!sessionToken()) return null
   try {
-    const response = await fetch('/api/auth/me', { headers: sessionHeaders() })
+    const response = await fetch(apiUrl('/api/auth/me'), { headers: sessionHeaders() })
     if (response.status === 401) { localStorage.removeItem(TOKEN_KEY); return null }
     if (!response.ok) return null
     return await response.json()
   } catch {
     return null
   }
-}
+}import { apiUrl } from './apiBase'
+

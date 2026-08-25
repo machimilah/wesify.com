@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { parseDiscoveryResponse, type DiscoveryAgentResponse, type DiscoverySession } from './businessDiscovery'
 import { capabilityCatalogPrompt, capabilityIds } from './capabilityCatalog'
 import { moduleIds } from './blueprint'
@@ -19,7 +20,7 @@ let availability: Promise<boolean> | null = null
 
 /** Cached for the session: the answer cannot change without a server restart. */
 export function serverInterviewAvailable(): Promise<boolean> {
-  availability ??= fetch('/api/research/status')
+  availability ??= fetch(apiUrl('/api/research/status'))
     .then(response => response.ok ? response.json() : { available: false })
     .then(status => status.available === true)
     .catch(() => false)
@@ -63,7 +64,7 @@ export async function requestDiscoveryTurn(request: DiscoveryModelRequest, indus
       ...request.session.businessState.resources,
     ].join(' ')
     const operatingKnowledge = evaluateOperatingKnowledge(knowledgeText, request.session.architecture?.capabilityIds ?? [])
-    const response = await fetch('/api/discovery/turn', {
+    const response = await fetch(apiUrl('/api/discovery/turn'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

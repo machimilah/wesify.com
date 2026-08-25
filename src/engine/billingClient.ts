@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { sessionHeaders } from './authClient'
 
 /**
@@ -44,12 +45,12 @@ async function readOrThrow(response: Response) {
 }
 
 export async function billingState(): Promise<BillingState> {
-  return readOrThrow(await fetch('/api/billing', { headers: sessionHeaders() }))
+  return readOrThrow(await fetch(apiUrl('/api/billing'), { headers: sessionHeaders() }))
 }
 
 /** Returns Stripe's hosted checkout URL. BO never sees a card number. */
 export async function startCheckout(plan: string): Promise<string> {
-  const result = await readOrThrow(await fetch('/api/billing/checkout', {
+  const result = await readOrThrow(await fetch(apiUrl('/api/billing/checkout'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...sessionHeaders() },
     body: JSON.stringify({ plan }),
@@ -59,6 +60,6 @@ export async function startCheckout(plan: string): Promise<string> {
 
 /** Stripe's own portal for changing a card, switching plan, or cancelling. BO rebuilds none of it. */
 export async function billingPortal(): Promise<string> {
-  const result = await readOrThrow(await fetch('/api/billing/portal', { method: 'POST', headers: sessionHeaders() }))
+  const result = await readOrThrow(await fetch(apiUrl('/api/billing/portal'), { method: 'POST', headers: sessionHeaders() }))
   return result.url as string
 }
