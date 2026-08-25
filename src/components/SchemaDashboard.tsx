@@ -2,7 +2,7 @@ import {
   ArrowRight, BadgeCheck, Banknote, BarChart3, BookOpen, Bot, Boxes, CalendarDays, Check, CircleDollarSign,
   ChevronRight, ClipboardList, Contact, Download, Factory, FileText, FolderKanban, GripVertical, Headphones, LayoutDashboard, Link2,
   ArrowLeftRight, Building2, CalendarCheck, Flag, Handshake, HardHat, Layers, ListChecks, Megaphone, Package,
-  Plus, Receipt, RefreshCw, ScanLine, ScrollText, ShieldCheck, ShoppingCart, Sparkles, Target, TrendingUp, Truck,
+  Plus, Receipt, RefreshCw, ScanLine, ScrollText, ShieldCheck, ShoppingCart, Target, TrendingUp, Truck,
   Users, UsersRound, Wallet, Warehouse,
   Workflow, Wrench, X, Zap,
   Calendar,
@@ -95,7 +95,7 @@ function setupStepsFor(config: WorkspaceConfiguration, records: WorkspaceRecords
 }
 
 const navIcons: Record<NavigationDefinition['kind'], typeof LayoutDashboard> = {
-  home: LayoutDashboard, today: Sparkles, entity: FileText, analytics: CircleDollarSign, links: Link2, automations: Workflow, assistant: Bot, settings: Zap,
+  home: LayoutDashboard, today: Bot, entity: FileText, analytics: CircleDollarSign, links: Link2, automations: Workflow, assistant: Bot, settings: Zap,
 }
 
 export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfig: WorkspaceConfiguration; basePath?: string }) {
@@ -392,7 +392,7 @@ export function SchemaDashboard({ initialConfig, basePath = '' }: { initialConfi
     </aside>}
     <div className="bo-dashboard__main">
       {setupSteps.length ? <div className="bo-setup-banner" data-testid="setup-banner">
-        <span><Sparkles size={14}/></span>
+        <span><Bot size={14}/></span>
         <strong>Finish setting up Wesify</strong>
         <em>{4 - setupSteps.length}/4 done</em>
         <div>{setupSteps.map(step => <button key={step.id} onClick={() => step.target && navigate(step.target)} title={step.detail}>{step.label}<ArrowRight size={13}/></button>)}</div>
@@ -524,7 +524,7 @@ function WorkspaceHome({ config, records, role, navigate, runtime, notifications
     <section className="bo-command-layout">
       <div className="bo-action-queue"><header><div><h2>What needs attention</h2></div><span>{attentionCount} open</span></header><div className="bo-action-list">
         {unreadNotifications.slice(0, 4).map(notification => <button key={notification.id} onClick={() => openNotification(notification)}><span><Zap size={13}/></span><strong>{notification.message}</strong><small>{humanize(config.entities.find(item => item.id === notification.entityId)?.label ?? 'Alert')}</small></button>)}
-        {recordAlerts.map(alert => <button key={alert.id} onClick={() => { const destination = navigationFor(alert.entityId); if (destination) navigate(destination) }}><span><Sparkles size={13}/></span><strong>{alert.message}</strong><small>{humanize(config.entities.find(item => item.id === alert.entityId)?.label ?? 'Record')}</small></button>)}
+        {recordAlerts.map(alert => <button key={alert.id} onClick={() => { const destination = navigationFor(alert.entityId); if (destination) navigate(destination) }}><span><Bot size={13}/></span><strong>{alert.message}</strong><small>{humanize(config.entities.find(item => item.id === alert.entityId)?.label ?? 'Record')}</small></button>)}
         {!attentionCount && <div className="bo-empty-state">Nothing needs your attention.</div>}
       </div><button className="bo-open-briefing" onClick={() => navigate('today')}>Open daily briefing <ArrowRight size={14}/></button></div>
       <div className="bo-command-modules"><header><div><h2>Recent activity</h2></div></header>{recent.map(({ entity, record }) => <button key={`${entity.id}-${record.id}`} onClick={() => { const destination = navigationFor(entity.id); if (destination) navigate(destination) }}><FileText size={15}/><span><strong>{String(record[entity.primaryField] ?? entity.label)}</strong><small>{entity.label} · {record.updatedAt ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(record.updatedAt)) : 'Just now'}</small></span><ArrowRight size={14}/></button>)}{!recent.length && <div className="bo-empty-state">Activity appears as your team works in Wesify.</div>}</div>
@@ -764,7 +764,7 @@ function SettingsView({ config, manifest, versions, auditEvents, role, onRoleCha
 }
 
 function ProjectBuildState({ label }: { label: string }) {
-  return <div className="bo-project-build"><section><Sparkles size={20}/><small>WESTIFY IS ADAPTING YOUR COMMAND CENTER</small><h2>{label}</h2><div><span className="done"><Check size={13}/> Understanding the change</span><span className="done"><Check size={13}/> Updating your business system</span><span><i/> Testing everything</span></div></section></div>
+  return <div className="bo-project-build"><section><Bot size={20}/><small>WESTIFY IS ADAPTING YOUR COMMAND CENTER</small><h2>{label}</h2><div><span className="done"><Check size={13}/> Understanding the change</span><span className="done"><Check size={13}/> Updating your business system</span><span><i/> Testing everything</span></div></section></div>
 }
 
 function RecordForm({ entity, entities, records, initialRecord, onClose, onSubmit, onDelete, onChangeEntity }: { entity: EntityDefinition; entities: EntityDefinition[]; records: WorkspaceRecords; initialRecord?: BusinessRecord; onClose: () => void; onSubmit: (values: Record<string, string | number | boolean>) => void; onDelete?: () => void; onChangeEntity: (entity: EntityDefinition) => void }) {
@@ -778,5 +778,5 @@ function ChangePreview({ action, config, candidate, onCancel, onApply }: { actio
   const plan = planWorkspaceMutation(config, action)
   const control = evaluateActionControl(config, action)
   const affected = [plan.affected.entityIds.length && `${plan.affected.entityIds.length} data types`, plan.affected.viewIds.length && `${plan.affected.viewIds.length} views`, plan.affected.workflowIds.length && `${plan.affected.workflowIds.length} workflows`, plan.affected.kpiIds.length && `${plan.affected.kpiIds.length} KPIs`, plan.affected.agentIds.length && `${plan.affected.agentIds.length} agents`, plan.affected.eventTypes.length && `${plan.affected.eventTypes.length} event types`].filter(Boolean).join(' · ')
-  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Sparkles size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>Wesify prepared your update</h2><div className="bo-change-impact"><strong>{description}</strong><span>Autonomy level {control.level}: {humanize(control.disposition)}</span>{affected && <span>Affects {affected}</span>}{plan.warnings.map(warning => <span key={warning}>{warning}</span>)}</div>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
+  return <div className="bo-modal-backdrop"><section className="bo-change-preview"><span><Bot size={18}/></span><small>TESTED WORKSPACE PREVIEW</small><h2>Wesify prepared your update</h2><div className="bo-change-impact"><strong>{description}</strong><span>Autonomy level {control.level}: {humanize(control.disposition)}</span>{affected && <span>Affects {affected}</span>}{plan.warnings.map(warning => <span key={warning}>{warning}</span>)}</div>{candidate && <div className="bo-candidate-preview"><strong>Version {candidate.version} passed its checks</strong><span>{candidate.pages.map(page => page.label).join(' · ')}</span><span>{candidate.specializedComponents.map(component => component.label).join(' · ')}</span></div>}<footer><button onClick={onCancel}>Request changes</button><button onClick={onApply}>Apply changes</button></footer></section></div>
 }

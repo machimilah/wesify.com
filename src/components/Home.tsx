@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ArrowRight, ArrowUp, ChevronDown, Lock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronDown, Lock } from 'lucide-react'
 import { capabilityIds } from '../engine/capabilityCatalog'
 import { prepareBusinessDiscoveryModel } from '../engine/discoveryModel'
 import { Brand } from './Brand'
@@ -97,7 +97,13 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
 }) {
   const explain = useRef<HTMLElement>(null)
   const modelWarmStarted = useRef(false)
+  const promptCloseTimer = useRef<number | undefined>(undefined)
   const [promptOpen, setPromptOpen] = useState(false)
+  const [promptClosing, setPromptClosing] = useState(false)
+
+  useEffect(() => () => {
+    if (promptCloseTimer.current !== undefined) window.clearTimeout(promptCloseTimer.current)
+  }, [])
 
   /**
    * The front door, and where it leads depends on whether Wesify knows who is knocking.
@@ -115,10 +121,22 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
       onSignIn?.()
       return
     }
+    setPromptClosing(false)
     setPromptOpen(true)
     if (modelWarmStarted.current) return
     modelWarmStarted.current = true
     void prepareBusinessDiscoveryModel().catch(() => undefined)
+  }
+
+  const closePrompt = () => {
+    if (promptClosing) return
+    setPromptClosing(true)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    promptCloseTimer.current = window.setTimeout(() => {
+      setPromptOpen(false)
+      setPromptClosing(false)
+      promptCloseTimer.current = undefined
+    }, reduceMotion ? 0 : 240)
   }
 
   return <main className="bo-home">
@@ -166,35 +184,43 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
          * being a lie the next time a capability is added or removed.
          */}
         <h1>
-          <span>You prompt,</span>
-          <span>  I build </span>
+          <span>Say what you are managing.</span>
+
+          <span>I'll build the system around it.</span>
         </h1>
-        {!promptOpen && <div className="bo-home__actions">
-          <div className="bo-home__get-started-wrap">
-            <GlassSurface
-              displace={15}
-              distortionScale={-150}
-              redOffset={5}
-              greenOffset={15}
-              blueOffset={25}
-              brightness={60}
-              opacity={0.8}
-              mixBlendMode="screen"
-            >
-              <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
-                Get started <ArrowRight size={17}/>
+        <div className="bo-home__interaction">
+          {!promptOpen && <div className="bo-home__actions">
+            <div className="bo-home__get-started-wrap">
+              <GlassSurface
+                displace={15}
+                distortionScale={-150}
+                redOffset={5}
+                greenOffset={15}
+                blueOffset={25}
+                brightness={60}
+                opacity={0.8}
+                mixBlendMode="screen"
+              >
+                <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
+                  Get started <ArrowRight size={17}/>
+                </button>
+              </GlassSurface>
+            </div>
+            <button type="button" className="bo-home__learn-more" onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })} data-testid="learn-more">
+              Learn more <ChevronDown size={17}/>
+            </button>
+          </div>}
+          {promptOpen && <div className={`bo-home__prompt-stage${promptClosing ? ' is-closing' : ''}`} data-testid="prompt-stage">
+            <div className="bo-home__prompt-shell">
+              <button type="button" className="bo-home__prompt-back" onClick={closePrompt} aria-label="Back to start" data-testid="close-prompt">
+                <ArrowLeft size={14}/>
               </button>
-            </GlassSurface>
-          </div>
-          <button type="button" className="bo-home__learn-more" onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })} data-testid="learn-more">
-            Learn more <ChevronDown size={17}/>
-          </button>
-        </div>}
-        {promptOpen && <div className="bo-home__prompt-stage" data-testid="prompt-stage">
-          <Suspense fallback={<div className="bo-home__prompt-loading" aria-hidden="true"/>}>
-            <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
-          </Suspense>
-        </div>}
+              <Suspense fallback={<div className="bo-home__prompt-loading" aria-hidden="true"/>}>
+                <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
+              </Suspense>
+            </div>
+          </div>}
+        </div>
       </section>
       {/* Where a company with customers would put their logos. Wesify has none yet, and a row of
           borrowed or invented marks is the one thing on a landing page that cannot be walked back —

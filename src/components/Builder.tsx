@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, Eye, RotateCcw, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Check, Eye, RotateCcw, Send } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
@@ -298,11 +298,11 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
 
       {/* One thread, oldest first. The question Wesify is asking is simply the newest thing in it. */}
       <div className="bo-thread" ref={chat} data-testid="build-thread">
-        {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><span className="bo-turn__text">Tell me how your company works.</span></div></div>}
+        {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div><span className="bo-turn__text">Tell me how your company works.</span></div></div>}
 
         {session?.messages.map(message => message.id === currentAssistantId ? null : message.role === 'user'
           ? <div className="bo-turn bo-turn--you" key={message.id}><div><span className="bo-turn__text">{message.content}</span></div></div>
-          : <div className="bo-turn bo-turn--bo" key={message.id}><span><Sparkles size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
+          : <div className="bo-turn bo-turn--bo" key={message.id}><span><Bot size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
 
         {/**
          * What Wesify is doing, and nothing about how it is doing it.
@@ -315,18 +315,18 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
          *
          * One line survives, because a wait with no label is a wait that looks broken.
          */}
-        {notice && <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div><span className="bo-turn__text bo-turn__notice" data-testid="agent-notice">{notice}</span></div></div>}
+        {notice && <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div><span className="bo-turn__text bo-turn__notice" data-testid="agent-notice">{notice}</span></div></div>}
 
         {loading && <div className="bo-turn bo-turn--bo" data-testid="agent-activity">
-          <span><Sparkles size={15}/></span>
+          <span><Bot size={15}/></span>
           <div><span className="bo-turn__text bo-turn__working">{activity || 'Working on it'}</span></div>
         </div>}
 
         {error ? <div className="bo-turn bo-turn--bo">
-          <span><Sparkles size={15}/></span>
+          <span><Bot size={15}/></span>
           <div className="bo-turn-error"><span className="bo-turn__text">Wesify couldn't finish that thought. {error}</span><button onClick={() => session && runAgent(session)}><RotateCcw size={13}/> Retry</button></div>
         </div> : architecture && session?.phase === 'AWAITING_APPROVAL' ? <div className="bo-turn bo-turn--bo">
-          <span><Sparkles size={15}/></span>
+          <span><Bot size={15}/></span>
           <div>
             {/**
              * The end of the interview is a decision, not a document.
@@ -354,12 +354,12 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             </div>
           </div>
         </div> : session?.currentQuestion ? <div className="bo-turn bo-turn--bo bo-turn--asking" data-testid="discovery-question">
-          <span><Sparkles size={15}/></span>
+          <span><Bot size={15}/></span>
           <div>
             {currentAcknowledgment && <span className="bo-turn-ack">{currentAcknowledgment}</span>}
             <span className="bo-turn-ask">{session.currentQuestion.text}</span>
           </div>
-        </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Sparkles size={15}/></span><div className="bo-typing" aria-label="Wesify is working"><i/><i/><i/></div></div> : null}
+        </div> : loading ? <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div className="bo-typing" aria-label="Wesify is working"><i/><i/><i/></div></div> : null}
       </div>
 
       {/* One composer, always in the same place: answering a question and asking for a change are the
@@ -386,6 +386,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       </footer>
     </section>
 
-    {launching && <div className="bo-launch-overlay"><div className="bo-generation-status"><Sparkles size={17}/><strong>{buildLabels[launchPhase]}</strong><span/></div></div>}
+    {launching && <div className="bo-launch-overlay"><div className="bo-generation-status"><Bot size={17}/><strong>{buildLabels[launchPhase]}</strong><span/></div></div>}
   </main>
 }

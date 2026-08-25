@@ -43,9 +43,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__hero h1 { max-width: 880px; margin: 0 auto 34px; font: 600 clamp(34px, 4.4vw, 58px)/1.08 'Ubuntu', sans-serif; letter-spacing: -.045em; }
 /* Two tones, one size: the claim, then the sentence that explains it, exactly as a person would say
    both in a row without pausing to change voice. */
-.bo-home__hero h1 span { color: #ffffff; }
-.bo-home__hero h1 span + span { color: #aeb4af; }
-.bo-home__actions { min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; }
+.bo-home__hero h1 span { display: block; color: #ffffff; }
+.bo-home__hero h1 span + span { color: #d8dbd9; }
+.bo-home__interaction { width: 100%; height: 88px; position: relative; }
+.bo-home__actions { width: 100%; min-height: 88px; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; animation: bo-home-actions-in .28s ease-out both; }
 .bo-home__get-started-wrap .glass-surface__content { padding: 0; }
 .bo-home__get-started-wrap .glass-surface:hover { opacity: .88; }
 .bo-home__get-started { width: 100%; height: 100%; padding: 0 19px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: inherit; color: #ffffff; background: transparent; font-size: 13px; font-weight: 600; text-shadow: 0 1px 5px rgba(0,0,0,.42); }
@@ -53,9 +54,16 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-home__learn-more { min-height: 28px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 0; color: rgba(255,255,255,.78); background: transparent; font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-color: rgba(255,255,255,.34); text-underline-offset: 4px; }
 .bo-home__learn-more:hover { color: #ffffff; text-decoration-color: rgba(255,255,255,.8); }
 .bo-home__learn-more:focus-visible { outline: 2px solid #ffffff; outline-offset: 4px; }
-.bo-home__prompt-stage { width: 100%; animation: bo-home-prompt-in .42s ease-out both; }
+.bo-home__prompt-stage { width: 100%; position: absolute; inset: 0; animation: bo-home-prompt-in .42s ease-out both; }
+.bo-home__prompt-stage.is-closing { pointer-events: none; animation: bo-home-prompt-out .24s ease-in both; }
+.bo-home__prompt-shell { width: min(620px, 100%); position: relative; margin: 0 auto; padding-top: 34px; }
+.bo-home__prompt-back { width: 26px; height: 26px; position: absolute; z-index: 3; top: 0; left: 2px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; color: #ffffff; background: rgba(18,20,18,.48); cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.bo-home__prompt-back:hover { border-color: rgba(255,255,255,.58); background: rgba(18,20,18,.68); }
+.bo-home__prompt-back:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 .bo-home__prompt-loading { width: min(620px, 100%); min-height: 126px; margin: 0 auto; border: 1px solid rgba(255,255,255,.22); border-radius: 18px; background: rgba(255,255,255,.08); }
 @keyframes bo-home-prompt-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes bo-home-prompt-out { to { opacity: 0; transform: translateY(10px); } }
+@keyframes bo-home-actions-in { from { opacity: 0; transform: translateY(8px); } }
 .bo-home__center .bo-prompt { max-width: 620px; margin-right: auto; margin-left: auto; }
 .bo-prompt__guidance { max-width: 620px; margin: 14px auto 0; color: #ffffff; font-size: 15px; line-height: 1.5; text-align: center; }
 .bo-home__center > small { display: block; margin-top: 13px; color: var(--text-2); font-size: 11px; }

@@ -130,7 +130,7 @@ export default function App() {
   }, [path])
   useEffect(() => {
     const companyName = String(answers.companyName ?? 'Dashboard')
-    document.title = path === '/' ? 'Wesify — Describe your company, get the software to run it' : path.startsWith('/build') ? 'Build your workspace — Wesify' : `${companyName} — Wesify`
+    document.title = path === '/' ? 'Wesify' : path.startsWith('/build') ? 'Build your workspace — Wesify' : `${companyName} — Wesify`
   }, [path, answers.companyName])
 
   /** Starts a fresh company from one sentence. Everything a previous workspace left behind goes. */

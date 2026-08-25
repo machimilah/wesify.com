@@ -137,6 +137,14 @@ try {
 
   // 4. It survives navigation, not just a reload of one page.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  const headlineTopBeforePrompt = await page.evaluate(() => document.querySelector('.bo-home__hero h1')?.getBoundingClientRect().top)
+  await page.getByTestId('get-started').click()
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  const headlineTopAfterPrompt = await page.evaluate(() => document.querySelector('.bo-home__hero h1')?.getBoundingClientRect().top)
+  if (typeof headlineTopBeforePrompt !== 'number' || typeof headlineTopAfterPrompt !== 'number' || Math.abs(headlineTopAfterPrompt - headlineTopBeforePrompt) > 0.5) throw new Error('Opening the prompt moved the hero headline.')
+  await page.getByTestId('close-prompt').click()
+  await page.getByTestId('prompt-stage').waitFor({ state: 'detached', timeout: 2_000 })
+  await page.getByTestId('get-started').waitFor({ timeout: 2_000 })
   await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving between pages.')
