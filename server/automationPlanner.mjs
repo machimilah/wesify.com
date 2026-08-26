@@ -16,6 +16,7 @@ const rules = [
   { id: 'maintenance-scheduling', capabilityIds: ['maintenance.assets'], entityId: 'maintenance-orders', event: 'updated', field: 'status', equals: 'Requested', name: 'Schedule requested maintenance', summary: 'Notify operations when preventive or corrective work is ready to schedule.', action: 'notification', message: 'A maintenance request is ready to schedule.', risk: 'low', pattern: 'Preventive work scheduling' },
   { id: 'delivery-exception', capabilityIds: ['logistics.shipping'], entityId: 'shipments', event: 'updated', field: 'status', equals: 'Exception', name: 'Escalate delivery exceptions', summary: 'Alert operations when a shipment leaves its expected flow.', action: 'notification', message: 'A shipment has a delivery exception.', risk: 'medium', pattern: 'Delivery proof and exception handling' },
   { id: 'collections-escalation', capabilityIds: ['finance.invoicing'], entityId: 'invoices', event: 'updated', field: 'status', equals: 'Overdue', name: 'Escalate overdue receivables', summary: 'Alert the finance owner when an invoice becomes overdue.', action: 'notification', message: 'An invoice is overdue and needs collection follow-up.', risk: 'medium', pattern: 'Receivables reminder and escalation' },
+  { id: 'daily-collections-review', capabilityIds: ['finance.invoicing'], entityId: 'invoices', event: 'scheduled', schedule: { cadence: 'daily', time: '08:00', timezone: 'UTC' }, field: 'status', equals: 'Overdue', name: 'Review overdue receivables daily', summary: 'Scan overdue invoices each morning so aging records cannot silently miss collection follow-up.', action: 'notification', message: 'Daily collections review: an overdue invoice needs follow-up.', risk: 'medium', pattern: 'Scheduled receivables review' },
   { id: 'return-approval', capabilityIds: ['commerce.returns'], entityId: 'returns', event: 'updated', field: 'status', equals: 'Requested', name: 'Review return requests', summary: 'Create a decision request before a return or refund proceeds.', action: 'approval', message: 'A return request is awaiting a decision.', risk: 'high', pattern: 'Complaint evidence, decision and resolution' },
   { id: 'employee-onboarding-control', capabilityIds: ['people.directory'], entityId: 'employees', event: 'created', name: 'Review employee onboarding', summary: 'Create a controlled onboarding checkpoint for every new employee record.', action: 'approval', message: 'A new employee onboarding requires confirmation.', risk: 'high', pattern: 'Employee lifecycle control' },
   { id: 'contract-acceptance-control', capabilityIds: ['sales.contracts'], entityId: 'contracts', event: 'updated', field: 'status', equals: 'Awaiting signature', name: 'Review contract acceptance', summary: 'Keep contract acceptance behind an accountable human decision.', action: 'approval', message: 'A contract is awaiting acceptance and signature.', risk: 'high', pattern: 'Contract acceptance control' },
@@ -42,10 +43,12 @@ export function compileGeneratedAutomations(specification, now = new Date().toIS
     humanControl: rule.action === 'approval' ? 'approval-required' : 'exception',
     enabled: true,
     reviewStatus: 'approved',
-    trigger: { entityId: rule.entityId, event: rule.event, ...(rule.field ? { field: rule.field, equals: rule.equals } : {}) },
+    trigger: { entityId: rule.entityId, event: rule.event, ...(rule.schedule ? { schedule: rule.schedule } : {}), ...(rule.field ? { field: rule.field, equals: rule.equals } : {}) },
     action: { type: rule.action, message: rule.message },
     steps: [
-      `Watch ${specification.entities.find(item => item.id === rule.entityId)?.pluralLabel ?? rule.entityId}`,
+      rule.event === 'scheduled'
+        ? `Scan ${specification.entities.find(item => item.id === rule.entityId)?.pluralLabel ?? rule.entityId} ${rule.schedule.cadence} at ${rule.schedule.time} ${rule.schedule.timezone}`
+        : `Watch ${specification.entities.find(item => item.id === rule.entityId)?.pluralLabel ?? rule.entityId}`,
       ...(rule.field ? [`Check ${rule.field} = ${rule.equals}`] : []),
       rule.action === 'approval' ? 'Create a human approval request' : 'Notify the responsible team',
       'Record the outcome in the audit history',

@@ -23,14 +23,24 @@ export const sessionUser = token => clerkUser(token)
  * a workspace that already has a different owner, so it can never be used to take one over.
  */
 export async function claimWorkspace(workspaceId, userId, name = '') {
-  const existing = await queryOne('select id, owner_id from workspaces where id = $1', [workspaceId])
+  const existing = await queryOne('select id, owner_id, deleted_at from workspaces where id = $1', [workspaceId])
   if (existing) {
+    // A deleted workspace is not an unowned one. Without this the id would be handed straight back
+    // to whoever mentioned it next, and the workspace somebody deleted would return from the dead —
+    // empty, but in their list. See migration 010.
+    if (existing.deleted_at) throw Object.assign(new Error('That workspace was deleted.'), { status: 410 })
     if (existing.owner_id !== userId) throw Object.assign(new Error('That workspace belongs to someone else.'), { status: 403 })
     return existing
   }
   await query('insert into workspaces (id, owner_id, name) values ($1, $2, $3)', [workspaceId, userId, String(name).slice(0, 120)])
   await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, userId, 'owner'])
   return { id: workspaceId, owner_id: userId }
+}
+
+/** The account a workspace belongs to, or null where no account has ever claimed it. */
+export async function workspaceOwner(workspaceId) {
+  const row = await queryOne('select owner_id from workspaces where id = $1', [workspaceId])
+  return row?.owner_id ?? null
 }
 
 /** Whether this person may act on this workspace at all, and as what. */
@@ -40,7 +50,7 @@ export async function membership(workspaceId, userId) {
 
 export async function workspacesFor(userId) {
   const result = await query(
-    'select w.id, w.name, m.role, w.created_at from workspace_members m join workspaces w on w.id = m.workspace_id where m.user_id = $1 order by w.created_at desc',
+    'select w.id, w.name, w.logo, m.role, w.created_at from workspace_members m join workspaces w on w.id = m.workspace_id where m.user_id = $1 and w.deleted_at is null order by w.created_at desc',
     [userId],
   )
   return result.rows

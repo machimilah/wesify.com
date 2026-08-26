@@ -15,7 +15,7 @@ import { generateWorkspaceConfigurationFromDiscovery } from './workspaceSchema'
  */
 
 // The assistant left the rail: it is reachable from every page, so it is not a section any more.
-const SHELL = ['home', 'today', 'analytics', 'links', 'settings']
+const SHELL = ['home', 'today', 'analytics', 'links', 'control', 'settings']
 
 function workspaceFor(summary: string, extra: Partial<ReturnType<typeof emptyBusinessState>> = {}) {
   const state = { ...emptyBusinessState(), companySummary: summary, industry: summary, ...extra }

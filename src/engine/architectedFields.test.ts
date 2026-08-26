@@ -111,6 +111,16 @@ describe('fields the architect asked for', () => {
     expect(invoices.fields.some(field => field.type === 'currency')).toBe(true)
   })
 
+  it('does not duplicate or weaken catalog fields when fallback inference matches an existing entity', () => {
+    const config = workspace({ entities: [{ name: 'Work orders', module: 'field-service', purpose: 'Jobs at customer homes' }] })
+    const workOrders = config.entities.find(entity => entity.id === 'work-orders')!
+    const labels = workOrders.fields.map(field => `${field.type}:${field.label.toLowerCase()}`)
+
+    expect(workOrders.fields.map(field => field.id)).not.toContain('name')
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(workOrders.fields.find(field => field.id === 'status')?.options).toEqual(expect.arrayContaining(['Scheduled', 'Dispatched', 'In progress', 'Cancelled']))
+  })
+
   it('does not let two companies in the same trade end up with the same record', () => {
     const plumber = workspace({
       entities: [{ name: 'Jobs', module: 'field-service', purpose: 'Visits', fields: [

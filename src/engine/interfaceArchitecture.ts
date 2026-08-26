@@ -27,6 +27,7 @@ export interface GeneratedInterfaceArchitecture {
 }
 
 function rolesFor(module: string, config: WorkspaceConfiguration) {
+  if (module === 'control') return config.roles.filter(role => role.id === 'owner' || role.id === 'admin').map(role => role.id)
   const sensitivePermission = /finance|accounting|payroll/.test(module) ? 'financial' : /people|team|hr/.test(module) ? 'people' : null
   return config.roles.filter(role => role.permissions.includes('view') && (!sensitivePermission || role.permissions.includes(sensitivePermission) || role.permissions.includes('admin'))).map(role => role.id)
 }

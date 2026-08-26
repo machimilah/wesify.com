@@ -1,24 +1,21 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, ArrowUp, ChevronDown, Lock } from 'lucide-react'
-import { capabilityIds } from '../engine/capabilityCatalog'
-import { prepareBusinessDiscoveryModel } from '../engine/discoveryModel'
-import { Brand } from './Brand'
-import { AccountButton } from './AccountButton'
-import { ThemeToggle } from './ThemeToggle'
-import { MoltenMetal } from './MoltenMetal'
+import { ArrowUp, Lock } from 'lucide-react'
+import { loadSelectedTools, saveSelectedTools } from '../engine/toolSelection'
 import Aurora from './Aurora'
-import GlassSurface from './GlassSurface'
-import LogoLoop from './LogoLoop'
+import { Brand } from './Brand'
 import BorderGlow from './BorderGlow'
-import GradualBlur from './GradualBlur'
+import LogoLoop from './LogoLoop'
+import { ThemeToggle } from './ThemeToggle'
 import wave04 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_04.png'
 import wave05 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_05.png'
 import wave06 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_06.png'
 import wave07 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_07.png'
 import wave08 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_08.png'
 import wave09 from '../../metallic_wave_webpage_images/varied_positions_and_angles/wave_09.png'
+import './Home.css'
 
 const CompanyPrompt = lazy(() => import('./CompanyPrompt').then(module => ({ default: module.CompanyPrompt })))
+const LightPillar = lazy(() => import('./LightPillar').then(module => ({ default: module.LightPillar })))
 
 function LazyCardImage({ src }: { src: string }) {
   const imageRef = useRef<HTMLImageElement>(null)
@@ -51,11 +48,13 @@ function LazyCardImage({ src }: { src: string }) {
   />
 }
 
-const trustedLogoPlaceholders = [
-  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
-  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
-  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
-  { node: <span className="bo-home__logo-placeholder">logo here</span>, title: 'Logo placeholder' },
+const trustedTeams = [
+  { node: <span className="bo-home__trusted-team">Professional services</span>, title: 'Professional services teams' },
+  { node: <span className="bo-home__trusted-team">Field operations</span>, title: 'Field operations teams' },
+  { node: <span className="bo-home__trusted-team">Distribution</span>, title: 'Distribution teams' },
+  { node: <span className="bo-home__trusted-team">Commerce</span>, title: 'Commerce teams' },
+  { node: <span className="bo-home__trusted-team">Project businesses</span>, title: 'Project-based businesses' },
+  { node: <span className="bo-home__trusted-team">Agencies</span>, title: 'Agency teams' },
 ]
 
 const howItWorksGlow = {
@@ -64,184 +63,77 @@ const howItWorksGlow = {
   backgroundColor: '#120F17',
   borderRadius: 28,
   glowRadius: 40,
-  glowIntensity: 1.0,
+  glowIntensity: 1,
   coneSpread: 25,
   animated: false,
   colors: ['#c084fc', '#f472b6', '#38bdf8'],
 }
 
-/**
- * Wesify's home page, signed in or not.
- *
- * There used to be two of these: a landing page at `/` that argued for Wesify, and this page behind the
- * account. They had converged on the same thing — a sentence and the box to answer it in — so the
- * landing page is gone and this is what `/` serves.
- *
- * That makes the front door and the workbench the same door, which is the honest arrangement for a
- * product whose entire pitch is the thing it builds from one sentence. A stranger can read all of it
- * and scroll all of it; what needs an account is starting something, so "Get started" is where the
- * asking happens.
- *
- * What follows below the fold is not the landing page come back. It answers the one question the
- * prompt itself cannot — "and then what happens?" — by showing it. Every card carries a picture of
- * Wesify's own interface rather than an icon standing in for an idea, because a picture of the product
- * is the only illustration that cannot promise something the product does not do.
- */
-
-export function Home({ initialValue = '', onSubmit, signedIn = false, accounts = false, onSignIn }: {
+export function Home({ initialValue = '', onSubmit, accounts = false, onSignIn }: {
   initialValue?: string
   onSubmit: (brief: string) => void
-  signedIn?: boolean
   accounts?: boolean
   onSignIn?: () => void
 }) {
-  const explain = useRef<HTMLElement>(null)
-  const modelWarmStarted = useRef(false)
-  const promptCloseTimer = useRef<number | undefined>(undefined)
-  const [promptOpen, setPromptOpen] = useState(false)
-  const [promptClosing, setPromptClosing] = useState(false)
+  const [selectedTools, setSelectedTools] = useState(() => loadSelectedTools(initialValue))
 
-  useEffect(() => () => {
-    if (promptCloseTimer.current !== undefined) window.clearTimeout(promptCloseTimer.current)
-  }, [])
+  useEffect(() => saveSelectedTools(selectedTools), [selectedTools])
 
-  /**
-   * The front door, and where it leads depends on whether Wesify knows who is knocking.
-   *
-   * Signed in, it opens the box: describe the company, and building starts. Signed out, it asks who
-   * they are first. The box used to open for everybody and the account was asked for at the moment
-   * they pressed build — which reads well and cost people their sentence at the worst moment, one
-   * keystroke from the thing they came to see.
-   *
-   * Below the fold is untouched by this. The page still argues for Wesify to anybody who scrolls; it is
-   * only the one button that starts something which now needs an account behind it.
-   */
-  const getStarted = () => {
-    if (accounts && !signedIn) {
-      onSignIn?.()
-      return
-    }
-    setPromptClosing(false)
-    setPromptOpen(true)
-    if (modelWarmStarted.current) return
-    modelWarmStarted.current = true
-    void prepareBusinessDiscoveryModel().catch(() => undefined)
-  }
-
-  const closePrompt = () => {
-    if (promptClosing) return
-    setPromptClosing(true)
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    promptCloseTimer.current = window.setTimeout(() => {
-      setPromptOpen(false)
-      setPromptClosing(false)
-      promptCloseTimer.current = undefined
-    }, reduceMotion ? 0 : 240)
-  }
-
-  return <main className="bo-home">
-    <div className="bo-home__hero">
-      <div className="bo-home__molten" aria-hidden="true">
-        <div className="bo-home__molten-frame">
-          <MoltenMetal
-            color1="#ffffff"
-            color2="#ffffff"
-            color3="#ffffff"
-            colorMode="frost"
-            speed={0.1}
-            scale={5}
-            detail={7}
-            glow={2}
-            coreSize={0.08}
-            swirl={1}
-            fold={-0.2}
-            blackPoint={0}
-            brightness={1.3}
-            opacity={1}
-            grain
-            grainIntensity={0}
-            mouseInteraction
-            mouseStrength={0.1}
+  return <main className="wes-home" data-testid="public-home">
+    <div className="wes-home__hero">
+      {/* One shaft of warm light across a near-black hero, leaning towards whoever is pointing at
+          it. The page's own dark ground shows through everywhere the beam is not. */}
+      <div className="wes-home__visual" aria-hidden="true">
+        <Suspense fallback={<div className="wes-home__visual-loading"/>}>
+          <LightPillar
+            topColor="#ffca55"
+            bottomColor="#ffffff"
+            intensity={0.8}
+            rotationSpeed={0.1}
+            glowAmount={0.005}
+            pillarWidth={2.2}
+            pillarHeight={0.3}
+            noiseIntensity={0.5}
+            pillarRotation={22}
+            interactive
+            mixBlendMode="normal"
           />
-        </div>
+        </Suspense>
       </div>
-      <header>
-        <Brand />
-        <ThemeToggle className="bo-home__theme-toggle"/>
-        {/* Only where it means something: with no accounts there is nothing to sign in to, and
-            somebody already signed in does not need to be offered it. */}
-        {accounts && !signedIn && <button type="button" className="bo-home__signin" onClick={onSignIn} data-testid="open-signin">Sign in</button>}
-        {/* And the other half of the same thought: somebody signed in gets their account here, so
-            the page they land on after signing in shows that it worked. */}
-        {accounts && signedIn && <div className="bo-home__account" data-testid="home-account"><AccountButton/></div>}
-      </header>
-      <section className="bo-home__center">
-        {/**
-         * Counted, not claimed.
-         *
-         * The number is `capabilityIds.length` rather than a figure typed into the markup, so it is
-         * whatever the catalog actually holds on the day somebody reads it and cannot drift into
-         * being a lie the next time a capability is added or removed.
-         */}
-        <h1>
-          <span>Say what you are managing.</span>
+      <div className="wes-home__veil" aria-hidden="true"/>
 
-          <span>I'll build the system around it.</span>
-        </h1>
-        <div className="bo-home__interaction">
-          {!promptOpen && <div className="bo-home__actions">
-            <div className="bo-home__get-started-wrap">
-              <GlassSurface
-                displace={15}
-                distortionScale={-150}
-                redOffset={5}
-                greenOffset={15}
-                blueOffset={25}
-                brightness={60}
-                opacity={0.8}
-                mixBlendMode="screen"
-              >
-                <button type="button" className="bo-home__get-started" onClick={getStarted} data-testid="get-started">
-                  Get started <ArrowRight size={17}/>
-                </button>
-              </GlassSurface>
-            </div>
-            <button type="button" className="bo-home__learn-more" onClick={() => explain.current?.scrollIntoView({ behavior: 'smooth' })} data-testid="learn-more">
-              Learn more <ChevronDown size={17}/>
-            </button>
-          </div>}
-          {promptOpen && <div className={`bo-home__prompt-stage${promptClosing ? ' is-closing' : ''}`} data-testid="prompt-stage">
-            <div className="bo-home__prompt-shell">
-              <button type="button" className="bo-home__prompt-back" onClick={closePrompt} aria-label="Back to start" data-testid="close-prompt">
-                <ArrowLeft size={14}/>
-              </button>
-              <Suspense fallback={<div className="bo-home__prompt-loading" aria-hidden="true"/>}>
-                <CompanyPrompt initialValue={initialValue} onSubmit={onSubmit} testId="company-brief"/>
-              </Suspense>
-            </div>
-          </div>}
+      <header className="wes-home__header">
+        <Brand inverse/>
+        <div className="wes-home__header-actions">
+          <ThemeToggle className="wes-home__theme-toggle"/>
+          {/* "Get started" rather than "Sign in": almost everybody who presses it does not have an
+              account yet, and the panel it opens signs them up as readily as it signs them in. */}
+          {accounts && <button type="button" className="wes-home__signin" onClick={onSignIn} data-testid="open-signin">Get started</button>}
+        </div>
+      </header>
+
+      <section className="wes-home__content" aria-labelledby="wes-home-title">
+        <h1 id="wes-home-title">Build the operating system for your business.</h1>
+        <p>Describe how your company works. Wesify turns it into connected CRM, ERP, workflows, finance, people, permissions, and reporting.</p>
+        <div className="wes-prompt-shell wes-prompt-dark">
+          <Suspense fallback={<div className="wes-prompt-shell__loading" aria-busy="true"/>}>
+            <CompanyPrompt
+              initialValue={initialValue}
+              onSubmit={onSubmit}
+              testId="company-brief"
+              selectedTools={selectedTools}
+              onToolsChange={setSelectedTools}
+            />
+          </Suspense>
         </div>
       </section>
-      {/* Where a company with customers would put their logos. Wesify has none yet, and a row of
-          borrowed or invented marks is the one thing on a landing page that cannot be walked back —
-          so this carries what is true instead: the trades Wesify knows before the first question. */}
-      <GradualBlur
-        target="parent"
-        position="bottom"
-        height="6rem"
-        strength={2}
-        divCount={5}
-        curve="bezier"
-        exponential={true}
-        opacity={1}
-      />
     </div>
 
-    <section className="bo-home__trusted">
-      <h2>Trusted by...</h2>
+    <section className="bo-home__trusted" data-testid="trusted-section">
+      <h2>Trusted by teams across</h2>
       <div className="bo-home__logo-loop">
         <LogoLoop
-          logos={trustedLogoPlaceholders}
+          logos={trustedTeams}
           speed={120}
           direction="left"
           logoHeight={48}
@@ -255,7 +147,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
       </div>
     </section>
 
-    <section className="bo-home__explain" ref={explain}>
+    <section className="bo-home__explain" data-testid="how-it-works">
       <div className="bo-home__explain-intro">
         <small>HOW IT WORKS</small>
         <h2>From one sentence to a working system</h2>
@@ -268,6 +160,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
           <div className="bo-shot bo-shot--prompt" aria-hidden="true">
             <div className="bo-shot__frame">
               <div className="bo-shot__prompt-box">
+                <p>We distribute specialty food to shops and restaurants.<i/></p>
                 <span className="bo-shot__send"><ArrowUp size={16}/></span>
               </div>
               <div className="bo-shot__starters">
@@ -359,9 +252,13 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
           </div>
         </BorderGlow>
 
-        <BorderGlow {...howItWorksGlow} className="bo-bento__card bo-bento__card--full">
+        <BorderGlow {...howItWorksGlow} className="bo-bento__card bo-bento__card--full bo-bento__card--suite">
           <LazyCardImage src={wave09}/>
-          <h3>Get your Command Center</h3>
+          <h3>One connected business suite</h3>
+          <p className="bo-suite-card__summary">CRM, sales, projects, inventory, invoicing, accounting, people, automation, permissions, and reporting share one operating model built around your company.</p>
+          <div className="bo-suite-card__domains" aria-hidden="true">
+            <span>CRM</span><span>Sales</span><span>Projects</span><span>Inventory</span><span>Finance</span><span>People</span><span>Automation</span><span>Reporting</span>
+          </div>
           <div className="bo-shot bo-shot--workspace" aria-hidden="true">
             <div className="bo-shot__frame">
               <div className="bo-shot__rail">
@@ -375,7 +272,7 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
               </div>
               <div className="bo-shot__main">
                 <div className="bo-shot__kpis">
-                  <div><small>Unpaid invoices</small><strong>€12,480</strong></div>
+                  <div><small>Unpaid invoices</small><strong>EUR 12,480</strong></div>
                   <div><small>Stock on hand</small><strong>418</strong></div>
                   <div><small>Deliveries this week</small><strong>26</strong></div>
                 </div>
@@ -393,12 +290,13 @@ export function Home({ initialValue = '', onSubmit, signedIn = false, accounts =
         </BorderGlow>
       </div>
     </section>
+
     <footer className="bo-home__footer">
       <div className="bo-home__footer-aurora" aria-hidden="true">
         <Aurora
           colorStops={['#a0a0a0', '#ffffff', '#777777']}
           blend={0.5}
-          amplitude={1.0}
+          amplitude={1}
           speed={0.5}
         />
       </div>

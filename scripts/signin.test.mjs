@@ -1,4 +1,4 @@
-import { launchBrowser } from './browser.mjs'
+import { launchBrowser, passOnboarding } from './browser.mjs'
 import { newDb } from 'pg-mem'
 import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -70,6 +70,22 @@ async function open({ signedIn = false } = {}) {
   if (signedIn) {
     await page.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, sessionToken)
   }
+  // Installed before React starts so this records a one-frame landing-page flash as well as a page
+  // that remains visible. Checking only the final URL cannot catch that regression.
+  await page.addInitScript(() => {
+    window.__BO_PUBLIC_HOME_MOUNTS__ = 0
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue
+          if (node.matches('[data-testid="public-home"]') || node.querySelector('[data-testid="public-home"]')) {
+            window.__BO_PUBLIC_HOME_MOUNTS__ += 1
+          }
+        }
+      }
+    })
+    observer.observe(document, { childList: true, subtree: true })
+  })
   // Only needed so the build below runs straight through to a finished Command Center rather than
   // stopping at the first question — the discovery model itself is not what this file is about.
   await page.addInitScript(() => {
@@ -98,33 +114,43 @@ async function open({ signedIn = false } = {}) {
 try {
   const stranger = await open()
 
-  /**
-   * 1. The page is public. Starting something is not.
-   *
-   * A stranger can read every word of the home page and scroll all of it — that is the entire
-   * argument for the product, and hiding it behind a sign-in would mean asking people to buy
-   * something they have not seen. What needs an account is the button that begins work, so this
-   * checks the two halves separately: the page renders, and the door asks who is knocking.
-   */
-  await stranger.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  // 1. The prompt is public. Submitting it preserves the sentence and asks who is building it.
+  await stranger.getByTestId('public-home').waitFor({ timeout: 20_000 })
+  await stranger.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await stranger.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
-  await stranger.getByTestId('learn-more').waitFor({ timeout: 20_000 })
-  await stranger.getByTestId('get-started').click()
+  await stranger.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
+  await stranger.getByTestId('start-building').click()
   await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await stranger.getByTestId('company-brief').count()) throw new Error('A stranger was handed the prompt without being asked who they are.')
+  /**
+   * A panel over the prompt rather than a page instead of it.
+   *
+   * Signing in used to be its own address, which meant somebody who had just described their company
+   * was navigated away from the sentence they were still thinking about. The sentence stays on screen
+   * behind the question now — and the dialog being modal is what makes the page under it unusable
+   * until the question is answered or dismissed.
+   */
+  if (!(await stranger.getByTestId('company-brief').count())) throw new Error('The public prompt was replaced rather than covered when Wesify asked who was building.')
+  if (!(await stranger.locator('dialog.wes-signin[open]').count())) throw new Error('Wesify asked for a sign-in somewhere other than a modal dialog.')
 
-  // 2. And the workspace itself stays gated however it is reached, not only through that button.
+  // 2. The address that page lived at is gone, and answers with the prompt and the same panel.
+  await stranger.goto(`http://127.0.0.1:${vitePort}/signin`, { waitUntil: 'networkidle' })
+  await stranger.waitForFunction(() => window.location.pathname === '/', undefined, { timeout: 20_000 })
+  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+
+  // 3. And the workspace itself stays gated however it is reached, not only through that button.
   await stranger.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
   await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await stranger.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
 
-  // 3. Signed in, the same button opens the box, and the sentence goes straight through to a
-  //    finished Command Center. Everything after this uses a real one on purpose: a workspace still
-  //    mid-build proves nothing about whether a second device can open one.
+  // 4. Signed in, the account lands on its dashboard and can build a finished Command Center there.
   const page = await open({ signedIn: true })
-  await page.getByTestId('get-started').click()
-  await page.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
-  await page.getByTestId('start-building').click()
+  await page.waitForURL('**/dashboard', { timeout: 20_000 })
+  await page.getByTestId('project-dashboard').waitFor({ timeout: 20_000 })
+  const publicHomeMounts = await page.evaluate(() => window.__BO_PUBLIC_HOME_MOUNTS__)
+  if (publicHomeMounts !== 0) throw new Error(`The public home mounted ${publicHomeMounts} time(s) before a signed-in dashboard redirect.`)
+  await page.getByTestId('dashboard-brief').fill('We run a plumbing business and technicians visit customer homes.')
+  await page.getByTestId('dashboard-start-building').click()
+  await passOnboarding(page, 'Ridge Plumbing')
   await page.getByTestId('build-thread').waitFor({ timeout: 30_000 })
   await page.waitForURL('**/build/**')
   await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 })
@@ -134,7 +160,7 @@ try {
   const builtWorkspaceId = page.url().match(/\/workspace\/([a-zA-Z0-9-]+)\//)?.[1]
   if (!builtWorkspaceId) throw new Error(`Approving the Command Center did not land on a workspace-scoped URL: ${page.url()}`)
 
-  // 4. The session survives a reload of the workspace itself. One that has to be re-established on
+  // 5. The session survives a reload of the workspace itself. One that has to be re-established on
   //    refresh is not a session.
   // `load` rather than `networkidle`: a finished Command Center keeps talking to the server — it
   // asks what it is, then what is in it — and waiting for the network to fall silent is waiting for
@@ -144,22 +170,16 @@ try {
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
 
-  /**
-   * 4b. "/" is the home page for everybody, including the people who use Wesify most.
-   *
-   * It used to redirect somebody who owned a workspace straight to it, which made the page they
-   * would most want to re-read the one page they could not reach. The workspace is a click away in
-   * the header instead — and that click has to actually land there, or this is just a removal.
-   */
+  // 4b. A signed-in visit to `/` resolves to the project dashboard, where its workspace is one click away.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
-  if (!page.url().endsWith('/')) throw new Error(`Opening "/" redirected somewhere else: ${page.url()}`)
-  await page.getByTestId('open-workspace').click()
+  await page.waitForURL('**/dashboard', { timeout: 20_000 })
+  await page.getByTestId('project-dashboard').waitFor({ timeout: 20_000 })
+  await page.getByTestId('open-workspace').first().click()
   await page.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
 
   /**
-   * 5. The same account reaches the same workspace from a different browser — the real point of
+   * 6. The same account reaches the same workspace from a different browser — the real point of
    *    having accounts at all, and of the workspace living at a URL rather than in localStorage.
    *
    * `second` has never seen this workspace: nothing cached, nothing built here. Before workspace
@@ -187,14 +207,16 @@ try {
   const second = await open({ signedIn: true })
   // The workspace is offered to it at all only because the server told it this account owns one —
   // this browser has never heard of it otherwise.
-  await second.getByTestId('open-workspace').waitFor({ timeout: 20_000 })
-  await second.getByTestId('open-workspace').click()
+  await second.waitForURL('**/dashboard', { timeout: 20_000 })
+  await second.getByTestId('project-dashboard').waitFor({ timeout: 20_000 })
+  await second.getByTestId('open-workspace').first().waitFor({ timeout: 20_000 })
+  await second.getByTestId('open-workspace').first().click()
   await second.waitForURL(new RegExp(`/workspace/${builtWorkspaceId}/home`), { timeout: 20_000 })
   await second.getByTestId('app-grid').waitFor({ timeout: 20_000 })
   const secondPages = await second.locator('[data-testid^="schema-nav-"]').count()
   if (secondPages < 2) throw new Error(`A browser with nothing cached could not open the workspace it signed into: only ${secondPages} sections rendered.`)
 
-  // 6. A different account is not shown somebody else's workspace, however it arrives at the URL.
+  // 7. A different account is not shown somebody else's workspace, however it arrives at the URL.
   const other = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   await other.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, tokenFor('user_intruder'))
   await other.goto(`http://127.0.0.1:${vitePort}/workspace/${builtWorkspaceId}/home`, { waitUntil: 'networkidle' })
@@ -213,12 +235,11 @@ try {
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out reload of the workspace URL still showed the workspace.')
 
-  // The public home page is readable again and offers the way back in — from the header, and from
-  // the start button, which asks the same question of somebody who has just lost their session as
-  // it does of somebody who never had one.
+  // The public prompt is visible again and its header offers the way back in.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   await page.getByTestId('open-signin').waitFor({ timeout: 20_000 })
-  await page.getByTestId('get-started').click()
+  await page.getByTestId('open-signin').click()
   await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
 
   await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
@@ -226,7 +247,7 @@ try {
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: a home page anybody can read, its start button asking who they are first, the workspace gated however it is reached, a signed-in operator carried from their sentence to a finished Command Center, the session surviving a reload, "/" staying the home page with the workspace one click away in the header, the same workspace opened by a browser that had never seen it, another account refused it, and a lost session clearing even a workspace already on screen.')
+  console.log('Sign-in test passed: a public prompt, protected build submission, a gated workspace, flash-free signed-in routing to /dashboard, dashboard creation of a finished Command Center, session persistence, project reopening from the dashboard in a second browser, tenant isolation, and sign-out returning to the public home page.')
 } finally {
   await browser.close()
   vite.kill()

@@ -1,5 +1,10 @@
 # Auditoría de producto después de V2
 
+> Nota de dirección (agosto de 2026): la decisión vigente está en
+> [PRODUCT_REPOSITIONING.md](PRODUCT_REPOSITIONING.md). Esta auditoría conserva el diagnóstico de V2,
+> pero su recomendación de no construir profundidad transaccional ha sido reemplazada por una
+> secuencia explícita para convertir Wesify en una suite operativa adaptativa.
+
 ## Veredicto
 
 La V2 demuestra la experiencia central: descubrir, representar, revisar, construir y modificar una empresa conversando. Todavía no demuestra que el sistema pueda comprender una empresa real con precisión ni ejecutar trabajo de forma segura.

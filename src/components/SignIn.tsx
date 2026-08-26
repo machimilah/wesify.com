@@ -1,29 +1,44 @@
 import { SignIn as ClerkSignIn } from '@clerk/react'
+import { X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Brand } from './Brand'
-import { ThemeToggle } from './ThemeToggle'
+import './SignIn.css'
 
 /**
- * The way in, when Wesify has accounts.
+ * The way in, when Wesify has accounts — a panel over the product rather than a page of its own.
  *
- * The form used to be Wesify's own — two fields, a third mode for forgotten passwords, and a server that
- * hashed and mailed. Clerk owns all of that now, including the parts Wesify never built: verification
- * codes, social sign-in, and whatever a Clerk instance is configured to offer next week. What is left
- * here is the page around it, and nothing else.
+ * It was a page, at /signin, and being a page is what was wrong with it: describing a company is
+ * public and takes one sentence, and the moment somebody finished typing it they were navigated away
+ * from everything they had just seen to a screen with a logo and a form on it. Sending a person who
+ * is mid-thought to a different address to prove who they are is how you lose them between two
+ * screens. The prompt stays exactly where it was, and Wesify asks over the top of it.
  *
- * Nothing else is the point. This screen used to also watch for a session and fetch the account when
- * one appeared — which meant the fetch only happened while this screen was on screen, and only while
- * Clerk agreed to render it. Clerk refuses to render a sign-in form to somebody who already has a
- * session, so the one case that most needed noticing was the one case nothing was watching. That job
- * belongs to `AccountWatch`, which is mounted on every page and never unmounts.
- *
- * No routing props: Wesify routes by reading `window.location` itself rather than through a router
- * Clerk could hook into, and with no `path` given the component keeps its flow on this screen
- * instead of pushing paths that App.tsx would then have to know about.
+ * The form inside is Clerk's — verification codes, social sign-in, forgotten passwords, and whatever
+ * that instance is configured to offer next week. What is here is the panel around it and nothing
+ * else: no session watching, which `AccountWatch` does on every page and never unmounts, and no
+ * routing, which App.tsx owns.
  */
-export function SignIn({ unreachable = false }: {
+export function SignInDialog({ open, unreachable = false, onClose }: {
+  open: boolean
   /** Signed in with Clerk, but the server would not say who. See App.tsx. */
   unreachable?: boolean
+  onClose: () => void
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (!open) {
+      if (dialog.open) dialog.close()
+      return
+    }
+    if (!dialog.open) dialog.showModal()
+    const previousOverflow = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    return () => { document.documentElement.style.overflow = previousOverflow }
+  }, [open])
+
   /**
    * A server with accounts and an interface built without a Clerk key is a real deployment mistake —
    * the two are configured in different places, by different people, at different times. Saying so is
@@ -36,19 +51,31 @@ export function SignIn({ unreachable = false }: {
       ? 'You are signed in, but Wesify could not open your account. Try again in a moment.'
       : ''
 
-  return <main className="bo-signin">
-    <ThemeToggle className="bo-signin__theme-toggle"/>
-    <div className="bo-signin__panel" data-testid="signin-form">
-      <Brand/>
+  return <dialog
+    ref={dialogRef}
+    className="wes-signin"
+    aria-labelledby="wes-signin-title"
+    onCancel={event => { event.preventDefault(); onClose() }}
+    onClose={onClose}
+  >
+    <div className="wes-signin__panel" data-testid="signin-form">
+      <header>
+        <div>
+          <Brand inverse/>
+          <p id="wes-signin-title">Sign in or create your account to keep building.</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close sign in" data-testid="close-signin"><X size={17}/></button>
+      </header>
+
       {problem
-        ? <div className="bo-signin-error" role="alert" data-testid="signin-error">{problem}</div>
+        ? <div className="wes-signin__error" role="alert" data-testid="signin-error">{problem}</div>
         : <ClerkSignIn
             /**
              * Signing up happens here too, rather than behind a link to Clerk's hosted pages.
              *
              * Almost everybody arriving at Wesify is new, and the alternative sends exactly those
-             * people off to another domain in the middle of describing their company. One screen,
-             * both jobs, which is what this screen always was.
+             * people off to another domain in the middle of describing their company. One panel,
+             * both jobs, which is what this always was.
              */
             withSignUp
             /**
@@ -57,9 +84,25 @@ export function SignIn({ unreachable = false }: {
              * Without it the panel is empty for as long as that takes, and an empty panel under a
              * logo reads as a page that has finished loading badly rather than one still loading.
              */
-            fallback={<div className="bo-signin__loading" aria-hidden="true"><i/><i/><i/></div>}
-            appearance={{ variables: { colorBackground: 'transparent' } }}
+            fallback={<div className="wes-signin__loading" aria-hidden="true"><i/><i/><i/></div>}
+            appearance={{
+              // The panel is dark in both themes, like every other product surface Wesify opens over a
+              // page, so Clerk is told to paint into it rather than onto its own white card.
+              variables: {
+                colorBackground: 'transparent',
+                colorForeground: '#f1f3ef',
+                colorMutedForeground: '#9aa197',
+                colorInput: '#202320',
+                colorInputForeground: '#f1f3ef',
+                colorBorder: 'rgba(255, 255, 255, .14)',
+                colorPrimary: '#f2f4ef',
+                colorPrimaryForeground: '#16180f',
+                colorDanger: '#e4a83e',
+                borderRadius: '10px',
+              },
+              elements: { cardBox: { boxShadow: 'none', border: '0' }, card: { boxShadow: 'none' } },
+            }}
           />}
     </div>
-  </main>
+  </dialog>
 }

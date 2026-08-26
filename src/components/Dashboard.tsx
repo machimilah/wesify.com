@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { Answers } from '../types'
 import type { AIBlueprint, ModuleId } from '../engine/blueprint'
-import { generateWorkspaceConfiguration, isWorkspaceConfiguration, type WorkspaceConfiguration } from '../engine/workspaceSchema'
+import { isWorkspaceConfiguration, type WorkspaceConfiguration } from '../engine/workspaceSchema'
 import { AccountButton } from './AccountButton'
 import { Brand } from './Brand'
 import { SchemaDashboard } from './SchemaDashboard'
@@ -56,7 +56,7 @@ const moduleMeta: Record<ModuleId, { label: string; singular: string; icon: Luci
 const platformMeta: Record<PlatformView, { label: string; singular: string; icon: LucideIcon }> = {
   documents: { label: 'Documents', singular: 'document', icon: FileText },
   governance: { label: 'Access & audit', singular: 'role', icon: ShieldCheck },
-  links: { label: 'Links', singular: 'link', icon: Zap },
+  links: { label: 'Automations', singular: 'automation', icon: Zap },
 }
 
 const roles: Array<{ id: WorkspaceRole; label: string }> = [
@@ -234,7 +234,7 @@ function RecordsTable({ label, records }: { label: string; records: string[] }) 
  * and a server fetch fills the gap for anything else, because the server has held the real answer,
  * in `manifest.specification`, since the moment this workspace was built.
  */
-export function Dashboard({ workspaceId, answers, blueprint }: { workspaceId: string; answers: Answers; blueprint: AIBlueprint | null }) {
+export function Dashboard({ workspaceId, onExit }: { workspaceId: string; onExit?: () => void }) {
   const cached = readStorage<unknown>(`bo-workspace-config:${workspaceId}`, readStorage<unknown>('bo-workspace-config', null))
   const cachedConfig = isWorkspaceConfiguration(cached) && cached.id === workspaceId ? cached : null
   const [fetched, setFetched] = useState<WorkspaceConfiguration | null>(null)
@@ -254,12 +254,22 @@ export function Dashboard({ workspaceId, answers, blueprint }: { workspaceId: st
     return () => { cancelled = true }
   }, [workspaceId, cachedConfig])
 
-  const config = cachedConfig ?? fetched ?? (blueprint ? generateWorkspaceConfiguration(answers, blueprint) : null)
+  const config = cachedConfig ?? fetched
 
-  // Nothing cached, nothing back from the server yet, and nothing to generate locally either: this
-  // is either a workspace mid-build in this same browser, or one this browser has never seen and is
-  // still waiting to hear about. Both look the same from here, so both wait rather than one of them
-  // lying about being empty.
+  /**
+   * Nothing cached and nothing on the server: this workspace has not been built, and that is what is
+   * said.
+   *
+   * There used to be a third option — generate a configuration here and now from `bo-blueprint` and
+   * `bo-answers`, the leftovers of whatever this browser last went through onboarding for. It was
+   * not a fallback, it was invention: those two values belong to no workspace in particular, so any
+   * stale link, bookmark or redirect landed on this screen and *created* a workspace out of them,
+   * named "Workspace" because the leftovers held no company name. Worse, it saved what it invented,
+   * so the phantom joined the dashboard's list and came back however many times it was deleted.
+   *
+   * A workspace that was really built in this browser is already in the cache below, written by the
+   * builder when it finished, so nothing real depended on the invention.
+   */
   if (!config) return <main className="bo-dashboard-page"><div className="bo-preview-empty">{checkedServer ? 'This workspace has not been built yet.' : 'Opening workspace...'}</div></main>
 
   config.id = workspaceId
@@ -268,5 +278,5 @@ export function Dashboard({ workspaceId, answers, blueprint }: { workspaceId: st
   localStorage.setItem('bo-active-workspace-id', workspaceId)
   // Every section link SchemaDashboard draws is built from this, which is what keeps a click on
   // "Clients" landing on /workspace/:id/clients instead of a bare, workspace-oblivious /clients.
-  return <main className="bo-dashboard-page"><SchemaDashboard initialConfig={config} basePath={`/workspace/${workspaceId}`}/></main>
+  return <main className="bo-dashboard-page"><SchemaDashboard initialConfig={config} basePath={`/workspace/${workspaceId}`} onExit={onExit}/></main>
 }

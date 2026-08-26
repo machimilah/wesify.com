@@ -17,6 +17,10 @@ import { applyFrontierArchitecture, frontierResearchStatus, mergeFrontierResearc
 import { applyIndustryVerdict, loadIndustryVerdict, recordIndustryObservations, type IndustryVerdict } from '../engine/industryClient'
 import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoverySessionClient'
 import { generateWorkspaceConfigurationFromDiscovery } from '../engine/workspaceSchema'
+import { applyWorkspaceSetup, briefWithSetup, readWorkspaceSetup } from '../engine/workspaceSetup'
+import { answerIntake, readBuildIntake, saveBuildIntake, withLogo, type BuildIntake } from '../engine/buildIntake'
+import { publishWorkspaceIdentity, sendInvites } from '../engine/workspaceSetupClient'
+import { BuildIntakeControls } from './BuildIntake'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -46,6 +50,13 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const launchRect = useRef<DOMRect | null>(null)
   const booted = useRef(false)
   const [session, setSession] = useState<DiscoverySession | null>(null)
+  /**
+   * The three scripted questions that open every build — a name, a logo, colleagues — and what has
+   * been said about them so far. Read from storage rather than started fresh, so a reload lands back
+   * in the conversation instead of asking for a name that was given a minute ago.
+   */
+  const [intake, setIntake] = useState<BuildIntake>(() => readBuildIntake(workspaceId))
+  const [intakeProblem, setIntakeProblem] = useState('')
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const [activity, setActivity] = useState('')
@@ -166,6 +177,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           setIndustry(verdict)
         })
       const last = initial.messages.at(-1)
+      // Nothing is asked of the model until the three opening questions have been answered: the
+      // description they enrich is the one the interview starts from.
+      if (readBuildIntake(workspaceId).stage !== 'done') return
       if (initial.phase === 'DISCOVERING' && last?.role === 'user' && !initial.currentQuestion) await runAgent(initial)
     })()
   }, [workspaceId])
@@ -193,9 +207,64 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     return () => { node.removeEventListener('scroll', onScroll); observer.disconnect() }
   }, [session?.workspaceId])
 
+  /**
+   * The end of the intake, which is the beginning of the interview.
+   *
+   * Everything the three answers are good for happens here, once: the name and logo go up so a
+   * second device and every colleague see the same workspace, the invitations go out, and the
+   * description the interview will work from is rewritten to include what was just said — so nobody
+   * is asked their company's name twice, once by a form and once by a model.
+   */
+  const advanceIntake = (next: BuildIntake) => {
+    setIntake(saveBuildIntake(workspaceId, next))
+    setIntakeProblem('')
+  }
+
+  /**
+   * The end of the intake, which is the beginning of the interview.
+   *
+   * An effect rather than the last line of the last answer, because the two are not the same moment:
+   * the session is still loading while the first questions are being answered, and the description
+   * these answers enrich lives in it. So the answers wait here for it, and `settled` — written to
+   * storage — is what stops a reload doing all of this a second time.
+   */
+  useEffect(() => {
+    if (intake.stage !== 'done' || intake.settled || !session || loading) return
+    const setup = intake.setup
+    const brief = session.messages.find(message => message.role === 'user')
+    setIntake(saveBuildIntake(workspaceId, { ...intake, settled: true }))
+    void publishWorkspaceIdentity(workspaceId, setup)
+    if (setup.invites.length) {
+      void sendInvites(workspaceId, setup.invites).then(result => {
+        if (result.failed.length) setNotice(`Wesify could not invite ${result.failed.map(failure => failure.email).join(', ')}.`)
+      })
+    }
+    const described = briefWithSetup(brief?.content ?? '', setup)
+    onAnswersChange({ ...initialAnswers, companyDescription: described, ...(setup.name.trim() ? { companyName: setup.name.trim() } : {}) })
+    // The interview starts from what the operator has just added to their description, rather than
+    // being told the company's name and then asking for it.
+    const enriched = { ...session, messages: session.messages.map(message => message.id === brief?.id ? { ...message, content: described } : message) }
+    commit(enriched)
+    void runAgent(enriched)
+  }, [intake.stage, intake.settled, session?.workspaceId, Boolean(session)])
+
+  /** The question on the table, and everything said before it. */
+  const intakeAsking = intake.stage === 'done' ? null : intake.turns.at(-1)?.role === 'bo' ? intake.turns.at(-1) : null
+  const intakeSaid = intakeAsking ? intake.turns.slice(0, -1) : intake.turns
+
   const submit = async (value = draft) => {
     const answer = value.trim()
-    if (!answer || !session || loading) return
+    if (!answer) return
+    // The opening questions are Wesify's own, and answering them waits for nothing: the session behind
+    // the interview may still be loading, and a name typed into a box that ignores it is worse than
+    // a name asked for twice.
+    if (intake.stage !== 'done') {
+      const result = answerIntake(intake, answer)
+      if (result.problem) return setIntakeProblem(result.problem)
+      setDraft('')
+      return advanceIntake(result.intake)
+    }
+    if (!session || loading) return
     setDraft('')
     const next = addUserMessage(session, answer)
     commit(next)
@@ -211,7 +280,9 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       companyDescription: session.messages.find(message => message.role === 'user')?.content ?? String(initialAnswers.companyDescription ?? ''),
       discoveryIndustry: session.businessState.industry,
     }
-    const config = generateWorkspaceConfigurationFromDiscovery(nextAnswers, blueprint, session.businessState, architecture)
+    // Onboarding asked for the name and the logo before any of this ran, and what a person typed
+    // about their own company outranks what the interview inferred about it.
+    const config = applyWorkspaceSetup(generateWorkspaceConfigurationFromDiscovery(nextAnswers, blueprint, session.businessState, architecture), readWorkspaceSetup(workspaceId))
     config.id = workspaceId
     localStorage.setItem('bo-workspace-config', JSON.stringify(config))
     localStorage.setItem(`bo-workspace-config:${workspaceId}`, JSON.stringify(config))
@@ -281,6 +352,23 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const proposalGaps = proposalResearch?.gaps.slice(0, 5) ?? []
   const questionProgress = interviewQuestionProgress(session?.metrics.questionsAsked ?? 0)
 
+  /**
+   * The thread in two halves, because something belongs between them.
+   *
+   * The opening questions — a name, a logo, colleagues — are asked before the interview and answered
+   * before it, so that is where they have to be read. Drawn after the message list instead, they sat
+   * below every answer given since, which put "How should we name this workspace?" underneath the
+   * third question of an interview it had already finished, and moved further down with every reply.
+   * The first message is the sentence somebody typed to start the build; everything after it is the
+   * interview those three questions came before.
+   */
+  const spoken = session?.messages.filter(message => message.id !== currentAssistantId) ?? []
+  const openingBrief = spoken[0]
+  const interviewSaid = spoken.slice(1)
+  const turn = (id: string, role: 'user' | 'assistant' | 'you' | 'bo', text: string) => (role === 'user' || role === 'you'
+    ? <div className="bo-turn bo-turn--you" key={id}><div><span className="bo-turn__text">{text}</span></div></div>
+    : <div className="bo-turn bo-turn--bo" key={id}><span><Bot size={15}/></span><div><span className="bo-turn__text">{text}</span></div></div>)
+
   return <main className="bo-builder" ref={root}>
     <section className="bo-builder__conversation">
       <header>
@@ -300,9 +388,32 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
       <div className="bo-thread" ref={chat} data-testid="build-thread">
         {!session?.messages.length && <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div><span className="bo-turn__text">Tell me how your company works.</span></div></div>}
 
-        {session?.messages.map(message => message.id === currentAssistantId ? null : message.role === 'user'
-          ? <div className="bo-turn bo-turn--you" key={message.id}><div><span className="bo-turn__text">{message.content}</span></div></div>
-          : <div className="bo-turn bo-turn--bo" key={message.id}><span><Bot size={15}/></span><div><span className="bo-turn__text">{message.content}</span></div></div>)}
+        {openingBrief && turn(openingBrief.id, openingBrief.role, openingBrief.content)}
+
+        {/**
+         * The three opening questions, after the sentence that started the build and before the
+         * interview that follows them — which is the order they were said in.
+         *
+         * The one still waiting for an answer is drawn like any other question Wesify is asking, because
+         * that is what it is. The ones already answered settle back into the thread behind it.
+         */}
+        {intakeSaid.map(said => turn(said.id, said.role, said.text))}
+
+        {intakeAsking && <div className="bo-turn bo-turn--bo bo-turn--asking" data-testid="intake-question">
+          <span><Bot size={15}/></span>
+          <div><span className="bo-turn-ask">{intakeAsking.text}</span></div>
+        </div>}
+
+        {intakeProblem && <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div><span className="bo-turn__text bo-turn__notice" data-testid="intake-problem">{intakeProblem}</span></div></div>}
+
+        {intake.stage !== 'done' && <BuildIntakeControls
+          intake={intake}
+          onLogo={(logo, fileName) => advanceIntake(withLogo(intake, logo, fileName))}
+          onSkip={() => advanceIntake(answerIntake(intake, 'Skip').intake)}
+          onProblem={setIntakeProblem}
+        />}
+
+        {interviewSaid.map(message => turn(message.id, message.role, message.content))}
 
         {/**
          * What Wesify is doing, and nothing about how it is doing it.
@@ -317,7 +428,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
          */}
         {notice && <div className="bo-turn bo-turn--bo"><span><Bot size={15}/></span><div><span className="bo-turn__text bo-turn__notice" data-testid="agent-notice">{notice}</span></div></div>}
 
-        {loading && <div className="bo-turn bo-turn--bo" data-testid="agent-activity">
+        {intake.stage === 'done' && loading && <div className="bo-turn bo-turn--bo" data-testid="agent-activity">
           <span><Bot size={15}/></span>
           <div><span className="bo-turn__text bo-turn__working">{activity || 'Working on it'}</span></div>
         </div>}
@@ -366,7 +477,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           same act, and moving the box between them is what made the build feel like a sequence of
           different screens rather than a conversation. */}
       <footer className="bo-composer">
-        {session?.currentQuestion && <div className="bo-question-progress" data-testid="question-progress">
+        {intake.stage === 'done' && session?.currentQuestion && <div className="bo-question-progress" data-testid="question-progress">
           <b>Question {questionProgress.current} of {questionProgress.total}</b>
           <i><u style={{ width: `${questionProgress.percent}%` }}/></i>
           <span>{questionProgress.percent}% complete</span>
@@ -377,7 +488,7 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit() } }}
-            placeholder={architecture && session?.phase === 'AWAITING_APPROVAL' ? 'Tell Wesify what should change…' : 'Reply to Wesify…'}
+            placeholder={intake.stage !== 'done' ? 'Answer, or say skip…' : architecture && session?.phase === 'AWAITING_APPROVAL' ? 'Tell Wesify what should change…' : 'Reply to Wesify…'}
             rows={1}
             data-testid="discovery-answer"
           />

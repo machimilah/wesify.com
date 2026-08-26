@@ -7,7 +7,10 @@ const captureScreenshots = process.env.BO_SMOKE_SCREENSHOTS === '1'
 const screenshotDirectory = process.env.TEMP || process.cwd()
 
 const apiPort = 8798
-const apiServer = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], { cwd: process.cwd(), stdio: 'pipe' })
+const apiServer = spawn(process.execPath, ['server/index.mjs', '--port', String(apiPort)], {
+  cwd: process.cwd(), stdio: 'pipe',
+  env: { ...process.env, BO_CONNECTION_SECRET: 'smoke-test-connection-secret-32-bytes', BO_AUTOMATION_SCHEDULER: 'off' },
+})
 for (let attempt = 0; attempt < 50; attempt += 1) {
   try { if ((await fetch(`http://127.0.0.1:${apiPort}/api/health`)).ok) break } catch { /* project service is starting */ }
   await new Promise(resolve => setTimeout(resolve, 100))
@@ -106,6 +109,7 @@ await page.addInitScript(() => {
 
 /** Opens a section whether the sidebar shows it directly or behind a module group. */
 async function openSection(page, id) {
+  await page.locator('[data-testid^="schema-nav-"], [data-testid^="schema-group-"]').first().waitFor({ timeout: 20_000 })
   const direct = page.getByTestId(`schema-nav-${id}`)
   if (await direct.count()) { await direct.click(); return }
   for (const groupId of await page.locator('[data-testid^="schema-group-"]').evaluateAll(nodes => nodes.map(n => n.getAttribute('data-testid')))) {
@@ -113,32 +117,97 @@ async function openSection(page, id) {
     await page.getByTestId('sub-sidebar').waitFor()
     if (await direct.count()) { await direct.click(); return }
   }
-  throw new Error(`No way to reach section "${id}" from the sidebar.`)
+  const available = await page.locator('[data-testid^="schema-nav-"], [data-testid^="schema-group-"]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-testid')).filter(Boolean))
+  throw new Error(`No way to reach section "${id}" from the sidebar. Available controls: ${available.join(', ') || 'none'}.`)
 }
 
 try {
   // A person meets the home page first, and it is the prompt, so the journey starts by typing.
   await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' })
-  // One page: `/` reveals the prompt in place, so there is nowhere else to navigate first.
-  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
-  await page.getByTestId('learn-more').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('company-brief').count()) throw new Error('The home page showed the prompt before Get started was clicked.')
-  await page.getByTestId('learn-more').click()
-  await page.waitForFunction(() => document.querySelector('.bo-home__explain')?.getBoundingClientRect().top < window.innerHeight * .25)
+  await page.getByTestId('public-home').waitFor({ timeout: 20_000 })
+  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
+  // Connecting tools is reached from inside the box and nowhere else. The second button under the
+  // prompt, and the row naming CRM, ERP, Automations and KPIs beneath that, are gone: there is one
+  // thing to do on this page, and everything competing with it was removed.
+  await page.getByTestId('prompt-connect-tools').click()
+  await page.getByTestId('tool-connections-dialog').waitFor()
+  await page.getByLabel('Close tool connections').click()
+  if (await page.getByTestId('open-tool-connections').count()) throw new Error('The second connect-tools button under the home prompt is back.')
+  if (await page.locator('.bo-prompt__guidance').count()) throw new Error('The CRM/ERP/Automations/KPIs row under the home prompt is back.')
+  if (await page.getByTestId('get-started').count()) throw new Error('The removed home-page interstitial returned.')
+  if (await page.getByText('Build the operating system for your business.', { exact: true }).count() !== 1) throw new Error('The home-page title is missing.')
+  if (await page.getByText('Describe how your company works. Wesify turns it into connected CRM, ERP, workflows, finance, people, permissions, and reporting.', { exact: true }).count() !== 1) throw new Error('The home-page explanation is missing.')
+  await page.getByTestId('trusted-section').waitFor()
+  await page.getByTestId('how-it-works').waitFor()
+  await page.getByRole('heading', { name: 'One connected business suite' }).waitFor()
+  await page.waitForFunction(() => (document.querySelector('.bo-prompt__example span')?.textContent?.length ?? 0) > 12)
+  const publicPrompt = page.getByTestId('company-brief')
+  const compactPromptBounds = await publicPrompt.boundingBox()
+  if (!compactPromptBounds) throw new Error('The home prompt has no measurable bounds.')
+  await publicPrompt.fill(Array.from({ length: 8 }, (_, index) => `Business detail ${index + 1}`).join('\n'))
+  await page.waitForFunction(initialHeight => {
+    const textarea = document.querySelector('[data-testid="company-brief"]')
+    return textarea instanceof HTMLTextAreaElement && textarea.getBoundingClientRect().height > Number(initialHeight) + 30
+  }, compactPromptBounds.height)
+  const expandedPromptBounds = await publicPrompt.boundingBox()
+  if (!expandedPromptBounds || Math.abs(expandedPromptBounds.width - compactPromptBounds.width) > 1) throw new Error('The home prompt changed width while expanding.')
+  await publicPrompt.fill('')
+  if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-home-typewriter.png'), fullPage: true })
+
+  // In local mode `/dashboard` is directly inspectable; account-enabled servers gate this same route.
+  await page.goto('http://127.0.0.1:4174/dashboard', { waitUntil: 'networkidle' })
+  await page.getByTestId('project-dashboard').waitFor({ timeout: 20_000 })
+  await page.getByTestId('dashboard-brief').waitFor()
+  await page.getByTestId('prompt-connect-tools').click()
+  await page.getByTestId('tool-connections-dialog').waitFor()
+  await page.getByLabel('Close tool connections').click()
+
+  await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
-  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('get-started').count()) throw new Error('Get started remained after the prompt opened.')
-  await page.waitForFunction(() => (document.querySelector('.bo-prompt__example span')?.textContent?.length ?? 0) > 12)
-  if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-home-typewriter.png'), fullPage: true })
   if (await page.getByTestId('starter').count()) throw new Error('The removed homepage starter choices returned.')
-  if (await page.getByText('Describe what your business does, how work moves, and what you need to manage.', { exact: true }).count() !== 1) throw new Error('The homepage prompt guidance is missing.')
   await page.getByTestId('company-brief').click()
   await page.locator('.bo-prompt__example.hidden').waitFor({ state: 'attached' })
   await page.getByTestId('company-brief').fill('We run a marketing agency for technology companies.')
   await page.getByTestId('start-building').click()
+
+  /**
+   * The three things Wesify has to be told, asked inside the build.
+   *
+   * They were a dialog in front of the build until they were questions inside it: a name Wesify cannot
+   * infer, a logo it cannot draw, colleagues it cannot guess. Checked here rather than skipped past,
+   * because they are the only thing anybody is asked to type about themselves rather than about
+   * their business — and because not one of the three is required.
+   */
   await page.waitForURL('**/build/*')
+  await page.getByTestId('build-thread').waitFor({ timeout: 20_000 })
+  await page.getByText('How should we name this workspace?', { exact: true }).waitFor()
+  await page.getByTestId('discovery-answer').fill('Northwind Studio')
+  await page.getByTestId('answer-question').click()
+
+  // A logo cannot be typed, so the picker travels with the question — and beside it, the way past.
+  await page.getByText('Should we add a logo now, or skip this step?', { exact: true }).waitFor()
+  await page.getByTestId('intake-logo-pick').waitFor()
+  await page.getByTestId('intake-skip').click()
+
+  // A reply that is not an address is said to be one rather than quietly dropped: a colleague
+  // silently not invited is worse than a question asked twice.
+  await page.getByText('Should we add any team members?', { exact: true }).waitFor()
+  await page.getByTestId('intake-skip').waitFor()
+  await page.getByTestId('discovery-answer').fill('not-an-address')
+  await page.getByTestId('answer-question').click()
+  await page.getByTestId('intake-problem').waitFor()
+  await page.getByTestId('discovery-answer').fill('colleague@northwind.example')
+  await page.getByTestId('answer-question').click()
+
+  // What Wesify was told is kept with the workspace it was told about, and the interview reads it back.
+  const onboarded = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(candidate => candidate.startsWith('bo-workspace-setup:'))
+    return key ? JSON.parse(localStorage.getItem(key) ?? '{}') : null
+  })
+  if (onboarded?.name !== 'Northwind Studio') throw new Error(`The intake did not keep the name it was given: ${JSON.stringify(onboarded)}`)
+  if (onboarded?.invites?.[0]?.email !== 'colleague@northwind.example') throw new Error('The intake did not keep the colleague it was given.')
   await page.getByTestId('build-stages').waitFor()
   await page.getByText('How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?', { exact: true }).waitFor()
   // Wesify asks and waits. Its reasoning is not printed into the thread for the operator to read past.
@@ -152,6 +221,27 @@ try {
   await page.getByText('Who handles the work day to day?', { exact: true }).waitFor()
   await page.getByTestId('discovery-answer').fill('A small internal team')
   await page.getByTestId('answer-question').click()
+
+  /**
+   * The thread is in the order it was said in.
+   *
+   * The three opening questions used to be drawn after the whole message list rather than after the
+   * sentence that started the build, so they slid down the thread with every answer given since —
+   * "How should we name this workspace?" printed underneath the third question of an interview it
+   * had already finished. Read as positions rather than presence, because both versions contained
+   * all of these lines; only one of them had them in the right places.
+   */
+  const threadOrder = await page.locator('.bo-turn').evaluateAll(nodes => nodes.map(node => node.textContent?.trim() ?? ''))
+  const at = text => threadOrder.findIndex(line => line.includes(text))
+  const brief = at('We run a marketing agency')
+  const naming = at('How should we name this workspace?')
+  const team = at('Should we add any team members?')
+  const firstInterview = at('How do clients normally engage the agency')
+  if (brief !== 0) throw new Error(`The sentence that started the build is not the first thing in the thread (position ${brief}).`)
+  if (!(brief < naming && naming < team && team < firstInterview)) {
+    throw new Error(`The build thread is out of order: brief ${brief}, naming ${naming}, team ${team}, first interview question ${firstInterview}.`)
+  }
+
   await page.getByTestId('open-dashboard').waitFor()
   await page.getByTestId('check-proposal').click()
   await page.getByTestId('architecture-proposal').waitFor()
@@ -189,6 +279,17 @@ try {
   // Setup guidance is a banner across the top of every page now, not a card on Home.
   await page.getByTestId('setup-banner').waitFor()
   if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-command-center.png'), fullPage: true })
+  await page.getByTestId('operating-map').waitFor()
+  if (captureScreenshots) {
+    await page.getByTestId('operating-map').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: join(screenshotDirectory, 'bo-operating-map.png') })
+  }
+  await page.getByTestId('schema-nav-control').click()
+  await page.waitForURL('**/control')
+  await page.getByTestId('permission-matrix').waitFor()
+  if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-access-control.png'), fullPage: true })
+  await page.getByTestId('schema-nav-home').click()
+  await page.waitForURL('**/home')
 
   // Every section owns an indexed URL: reachable directly, survives reload, and back/forward works.
   const workspaceId = await page.evaluate(() => localStorage.getItem('bo-active-workspace-id'))
@@ -210,43 +311,68 @@ try {
   await page.goto('http://127.0.0.1:4174/dashboard/today', { waitUntil: 'networkidle' })
   await page.waitForURL('**/today')
   await page.getByRole('heading', { name: 'Today', exact: true }).waitFor()
+  // Bare `/dashboard` now owns project selection rather than aliasing a workspace home page.
+  await page.goto('http://127.0.0.1:4174/dashboard', { waitUntil: 'networkidle' })
+  await page.getByTestId('project-dashboard').waitFor()
+  await page.getByTestId('open-workspace').first().waitFor()
   // An unknown path must fall back to the prompt home rather than rendering an empty workspace.
   await page.goto('http://127.0.0.1:4174/not-a-real-section', { waitUntil: 'networkidle' })
-  await page.getByTestId('get-started').waitFor()
+  await page.getByTestId('company-brief').waitFor()
   await page.goto('http://127.0.0.1:4174/home', { waitUntil: 'networkidle' })
   await page.getByTestId('app-grid').waitFor()
 
   await page.getByTestId('schema-nav-links').click()
   await page.waitForURL('**/links')
-  await page.getByRole('heading', { name: 'Links', exact: true }).waitFor()
-  // Connected apps sit above the automation canvas, and must say what they do and do not do.
+  await page.getByTestId('workflow-studio').waitFor()
+  const automationMainBounds = await page.locator('.bo-dashboard__main').boundingBox()
+  const automationStudioBounds = await page.getByTestId('workflow-studio').boundingBox()
+  const automationViewport = page.viewportSize()
+  if (!automationMainBounds || !automationStudioBounds || !automationViewport) throw new Error('The automation workspace has no measurable bounds.')
+  if (automationStudioBounds.width < automationMainBounds.width * .9) throw new Error(`The automation workspace uses only ${Math.round(automationStudioBounds.width / automationMainBounds.width * 100)}% of the available dashboard width.`)
+  if (automationStudioBounds.height < automationViewport.height * .72) throw new Error(`The automation workspace uses only ${Math.round(automationStudioBounds.height / automationViewport.height * 100)}% of the viewport height.`)
+  // Connected apps remain available beside the workflow runtime, and must say what they do and do not do.
   await page.getByTestId('connected-apps').waitFor()
   const stripeRow = page.getByTestId('connected-app-stripe')
   await stripeRow.getByText('Stripe', { exact: true }).waitFor()
   await stripeRow.getByTestId('stripe-key').waitFor()
   const stripeCopy = await stripeRow.innerText()
   if (!/never changes anything in Stripe/i.test(stripeCopy)) throw new Error(`The connector did not state that it is read-only: ${stripeCopy}`)
-  await page.getByTestId('connector-name').fill('Make test')
-  await page.getByTestId('connector-url').fill('https://hook.eu2.make.com/bo-smoke-test')
-  await page.getByRole('button', { name: 'Save connection', exact: true }).click()
-  await page.getByText(/Connector saved/).waitFor()
-  await page.getByTestId('link-trigger-source-leads').dragTo(page.getByTestId('links-canvas'), { targetPosition: { x: 260, y: 230 } })
+  await page.getByRole('button', { name: 'Connections', exact: true }).click()
+  const connectionsDialog = page.getByRole('dialog', { name: 'Workflow connections' })
+  await connectionsDialog.getByTestId('connector-name').fill('Make test')
+  await connectionsDialog.getByTestId('connector-url').fill('https://hook.eu2.make.com/bo-smoke-test')
+  await connectionsDialog.getByRole('button', { name: 'Save connection', exact: true }).click()
+  await page.getByText(/Connection saved/).waitFor()
+  await connectionsDialog.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'New', exact: true }).click()
+  // The agency calls these Leads and that is what the page says; the record itself is the catalog's
+  // pipeline entity, renamed rather than built a second time alongside it.
+  await page.getByTestId('link-trigger-source-opportunities').dragTo(page.getByTestId('links-canvas'), { targetPosition: { x: 520, y: 230 } })
   const triggerAfterFirstDrag = await page.getByTestId('link-trigger-node').innerText()
   if (!triggerAfterFirstDrag.includes('Lead')) throw new Error(`Lead drag created the wrong trigger node: ${triggerAfterFirstDrag}`)
-  await page.getByTestId('link-action-source').dragTo(page.getByTestId('links-canvas'), { targetPosition: { x: 670, y: 230 } })
+  await page.getByTestId('link-trigger-node').getByRole('button', { name: 'Add next step' }).click()
+  await page.getByRole('button', { name: /If condition/ }).click()
+  await page.getByTestId('link-condition-node').getByRole('button', { name: 'Add step to yes branch' }).click()
+  await page.getByTestId('link-action-source').click()
   await page.getByTestId('link-trigger-node').waitFor()
-  if (!(await page.getByTestId('link-action-node').isVisible())) await page.getByTestId('link-action-source').click()
   await page.getByTestId('link-action-node').waitFor()
+  await page.getByTestId('link-condition-node').waitFor()
   const triggerAfterAction = await page.getByTestId('link-trigger-node').innerText()
   if (!triggerAfterAction.includes('Lead')) throw new Error(`Action placement replaced the lead trigger: ${triggerAfterAction}`)
   await page.getByTestId('link-name').fill('Send new leads to Make')
-  await page.getByRole('button', { name: 'Save Link', exact: true }).click()
-  await page.getByText(/Link saved in paused mode/).waitFor()
-  const savedTrigger = await page.getByTestId('saved-link').getAttribute('data-trigger')
-  if (savedTrigger !== 'leads') throw new Error(`The graphical Link did not preserve the dragged lead trigger (saved ${savedTrigger}).`)
-  await page.getByRole('button', { name: 'Simulate', exact: true }).click()
+  await page.getByRole('button', { name: 'Save automation', exact: true }).click()
+  await page.getByText(/Automation saved in paused mode/).waitFor()
+  await page.waitForFunction(() => document.querySelector('[data-testid="workflow-studio"]')?.getAttribute('data-frame-ready') === 'true')
+  const savedLink = page.getByTestId('saved-link').filter({ hasText: 'Send new leads to Make' })
+  const savedTrigger = await savedLink.getAttribute('data-trigger')
+  if (savedTrigger !== 'opportunities') throw new Error(`The graphical automation did not preserve the dragged lead trigger (saved ${savedTrigger}).`)
+  if (captureScreenshots) {
+    await page.locator('.bo-dashboard__main').evaluate(element => { element.scrollTop = 0 })
+    await page.screenshot({ path: join(screenshotDirectory, 'bo-links-editor.png'), fullPage: true })
+  }
+  await page.getByRole('button', { name: 'Test workflow', exact: true }).click()
   await page.getByText(/Simulation passed/).waitFor()
-  await page.getByText('Simulated', { exact: true }).waitFor()
+  await page.getByText('Simulated', { exact: true }).first().waitFor()
   if (captureScreenshots) {
     await page.locator('.bo-dashboard__main').evaluate(element => { element.scrollTop = 0 })
     await page.screenshot({ path: join(screenshotDirectory, 'bo-links.png'), fullPage: true })
@@ -278,9 +404,22 @@ try {
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   if (mobileOverflow > 1) throw new Error(`Mobile workspace overflows horizontally by ${mobileOverflow}px.`)
   if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-command-center-mobile.png'), fullPage: true })
+  await page.getByTestId('schema-nav-control').click()
+  await page.waitForURL('**/control')
+  await page.getByTestId('permission-matrix').waitFor()
+  const mobileControlOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  if (mobileControlOverflow > 1) throw new Error(`Mobile access control overflows horizontally by ${mobileControlOverflow}px.`)
+  if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-access-control-mobile.png'), fullPage: true })
+  await page.getByTestId('schema-nav-links').click()
+  await page.waitForURL('**/links')
+  await page.getByRole('tab', { name: /Editor/ }).click()
+  await page.waitForFunction(() => document.querySelector('[data-testid="workflow-studio"]')?.getAttribute('data-frame-ready') === 'true')
+  const mobileWorkflowOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  if (mobileWorkflowOverflow > 1) throw new Error(`Mobile workflow editor overflows horizontally by ${mobileWorkflowOverflow}px.`)
+  if (captureScreenshots) await page.screenshot({ path: join(screenshotDirectory, 'bo-links-mobile.png'), fullPage: true })
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Smoke test passed: sequential AI onboarding, navbar-free Command Center, indexed Links route, graphical drag-and-drop automation canvas, Make connection, simulation, generated forms, role settings, and change preview.')
+  console.log('Smoke test passed: sequential AI onboarding, dashboard routing, n8n-style workflow canvas, Make connection, draft simulation, generated forms, role settings, and change preview.')
 } finally {
   await browser.close()
   server.kill()

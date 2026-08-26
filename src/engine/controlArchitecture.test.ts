@@ -20,6 +20,8 @@ describe('generated interface architecture', () => {
     expect(invoicePage?.roleIds).toEqual(expect.arrayContaining(['owner', 'admin', 'accountant']))
     expect(invoicePage?.roleIds).not.toContain('employee')
     expect(invoicePage?.kpiIds.length).toBeGreaterThan(0)
+    const controlPage = config.interfaceArchitecture?.pages.find(page => page.id === 'control')
+    expect(controlPage?.roleIds).toEqual(['owner', 'admin'])
     expect(config.interfaceArchitecture?.propagation).toEqual(expect.arrayContaining(['data-model', 'views', 'permissions', 'workflows', 'kpis', 'agents', 'events']))
   })
 

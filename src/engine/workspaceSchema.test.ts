@@ -15,7 +15,12 @@ describe('schema-driven workspace', () => {
     const config = generateWorkspaceConfiguration({ companyDescription: 'Digital marketing agency', companyName: 'Northstar', chargeModel: 'Subscription' }, agency)
     expect(config.profile.companyName).toBe('Northstar')
     expect(config.entities.map(entity => entity.id)).toEqual(expect.arrayContaining(['customers', 'opportunities', 'projects', 'tasks', 'invoices', 'expenses', 'employees']))
-    expect(config.navigation.map(item => item.id)).toEqual(expect.arrayContaining(['home', 'today', 'sales', 'customers', 'projects', 'finance', 'team', 'analytics', 'links']))
+    expect(config.navigation.map(item => item.id)).toEqual(expect.arrayContaining(['home', 'today', 'sales', 'customers', 'projects', 'finance', 'team', 'analytics', 'links', 'control']))
+    expect(config.navigation).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'analytics', label: 'Reporting' }),
+      expect.objectContaining({ id: 'links', label: 'Automations' }),
+      expect.objectContaining({ id: 'control', label: 'Access & control' }),
+    ]))
     expect(config.metrics.length).toBeGreaterThan(3)
     expect(config.roles.map(role => role.id)).toEqual(['owner', 'admin', 'manager', 'employee', 'accountant'])
   })

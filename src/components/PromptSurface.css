@@ -1,0 +1,65 @@
+/**
+ * The dark prompt box, wherever it is asked for.
+ *
+ * These rules were written for the public page and lived in its stylesheet, which was fine while the
+ * public page was the only place anybody typed a description. The dashboard asks for exactly the
+ * same thing, and "exactly the same" is not something two copies of a stylesheet stay for long — so
+ * the look moved here, next to the component it dresses, and both pages ask for it by name.
+ *
+ * Imported by CompanyPrompt itself, so a page cannot get the box without the styling that makes it
+ * legible: white type on a near-black panel is unreadable the moment the panel goes missing.
+ */
+
+.wes-prompt-dark .bo-prompt {
+  width: 100%;
+  padding: 24px 20px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(5, 6, 5, .9);
+  border-radius: 40px;
+  color: #fff;
+  background: rgba(34, 35, 33, .96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .36);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.wes-prompt-dark .bo-prompt:focus-within { border-color: rgba(255, 255, 255, .46); box-shadow: 0 26px 78px rgba(0, 0, 0, .42); }
+.wes-prompt-dark .bo-prompt__input { min-height: 108px; }
+.wes-prompt-dark .bo-prompt textarea {
+  min-height: 108px;
+  max-height: min(48svh, 500px);
+  color: #fff;
+  caret-color: #fff;
+  font-size: 18px;
+  line-height: 1.55;
+  scrollbar-color: rgba(255, 255, 255, .58) transparent;
+  scrollbar-width: thin;
+}
+.wes-prompt-dark .bo-prompt textarea::placeholder,
+.wes-prompt-dark .bo-prompt__example { color: rgba(255, 255, 255, .56); font-size: 18px; line-height: 1.55; }
+.wes-prompt-dark .bo-prompt__example i { background: rgba(255, 255, 255, .72); }
+.wes-prompt-dark .bo-prompt__footer { margin-top: 12px; }
+.wes-prompt-dark .bo-prompt__footer button { color: rgba(255, 255, 255, .82); }
+.wes-prompt-dark .bo-prompt__add-tool:hover,
+.wes-prompt-dark .bo-prompt__voice:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.wes-prompt-dark .bo-prompt__mode { color: rgba(255, 255, 255, .82); }
+.wes-prompt-dark .bo-prompt__footer .bo-prompt__submit { width: 46px; height: 46px; flex-basis: 46px; color: #171917; background: #fff; }
+.wes-prompt-dark .bo-prompt__footer .bo-prompt__submit:disabled { color: #4c4f4c; background: rgba(255, 255, 255, .64); }
+
+/* The shell around it: the same width ceiling on every page that asks for the box. */
+.wes-prompt-shell { width: min(960px, 100%); margin: 0 auto; }
+.wes-prompt-shell__loading { min-height: 206px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 40px; background: rgba(34, 35, 33, .96); }
+
+@media (max-width: 720px) {
+  .wes-prompt-dark .bo-prompt { padding: 19px 15px 11px; border-radius: 30px; }
+  .wes-prompt-dark .bo-prompt__input,
+  .wes-prompt-dark .bo-prompt textarea { min-height: 92px; }
+  .wes-prompt-dark .bo-prompt textarea,
+  .wes-prompt-dark .bo-prompt__example { font-size: 16px; }
+  .wes-prompt-dark .bo-prompt__mode { display: none; }
+}
+
+@media (max-height: 680px) and (min-width: 721px) {
+  .wes-prompt-dark .bo-prompt__input,
+  .wes-prompt-dark .bo-prompt textarea { min-height: 86px; }
+}

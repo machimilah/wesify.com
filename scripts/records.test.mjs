@@ -156,10 +156,17 @@ try {
   assert.ok(Array.isArray(exported.payload.notifications))
   assert.ok(exported.payload.exportedAt)
 
-  //    Exporting is reading, so a role with only `view` may do it — otherwise the one person most
-  //    likely to be leaving would be the one unable to take their data with them.
-  const viewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { ...auth, 'x-bo-role': 'viewer' } })
-  assert.equal(viewerExport.status, 403, 'a role that cannot even view the workspace could still export it')
+  //    Authenticated authority comes from the database membership, never from a role header. An
+  //    owner cannot downgrade or elevate themselves by forging that header; a genuinely assigned
+  //    role with no view permission must still be refused.
+  const forgedViewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { ...auth, 'x-bo-role': 'viewer' } })
+  assert.equal(forgedViewerExport.status, 200, 'an authenticated owner role was replaced by a forged role header')
+  const viewerToken = tokenFor('user_viewless')
+  const viewerProfile = await json('/api/auth/me', { headers: { authorization: `Bearer ${viewerToken}` } })
+  assert.equal(viewerProfile.status, 200)
+  await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, 'user_viewless', 'viewer'])
+  const viewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { authorization: `Bearer ${viewerToken}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' } })
+  assert.equal(viewerExport.status, 403, 'a database-assigned role that cannot view the workspace could still export it')
 
   // 9. Deleting the account cascades all the way down: workspace, then every record it held.
   await query('delete from users where id = $1', ['user_owner'])

@@ -15,6 +15,7 @@ import type { BusinessGraph } from './businessGraph'
 import type { EventArchitecture } from './eventArchitecture'
 import type { GeneratedInterfaceArchitecture } from './interfaceArchitecture'
 import type { GovernanceArchitecture } from './governanceArchitecture'
+import { connectOperationalEntities } from './operatingSuite'
 
 export type FieldType = 'text' | 'long-text' | 'number' | 'currency' | 'date' | 'boolean' | 'email' | 'phone' | 'select' | 'relation' | 'file'
 export type ViewType = 'table' | 'kanban' | 'cards' | 'calendar' | 'timeline'
@@ -22,6 +23,8 @@ export type WorkspaceRoleId = 'owner' | 'admin' | 'manager' | 'employee' | 'acco
 
 export interface BusinessProfile {
   companyName: string
+  /** A data URL, given during onboarding. Absent in every workspace built before it was asked for. */
+  logo?: string
   description: string
   archetype: string
   industry: string
@@ -82,7 +85,7 @@ export interface NavigationDefinition {
   id: string
   label: string
   /** 'automations' and 'assistant' only appear in workspaces built before those sections moved; see normalizeNavigation. */
-  kind: 'home' | 'today' | 'entity' | 'analytics' | 'links' | 'automations' | 'assistant' | 'settings'
+  kind: 'home' | 'today' | 'entity' | 'analytics' | 'links' | 'automations' | 'control' | 'assistant' | 'settings'
   viewId?: string
   module?: string
 }
@@ -97,7 +100,7 @@ export interface NavigationDefinition {
  * ambiguous. Suffixing the business one keeps both, and keeps the shell's section where people
  * expect to find it.
  */
-const RESERVED_NAVIGATION_IDS = new Set(['home', 'today', 'analytics', 'links', 'automations', 'assistant', 'settings'])
+const RESERVED_NAVIGATION_IDS = new Set(['home', 'today', 'analytics', 'links', 'automations', 'control', 'assistant', 'settings'])
 export const navigationId = (id: string) => RESERVED_NAVIGATION_IDS.has(id) ? `${id}-records` : id
 
 export interface WorkflowDefinition {
@@ -203,7 +206,7 @@ function createProfile(answers: Answers, blueprint: AIBlueprint, useIndustryTemp
 export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBlueprint, useIndustryTemplate = true): WorkspaceConfiguration {
   const profile = createProfile(answers, blueprint, useIndustryTemplate)
   const modules = [...new Set(blueprint.modules)]
-  const entities: EntityDefinition[] = modules.flatMap(module => entityLibrary[module] ?? []).map(item => ({ ...item, fields: item.fields.map(itemField => ({ ...itemField, ...(itemField.options ? { options: [...itemField.options] } : {}) })) }))
+  let entities: EntityDefinition[] = modules.flatMap(module => entityLibrary[module] ?? []).map(item => ({ ...item, fields: item.fields.map(itemField => ({ ...itemField, ...(itemField.options ? { options: [...itemField.options] } : {}) })) }))
   if (profile.archetype === 'agency') entities.splice(Math.max(0, entities.findIndex(item => item.id === 'projects')), 0,
     { id: 'campaigns', label: 'Campaign', pluralLabel: 'Campaigns', module: 'projects', primaryField: 'name', fields: [field('name', 'Campaign', 'text', { required: true }), field('customer', 'Client', 'relation', { relationEntityId: 'customers' }), statuses('Planned', 'Live', 'Review', 'Complete'), field('channel', 'Channel', 'text'), field('budget', 'Budget', 'currency'), field('startDate', 'Start date', 'date'), field('endDate', 'End date', 'date')] })
   if (profile.archetype === 'field-service') entities.push(
@@ -215,6 +218,7 @@ export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBl
     if (materials) { materials.label = 'Material'; materials.pluralLabel = 'Materials' }
     entities.push({ id: 'project-costs', label: 'Project cost', pluralLabel: 'Project Costs', module: 'finance', primaryField: 'description', fields: [field('description', 'Description', 'text', { required: true }), field('project', 'Project', 'relation', { relationEntityId: 'projects' }), field('type', 'Cost type', 'select', { options: ['Material', 'Contractor', 'Labor', 'Equipment', 'Other'] }), field('amount', 'Amount', 'currency'), field('date', 'Date', 'date')] })
   }
+  entities = connectOperationalEntities(entities)
   const views: ViewDefinition[] = entities.map(item => ({
     id: `${item.id}-${item.id === 'opportunities' || item.id === 'projects' || item.id === 'tasks' ? 'kanban' : 'table'}`,
     label: item.pluralLabel,
@@ -230,8 +234,9 @@ export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBl
       const moduleViews = views.filter(view => entities.find(entity => entity.id === view.entityId)?.module === module)
       return moduleViews.map((view, index) => ({ id: navigationId(index === 0 ? module : view.entityId === module ? `${view.entityId}-list` : view.entityId), label: view.label, kind: 'entity' as const, viewId: view.id, module }))
     }),
-    { id: 'analytics', label: 'Analytics', kind: 'analytics' },
-    { id: 'links', label: 'Links', kind: 'links' },
+    { id: 'analytics', label: 'Reporting', kind: 'analytics' },
+    { id: 'links', label: 'Automations', kind: 'links' },
+    { id: 'control', label: 'Access & control', kind: 'control' },
     { id: 'settings', label: 'Settings', kind: 'settings' },
   ]
   const metricRoles: WorkspaceRoleId[] = ['owner', 'admin', 'manager', 'accountant']
@@ -359,12 +364,22 @@ function catalogEntity(definition: CatalogEntity, module: string, capabilityId: 
   return { id: definition.id, label: definition.label, pluralLabel: definition.pluralLabel, module, primaryField: definition.primaryField, capabilityId, fields: definition.fields.map(item => ({ ...item, ...(item.options ? { options: [...item.options] } : {}) })) }
 }
 
-function mergeEntity(base: EntityDefinition, addition: EntityDefinition): EntityDefinition {
+function mergeEntity(base: EntityDefinition, addition: EntityDefinition, preferAddition = true): EntityDefinition {
   const fields = [...base.fields]
   for (const candidate of addition.fields) {
     const index = fields.findIndex(item => item.id === candidate.id)
-    if (index < 0) fields.push(candidate)
-    else fields[index] = { ...fields[index], ...candidate, options: candidate.options ?? fields[index].options }
+    const semanticIndex = index >= 0 ? index : fields.findIndex(item => slug(item.label) === slug(candidate.label) && item.type === candidate.type)
+    if (semanticIndex < 0) fields.push(candidate)
+    else {
+      const existing = fields[semanticIndex]
+      const merged = preferAddition ? { ...existing, ...candidate } : { ...candidate, ...existing }
+      fields[semanticIndex] = {
+        ...merged,
+        id: existing.id,
+        required: Boolean(existing.required || candidate.required),
+        options: preferAddition ? candidate.options ?? existing.options : existing.options ?? candidate.options,
+      }
+    }
   }
   return { ...base, label: base.label || addition.label, pluralLabel: base.pluralLabel || addition.pluralLabel, fields }
 }
@@ -406,6 +421,10 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     terminology: {},
   }
   const capabilityPlan = planCapabilities(businessState, architecture)
+  /** Capabilities that arrived behind something else. Their records are plumbing until a page asks for them. */
+  const supportingCapabilities = new Set(capabilityPlan.supporting)
+  /** Entities the architect named itself, in the company's own words. These are never plumbing. */
+  const namedByArchitect = new Set<string>()
   const catalogEntityMetadata = new Map<string, CatalogEntity>()
   let entities: EntityDefinition[] = []
   for (const selected of capabilityPlan.selected) for (const definition of selected.entities) {
@@ -417,14 +436,54 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   }
   const uniqueArchitectureEntities = architecture.entities.filter((item, index, items) => slug(item.name) && items.findIndex(candidate => slug(candidate.name) === slug(item.name)) === index)
   const entityIds = [...new Set([...entities.map(item => item.id), ...uniqueArchitectureEntities.map(item => slug(item.name))])]
+
+  /** Catalog records the architect asked for by page name, so they are not offered up to be renamed. */
+  const pagedCatalogEntities = new Set(architecture.pages.map(label => matchEntity(entities, label)?.id).filter(Boolean) as string[])
+  const chosenCapabilities = new Set(architecture.capabilityIds ?? [])
+
+  /**
+   * The catalog record this architect record is really a rename of.
+   *
+   * A capability arrives with the catalog's noun on it — Tasks — and the architect describes the same
+   * thing in the company's own noun: Assignments, Matters, Jobs, Tickets. Nothing spelled alike, so
+   * the two used to be built side by side, and the sidebar carried the company's word next to
+   * Wesify's word for the same record. Adopting is narrow on purpose: the same module, a capability
+   * somebody actually chose, and a record the architect did not separately ask for a page of. Where
+   * any of that is untrue the architect's record is built in its own right.
+   */
+  const adoptable = (proposed: { name: string; module: string }) => entities.find(item =>
+    item.capabilityId
+    && chosenCapabilities.has(item.capabilityId)
+    && item.module === proposed.module
+    && !namedByArchitect.has(item.id)
+    && !pagedCatalogEntities.has(item.id)
+    && !uniqueArchitectureEntities.some(candidate => slug(candidate.name) === item.id))
+
   for (const proposed of uniqueArchitectureEntities) {
     const compiled = customEntity(proposed.name, proposed.module, proposed.purpose, architecture, entityIds, proposed.fields)
-    const existing = semanticEntityMatch(entities, proposed.name, proposed.purpose)
+    const existing = semanticEntityMatch(entities, proposed.name, proposed.purpose) ?? adoptable(proposed)
     if (existing) {
       const singular = proposed.name.replace(/s$/i, '') || proposed.name
-      entities = entities.map(item => item.id === existing.id ? { ...mergeEntity(item, { ...compiled, id: existing.id, module: existing.module }), label: singular, pluralLabel: proposed.name } : item)
+      const architected = Boolean(proposed.fields && proposed.fields.length >= 3)
+      /**
+       * A described record replaces the catalog's, rather than being added to it.
+       *
+       * Merging the two looked generous and read as somebody else's form. The catalog's task carries
+       * a project, a priority and an assignee because that is what a task is in an agency; a student
+       * who described an assignment as a title, a class, a due date and a grade got all four of
+       * theirs plus all three of those, two of them pointing at records their workspace does not
+       * show. The architect read the interview and listed the fields; a field it did not list is a
+       * field this company said nothing about. Only where it described nothing does the catalog's
+       * shape stand, which is what the merge below is still for.
+       */
+      entities = entities.map(item => item.id === existing.id
+        ? architected
+          ? { ...compiled, id: existing.id, module: existing.module, ...(item.capabilityId ? { capabilityId: item.capabilityId } : {}), label: singular, pluralLabel: proposed.name }
+          : { ...mergeEntity(item, { ...compiled, id: existing.id, module: existing.module }, false), label: singular, pluralLabel: proposed.name }
+        : item)
+      namedByArchitect.add(existing.id)
     }
-    else entities.push(compiled)
+    else { entities.push(compiled); namedByArchitect.add(compiled.id) }
   }
   const knowledgeText = [
     businessState.companySummary,
@@ -438,6 +497,7 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     ...businessState.facts.map(item => `${item.topic} ${item.value}`),
   ].join(' ')
   entities = enrichEntityFieldsFromKnowledge(entities, knowledgeText, capabilityPlan.selected.map(item => item.id))
+  entities = connectOperationalEntities(entities)
   const views: ViewDefinition[] = entities.map(entity => {
     const preferred = catalogEntityMetadata.get(entity.id)
     const type = preferred?.view ?? (entity.fields.some(item => item.id === 'status') && /project|task|job|deal|lead|order|booking|campaign|production|ticket/i.test(entity.id) ? 'kanban' : 'table')
@@ -446,10 +506,22 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   const schedulingEntity = entities.find(entity => /visit|appointment|booking|shift|job|task|project|delivery/.test(entity.id) && entity.fields.some(item => item.type === 'date'))
   if (schedulingEntity) views.push({ id: `${schedulingEntity.id}-calendar`, label: 'Schedule', entityId: schedulingEntity.id, type: 'calendar', dateField: schedulingEntity.fields.find(item => item.type === 'date')?.id })
 
+  /**
+   * A record that is here to hold a field, not to be a section in the sidebar.
+   *
+   * Nothing the architect named is ever plumbing, and neither is anything from a capability somebody
+   * actually chose. This is only the third kind: an entity that exists because a chosen capability
+   * declares a dependency on it. A task record relates to a project and an assignee, so choosing
+   * tasks drags in projects, the team directory and the client list behind it — and a person keeping
+   * track of their homework then opens their new workspace and finds Clients, Projects and Team in
+   * the sidebar. They asked for none of those. They get a page only if a page asks for them.
+   */
+  const plumbing = (entity: EntityDefinition) => Boolean(entity.capabilityId) && supportingCapabilities.has(entity.capabilityId!) && !namedByArchitect.has(entity.id)
+
   const seenModules = new Set<string>()
   const usedEntities = new Set<string>()
   const businessNavigation: NavigationDefinition[] = []
-  const capabilityPages = capabilityPlan.selected.flatMap(item => item.pages.map(page => ({ ...page, module: item.module })))
+  const capabilityPages = capabilityPlan.selected.filter(item => !supportingCapabilities.has(item.id)).flatMap(item => item.pages.map(page => ({ ...page, module: item.module })))
   const pageCandidates = [...architecture.pages.map(label => ({ label })), ...capabilityPages]
   for (const page of pageCandidates) {
     const label = String(page.label)
@@ -468,23 +540,58 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     if (businessNavigation.some(item => item.id === id)) continue
     businessNavigation.push({ id, label, kind: 'entity', viewId: view?.id, module: entity.module })
   }
-  for (const entity of entities.filter(item => !usedEntities.has(item.id))) {
+  for (const entity of entities.filter(item => !usedEntities.has(item.id) && !plumbing(item))) {
     const firstInModule = !seenModules.has(entity.module)
     seenModules.add(entity.module)
     const id = navigationId(firstInModule ? entity.module : entity.id)
-    if (!businessNavigation.some(item => item.id === id)) businessNavigation.push({ id, label: entity.pluralLabel, kind: 'entity', viewId: views.find(view => view.entityId === entity.id && view.type !== 'calendar')?.id, module: entity.module })
+    if (!businessNavigation.some(item => item.id === id)) { usedEntities.add(entity.id); businessNavigation.push({ id, label: entity.pluralLabel, kind: 'entity', viewId: views.find(view => view.entityId === entity.id && view.type !== 'calendar')?.id, module: entity.module }) }
   }
+
+  /**
+   * The records this company actually opens, as opposed to the ones holding its fields together.
+   *
+   * Everything downstream that describes the workspace to a person — the metrics on the dashboard,
+   * the automations, the domain headings the shell puts above them — is built from this rather than
+   * from every entity in the file. A client list that exists only because a project record has a
+   * client field on it should not put CRM in the sidebar, produce an "Active clients" number nobody
+   * can act on, or make a homework tracker claim to be a business with customers.
+   */
+  const navigableEntityIds = new Set(businessNavigation.map(item => views.find(view => view.id === item.viewId)?.entityId).filter(Boolean) as string[])
+
+  /**
+   * A picker onto a page that does not exist is worse than no field at all.
+   *
+   * The catalog's records point at each other — a task at a project and an assignee, a shipment at
+   * an order — and the lineage pass adds more of the same. Where the other side of one of those
+   * relationships is plumbing rather than a section, the field renders as a dropdown a person can
+   * neither fill nor add to: they cannot reach the list, so it stays empty forever. Taken off the
+   * forms people actually open; what is already hidden keeps its wiring, since nobody sees it.
+   */
+  entities = entities.map(entity => {
+    if (!navigableEntityIds.has(entity.id)) return entity
+    const fields = entity.fields.filter(item => item.type !== 'relation' || (item.relationEntityId && navigableEntityIds.has(item.relationEntityId)))
+    if (fields.length === entity.fields.length) return entity
+    const kept = new Set(fields.map(item => item.id))
+    for (const view of views) if (view.entityId === entity.id && view.columns) view.columns = fields.slice(0, 5).map(item => item.id).filter(id => kept.has(id))
+    return { ...entity, fields }
+  })
+  // Sections first, plumbing last: several surfaces reach for the first entity when they need one to
+  // start with, and starting a workspace on a record that has no page is a dead end for the person
+  // who clicked. Stable, so the order the architecture asked for survives within each group.
+  entities = [...entities.filter(entity => navigableEntityIds.has(entity.id)), ...entities.filter(entity => !navigableEntityIds.has(entity.id))]
+
   const navigation: NavigationDefinition[] = [
     { id: 'home', label: 'Home', kind: 'home' },
     { id: 'today', label: 'Today', kind: 'today' },
     ...businessNavigation,
-    { id: 'analytics', label: 'Analytics', kind: 'analytics' },
-    { id: 'links', label: 'Links', kind: 'links' },
+    { id: 'analytics', label: 'Reporting', kind: 'analytics' },
+    { id: 'links', label: 'Automations', kind: 'links' },
+    { id: 'control', label: 'Access & control', kind: 'control' },
     { id: 'settings', label: 'Settings', kind: 'settings' },
   ]
   const financialRoles: WorkspaceRoleId[] = ['owner', 'admin', 'accountant']
   const operationalRoles: WorkspaceRoleId[] = ['owner', 'admin', 'manager', 'employee', 'accountant']
-  const metrics = capabilityPlan.selected.flatMap(item => item.metrics ?? []).filter((item, index, items) => items.findIndex(candidate => candidate.id === item.id) === index).map<MetricDefinition>(item => {
+  const metrics = capabilityPlan.selected.flatMap(item => item.metrics ?? []).filter(item => navigableEntityIds.has(item.entityId)).filter((item, index, items) => items.findIndex(candidate => candidate.id === item.id) === index).map<MetricDefinition>(item => {
     const entity = entities.find(candidate => candidate.id === item.entityId)
     const financial = item.format === 'currency' || Boolean(entity?.fields.find(candidate => candidate.id === item.field && candidate.type === 'currency'))
     return { id: item.id, label: item.label, entityId: item.entityId, operation: item.operation, ...(item.field ? { field: item.field } : {}), ...(item.statusNotEquals ? { filter: { field: 'status', notEquals: item.statusNotEquals } } : {}), roles: financial ? financialRoles : operationalRoles, format: item.format ?? (financial ? 'currency' : 'number') }
@@ -501,7 +608,7 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   })
   if (!metrics.length) entities.slice(0, 4).forEach(entity => metrics.push({ id: `${entity.id}-count`, label: entity.pluralLabel, entityId: entity.id, operation: 'count', roles: operationalRoles, format: 'number' }))
 
-  const workflows = capabilityPlan.selected.flatMap(item => item.workflows ?? []).filter((item, index, items) => items.findIndex(candidate => candidate.id === item.id) === index).map<WorkflowDefinition>(item => ({ id: item.id, name: item.name, enabled: true, trigger: { entityId: item.entityId, event: item.event, ...(item.field ? { field: item.field, equals: item.equals } : {}) }, action: { type: 'notify', message: item.message } }))
+  const workflows = capabilityPlan.selected.flatMap(item => item.workflows ?? []).filter(item => navigableEntityIds.has(item.entityId)).filter((item, index, items) => items.findIndex(candidate => candidate.id === item.id) === index).map<WorkflowDefinition>(item => ({ id: item.id, name: item.name, enabled: true, trigger: { entityId: item.entityId, event: item.event, ...(item.field ? { field: item.field, equals: item.equals } : {}) }, action: { type: 'notify', message: item.message } }))
   architecture.workflows.forEach((name, index) => {
     const entity = matchEntity(entities, name) ?? entities.find(item => /invoice/.test(name.toLowerCase()) && /invoice/.test(item.id)) ?? entities.find(item => /visit|job|task|project/.test(name.toLowerCase()) && /visit|job|task|project/.test(item.id))
     if (!entity) return
@@ -511,10 +618,19 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     if (!workflows.some(item => item.id === id || item.name.toLowerCase() === name.toLowerCase())) workflows.push({ id, name, enabled: true, trigger: { entityId: entity.id, event: 'updated', ...(desiredStatus ? { field: 'status', equals: desiredStatus } : {}) }, action: { type: 'notify', message: name } })
   })
 
-  const modules = [...new Set([...capabilityPlan.selected.map(item => item.module), ...architecture.modules, ...blueprint.modules.filter(module => entities.some(entity => entity.module === module))])]
-  const connections = planConnections(capabilityPlan.selected.map(item => item.id), [...businessState.currentTools, ...businessState.softwareImplications, businessState.companySummary].join(' '))
+  /**
+   * What was built, rather than what was considered.
+   *
+   * `modules` and `capabilities` are read by the workspace shell to decide which of Wesify's domains
+   * a company has — the Inventory heading, the Accounting heading. A capability whose records were
+   * all dropped above is not part of this business, and listing it here would put the heading back
+   * over an empty room.
+   */
+  const built = capabilityPlan.selected.filter(item => !item.entities.length || item.entities.some(entity => navigableEntityIds.has(entity.id)))
+  const modules = [...new Set([...built.map(item => item.module), ...architecture.modules, ...blueprint.modules])].filter(module => entities.some(entity => entity.module === module))
+  const connections = planConnections(built.map(item => item.id), [...businessState.currentTools, ...businessState.softwareImplications, businessState.companySummary].join(' '))
   const industry = resolveIndustry([businessState.companySummary, businessState.industry, ...businessState.productsOrServices].filter(Boolean).join('. '))
-  const capabilities = capabilityPlan.selected.map(item => item.id)
+  const capabilities = built.map(item => item.id)
   const kpis = generateKpiDefinitions({ capabilityIds: capabilities, entities, metrics, goals: businessState.goals })
   const config: WorkspaceConfiguration = { version: 1, id: crypto.randomUUID(), profile, modules, capabilities, capabilityPlan: { packId: capabilityPlan.pack?.id ?? 'custom', excluded: capabilityPlan.excluded, reasons: capabilityPlan.reasons }, entities, views, navigation, metrics, kpis, workflows, roles, connections, industrySubsector: industry?.subsector, industryLabel: industry?.subsectorTitle }
   config.businessModel = createBusinessModelV2({ config, state: businessState, architecture, research: capabilityPlan.research })

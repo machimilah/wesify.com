@@ -3,7 +3,7 @@ import { newDb } from 'pg-mem'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { useDatabase, migrate } from '../server/db.mjs'
+import { useDatabase, migrate, query } from '../server/db.mjs'
 import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
@@ -72,6 +72,33 @@ try {
   assert.equal(after.workspaces.length, 1, 'using a workspace did not record who it belongs to')
   assert.equal(after.workspaces[0].id, workspaceId)
   assert.equal(after.workspaces[0].role, 'owner')
+
+  // The database membership, not a role header chosen by the browser, authorizes workspace actions.
+  const specification = {
+    version: 1, id: workspaceId,
+    profile: { companyName: 'Role Test', description: 'Role authorization test', industry: 'Services', goals: [], terminology: {} },
+    modules: ['customers'], capabilities: [],
+    entities: [{ id: 'customers', label: 'Client', pluralLabel: 'Clients', module: 'customers', primaryField: 'name', fields: [{ id: 'name', label: 'Name', type: 'text', required: true }] }],
+    views: [{ id: 'customers-table', label: 'Clients', entityId: 'customers', type: 'table', columns: ['name'] }],
+    navigation: [{ id: 'home', label: 'Home', kind: 'home' }, { id: 'customers', label: 'Clients', kind: 'entity', viewId: 'customers-table', module: 'customers' }],
+    metrics: [], workflows: [],
+    roles: [{ id: 'owner', label: 'Owner', permissions: ['admin'] }, { id: 'employee', label: 'Employee', permissions: ['view'] }],
+  }
+  const built = await call('/api/builds', { method: 'POST', token: ownerToken, workspaceId, body: { workspaceId, specification } })
+  assert.equal(built.status, 201, `role test workspace did not build: ${await built.text()}`)
+  const memberToken = tokenFor('user_member')
+  await call('/api/auth/me', { token: memberToken })
+  await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, 'user_member', 'employee'])
+  assert.equal((await call(`/api/projects/${workspaceId}/records/customers`, { token: memberToken, workspaceId })).status, 200, 'an employee could not read records')
+  const forgedOwner = await call(`/api/projects/${workspaceId}/records/customers`, { method: 'POST', token: memberToken, workspaceId, body: { name: 'Unauthorized' } })
+  assert.equal(forgedOwner.status, 403, 'an employee promoted their request by sending x-bo-role: owner')
+  const promoted = await call(`/api/projects/${workspaceId}/members/user/user_member`, { method: 'PATCH', token: ownerToken, workspaceId, body: { role: 'manager' } })
+  assert.equal(promoted.status, 200, `the owner could not change a member role: ${await promoted.text()}`)
+  assert.equal((await query('select role from workspace_members where workspace_id = $1 and user_id = $2', [workspaceId, 'user_member'])).rows[0].role, 'manager')
+  const forgedAdministrator = await call(`/api/projects/${workspaceId}/members/user/user_member`, { method: 'PATCH', token: memberToken, workspaceId, body: { role: 'admin' } })
+  assert.equal(forgedAdministrator.status, 403, 'a member changed their own server-assigned role')
+  const demotedOwner = await call(`/api/projects/${workspaceId}/members/user/user_owner`, { method: 'PATCH', token: ownerToken, workspaceId, body: { role: 'employee' } })
+  assert.equal(demotedOwner.status, 409, 'the workspace owner could be demoted through member management')
 
   // 6. The rule. A different signed-in account cannot reach it, however it asks.
   const strangerToken = tokenFor('user_stranger')

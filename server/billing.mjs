@@ -150,6 +150,17 @@ export async function requireRebuildRoom(userId) {
   )
 }
 
+/**
+ * A second person in a workspace is what the Business plan sells, so this is where an invitation is
+ * weighed against it. Asked at the moment somebody is invited rather than when they arrive: nobody
+ * should be told they are welcome and then refused at the door.
+ */
+export async function requireTeamMembers(userId) {
+  const plan = await planFor(userId)
+  if (plan.teamMembers) return plan
+  throw refuse('Inviting your colleagues into a workspace is part of the Business plan.', cheapestWith(candidate => candidate.teamMembers))
+}
+
 export async function requireConnectedApps(userId) {
   const plan = await planFor(userId)
   if (plan.connectedApps) return plan

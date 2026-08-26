@@ -44,3 +44,22 @@ export async function browserPath() {
 export async function launchBrowser(options = {}) {
   return chromium.launch({ executablePath: await browserPath(), headless: true, ...options })
 }
+
+/**
+ * Onboarding, got through.
+ *
+ * Every build begins with three questions — a name, a logo, colleagues — asked by the assistant in
+ * the build thread itself rather than by a dialog in front of it. Only the name needs typing; the
+ * other two take the Skip button beside them. It lives here rather than in six copies for the usual
+ * reason: when the intake gains a question, one file changes.
+ */
+export async function passOnboarding(page, name = 'Test Company') {
+  await page.getByTestId('build-thread').waitFor({ timeout: 20_000 })
+  await page.getByTestId('discovery-answer').fill(name)
+  await page.getByTestId('answer-question').click()
+  // The logo, then the team. Both are skipped from the buttons under the question.
+  for (let question = 0; question < 2; question += 1) {
+    await page.getByTestId('intake-skip').click()
+    await page.waitForTimeout(120)
+  }
+}

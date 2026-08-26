@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
 import type { AIBlueprint } from './engine/blueprint'
 import { isWorkspaceConfiguration } from './engine/workspaceSchema'
@@ -9,8 +9,10 @@ import { AccountWatch, type SignedInAccount } from './components/AccountWatch'
 
 const Builder = lazy(() => import('./components/Builder').then(module => ({ default: module.Builder })))
 const Dashboard = lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })))
-const SignIn = lazy(() => import('./components/SignIn').then(module => ({ default: module.SignIn })))
+const ProjectDashboard = lazy(() => import('./components/ProjectDashboard').then(module => ({ default: module.ProjectDashboard })))
+const SignInDialog = lazy(() => import('./components/SignIn').then(module => ({ default: module.SignInDialog })))
 const Billing = lazy(() => import('./components/Billing').then(module => ({ default: module.Billing })))
+const clerkConfigured = Boolean(String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '').trim())
 
 function activeWorkspaceId() {
   return localStorage.getItem('bo-active-workspace-id') || localStorage.getItem('bo-workspace-id') || readStorage<{ id?: string }>('bo-workspace-config', {}).id || ''
@@ -29,6 +31,7 @@ export default function App() {
 
   const [accounts, setAccounts] = useState<boolean | undefined>(undefined)
   const [account, setAccount] = useState<Account | null>(null)
+  const [clerkSession, setClerkSession] = useState<'loading' | 'signed-in' | 'signed-out'>(clerkConfigured ? 'loading' : 'signed-out')
   // Every workspace this account owns or belongs to, most recently created first — the same order
   // the server already returns them in. Empty until the account is known, and re-read after signing
   // in, since neither /api/auth/register nor /api/auth/login themselves return the list.
@@ -39,16 +42,29 @@ export default function App() {
   // Signed in with Clerk, but the server would not say who: a key from another Clerk instance, or a
   // database that is down. The sign-in screen says so rather than sitting on 'one moment' forever.
   const [unreachable, setUnreachable] = useState(false)
+  /**
+   * A description that has been accepted but not yet built: onboarding is open over it.
+   *
+   * Held here rather than inside either page that can start a build, because both of them can — the
+   * public prompt and the project dashboard — and the dialog, the workspace id it produces and the
+   * invitations it sends all have to be the same three things whichever door somebody came through.
+   */
+  // Invitations the server refused, named. Silence here would leave somebody believing a colleague
+  // was invited when the plan allowed none.
+  /**
+   * Whether Wesify is asking who is knocking.
+   *
+   * A dialog rather than a page, and therefore a piece of state rather than a URL. Sign-in used to
+   * live at /signin, which meant that describing a company and being asked to sign in were two
+   * different addresses — somebody mid-sentence was navigated away from everything they had just
+   * seen. The page they were on stays where it is now, and the question is asked over it.
+   */
+  const [signInOpen, setSignInOpen] = useState(false)
 
   const navigate = (nextPath: string) => { window.history.pushState({}, '', nextPath); setPath(nextPath) }
 
-  /**
-   * Where a signed-in account lands with no more specific intent than "I am here": the workspace it
-   * last used, or the build prompt if it does not have one yet. `list[0]` is deliberate rather than a
-   * separate "last active" concept — the server already orders a person's workspaces by creation
-   * date, and until there is a switcher, the most recent one *is* the one anybody was last using.
-   */
-  const homeFor = (list: AccountWorkspace[]) => list[0] ? `/workspace/${list[0].id}/home` : '/'
+  /** The signed-in front door owns project selection; individual workspaces keep their scoped URLs. */
+  const homeFor = () => '/dashboard'
 
   /**
    * What the interface does when it learns who is signed in — whichever of the two ways told it.
@@ -73,15 +89,16 @@ export default function App() {
     let cancelled = false
     void (async () => {
       /**
-       * Both questions at once, because the answers do not depend on each other: whether this server
-       * has accounts, and who is holding this browser. Asked in sequence, every load cost two round
-       * trips end to end before Wesify drew anything.
-       *
-       * The second answer is provisional wherever Clerk is present — at this instant Clerk has
-       * usually not restored the session yet, so it comes back "nobody", and `AccountWatch` corrects
-       * it a moment later. It is the whole answer only where there is no Clerk to ask.
+       * Without Clerk, ask both independent questions together so startup costs one round trip. With
+       * Clerk, ask only whether accounts are enabled here; AccountWatch waits for Clerk to restore
+       * its session before requesting the account, avoiding an anonymous request caused by the race.
        */
-      const [enabled, found] = await Promise.all([accountsEnabled(), currentAccount()])
+      const [enabled, found] = await Promise.all([
+        accountsEnabled(),
+        // With Clerk, AccountWatch waits for its restored session before making this request. Asking
+        // here races the SDK and almost always produces a useless anonymous response first.
+        clerkConfigured ? Promise.resolve(null) : currentAccount(),
+      ])
       if (cancelled) return
       setAccounts(enabled)
       if (enabled && found) handleAccount(found, false)
@@ -90,30 +107,63 @@ export default function App() {
   }, [handleAccount])
 
   /**
-   * The one thing that happens on its own the first time Wesify learns who somebody is.
-   *
-   * There used to be two. The other sent anybody who owned a workspace straight to it from a bare
-   * "/", on the theory that a returning operator should not be shown a prompt they had already
-   * answered. That was true when "/" was only a prompt. It is the home page now — the argument for
-   * the product, the thing a person might want to re-read, and the page they get if they type the
-   * address — and taking it away from the people who use Wesify most made it unreachable to exactly
-   * them. Their workspace is a click away in the header instead.
-   *
-   * What survives is the brief: somebody who described their company and was asked to sign in has
-   * already done the one thing Wesify needs from them, and sending them back to an empty box to prove
-   * they now have an account is how they get lost between two screens.
-   *
-   * An effect rather than something done inside the callback above, because the two facts it needs —
-   * the account, and that sentence — arrive from different places at times neither controls. Reading
-   * them from state at the moment both exist is the only version that cannot be handed a stale copy
-   * of one while holding the other. `landed` makes it happen once: Clerk renewing a token is a change
-   * here, and none of those is an arrival.
+   * A returning Clerk session can choose its route without waiting for `/api/auth/me` to return the
+   * account profile. The public page remains ineligible to render while Clerk is deciding, and this
+   * history replacement happens before the browser paints the signed-in state.
    */
+  useLayoutEffect(() => {
+    if (accounts !== true || clerkSession !== 'signed-in' || path !== '/') return
+    window.history.replaceState({}, '', '/dashboard')
+    setPath('/dashboard')
+  }, [accounts, clerkSession, path])
+
+  /** Resume a public brief after sign-in; otherwise send the account to its project dashboard. */
   useEffect(() => {
-    if (!account || landed.current) return
-    landed.current = true
-    if (pendingBrief) build(pendingBrief)
-  }, [account, pendingBrief])
+    if (!account) {
+      landed.current = false
+      return
+    }
+    // Whoever it is, they are in: the question the panel was asking has been answered.
+    setSignInOpen(false)
+    if (pendingBrief && !landed.current) {
+      landed.current = true
+      // The sentence survived the sign-in panel, and lands in the build exactly as it would have
+      // done had this person already been signed in when they typed it.
+      build(pendingBrief)
+      return
+    }
+    if (!pendingBrief && path === '/') {
+      window.history.replaceState({}, '', '/dashboard')
+      setPath('/dashboard')
+    }
+  }, [account, path, pendingBrief])
+
+  /**
+   * A signed-out person on a page that belongs to an account.
+   *
+   * There is nothing to render for them there — the workspace, the project dashboard and the billing
+   * screen are all somebody's — so they land on the one page that is genuinely public, with the
+   * sign-in panel already open over it. Before, this was a full-page redirect to /signin, which lost
+   * both the page they wanted and any sense that Wesify was still the thing behind the form.
+   */
+  const hasSignedInSession = Boolean(account) || (clerkConfigured && clerkSession === 'signed-in')
+  const locked = accounts === true && !hasSignedInSession && path !== '/'
+  useEffect(() => {
+    if (!locked) return
+    window.history.replaceState({}, '', '/')
+    setPath('/')
+    setSignInOpen(true)
+  }, [locked])
+
+  /** Refresh project membership when the dashboard becomes visible after a completed build. */
+  useEffect(() => {
+    if (path !== '/dashboard' || !account) return
+    let cancelled = false
+    void currentAccount().then(found => {
+      if (!cancelled && found) handleAccount(found, false)
+    })
+    return () => { cancelled = true }
+  }, [account?.id, handleAccount, path])
 
   useEffect(() => {
     const handleHistory = () => setPath(window.location.pathname)
@@ -130,14 +180,22 @@ export default function App() {
   }, [path])
   useEffect(() => {
     const companyName = String(answers.companyName ?? 'Dashboard')
-    document.title = path === '/' ? 'Wesify' : path.startsWith('/build') ? 'Build your workspace — Wesify' : `${companyName} — Wesify`
+    document.title = path === '/' ? 'Wesify' : path === '/dashboard' ? 'Dashboard | Wesify' : path.startsWith('/build') ? 'Build | Wesify' : `${companyName} | Wesify`
   }, [path, answers.companyName])
 
-  /** Starts a fresh company from one sentence. Everything a previous workspace left behind goes. */
+  /**
+   * Starts a fresh company from one sentence.
+   *
+   * Everything a previous workspace left behind goes first, and then the sentence is handed to the
+   * build. What used to happen here — a name, a logo and a list of colleagues, collected by a dialog
+   * standing in front of all this — is now the first thing the build itself asks about, so this is
+   * the whole of it again.
+   */
   function build(brief: string) {
     const workspaceId = crypto.randomUUID()
     localStorage.removeItem('bo-records'); localStorage.removeItem('bo-actions'); localStorage.removeItem('bo-workspace-config'); localStorage.removeItem('bo-workspace-records'); localStorage.removeItem('bo-ai-history'); localStorage.removeItem('bo-active-workspace-id')
-    setAnswers({ companyDescription: brief }); setBlueprint(null); setPendingBrief('')
+    setAnswers({ companyDescription: brief })
+    setBlueprint(null); setPendingBrief('')
     navigate(`/build/${workspaceId}`)
   }
 
@@ -158,7 +216,7 @@ export default function App() {
   const startBuild = (brief: string) => {
     if (!accounts || account) return build(brief)
     setPendingBrief(brief)
-    navigate('/signin')
+    setSignInOpen(true)
   }
 
   /**
@@ -170,14 +228,6 @@ export default function App() {
    * screens where somebody is using it.
    */
   const renderPage = () => {
-  if (path === '/') return <Home
-    initialValue={String(answers.companyDescription ?? '')}
-    onSubmit={startBuild}
-    signedIn={Boolean(account)}
-    accounts={accounts === true}
-    onSignIn={() => navigate('/signin')}
-  />
-
   // `/start` was Wesify's second home page until there was only one. It is gone rather than duplicated,
   // and anybody holding an old link or an open tab lands on the page it became.
   if (path === '/start') {
@@ -186,26 +236,44 @@ export default function App() {
     return <main className="bo-home"/>
   }
 
-  if (accounts === undefined) return <main className="bo-home"/>
+  if (accounts === undefined || (accounts === true && clerkConfigured && clerkSession === 'loading')) {
+    return <main className="wes-dashboard" aria-busy="true" data-testid="session-boot"/>
+  }
 
-  // Wesify had a /reset page of its own, for links its own server mailed. Clerk mails them now and
-  // handles the whole flow inside the sign-in screen, so an old link is answered by the screen that
-  // can actually help: sign-in, which is where forgetting a password is dealt with.
-  if (path === '/reset') {
-    window.history.replaceState({}, '', '/signin')
-    setTimeout(() => setPath('/signin'), 0)
+  // The public prompt is the first visit. Once an account is known, the arrival effect above owns
+  // the move to `/dashboard`; holding this frame avoids flashing the public page during that move.
+  if (path === '/' && hasSignedInSession) return <main className="wes-dashboard" aria-busy="true" data-testid="session-boot"/>
+  if (path === '/') return <Home
+    initialValue={String(answers.companyDescription ?? '')}
+    onSubmit={startBuild}
+    accounts={accounts === true}
+    onSignIn={() => setSignInOpen(true)}
+  />
+
+  /**
+   * Two addresses Wesify used to own and no longer does.
+   *
+   * /reset was for links its own server mailed, before Clerk mailed them; /signin was the sign-in
+   * page, before signing in became a panel. Both are answered the same way — the public prompt, with
+   * the panel open over it — so an old link, a bookmark or a tab left open since last week still
+   * arrives somewhere that can help.
+   */
+  if (path === '/reset' || path === '/signin') {
+    window.history.replaceState({}, '', '/')
+    setTimeout(() => { setPath('/'); setSignInOpen(true) }, 0)
     return <main className="bo-home"/>
   }
 
-  if (accounts && !account) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><SignIn unreachable={unreachable}/></Suspense>
+  if (path === '/dashboard') return <Suspense fallback={<main className="wes-dashboard" aria-busy="true"/>}>
+    <ProjectDashboard account={account} workspaces={workspaces} onNavigate={navigate} onBuild={startBuild}/>
+  </Suspense>
 
   // Behind the gate, unlike /reset: a plan belongs to an account, so there is nothing to show anyone
   // who has not signed in.
-  if (path === '/billing') return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Billing onBack={() => navigate(homeFor(workspaces))}/></Suspense>
-  if (path === '/signin') { navigate('/'); return <main className="bo-home"/> }
+  if (path === '/billing') return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Billing onBack={() => navigate(homeFor())}/></Suspense>
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
-  if (buildMatch) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate('/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate(`/workspace/${buildMatch[1]}/home`) }}/></Suspense>
+  if (buildMatch) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate(account ? '/dashboard' : '/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate(`/workspace/${buildMatch[1]}/home`) }}/></Suspense>
   if (path === '/build') return <main className="bo-home"/>
 
   /**
@@ -224,7 +292,7 @@ export default function App() {
     // what this render shows.
     localStorage.setItem('bo-active-workspace-id', matchedWorkspaceId)
     if (!section || section === 'home' || workspaceSections(matchedWorkspaceId).includes(section)) {
-      return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Dashboard workspaceId={matchedWorkspaceId} answers={answers} blueprint={blueprint}/></Suspense>
+      return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Dashboard workspaceId={matchedWorkspaceId} onExit={() => navigate('/dashboard')}/></Suspense>
     }
     // An unrecognised section under a real workspace still lands inside that workspace, at home,
     // rather than falling all the way through to the public prompt as if the workspace did not exist.
@@ -240,8 +308,8 @@ export default function App() {
    * in the URL at all. Both are resolved against whichever workspace this browser last had open —
    * the one thing localStorage's memory of "the active workspace" is still for.
    */
-  if (path.startsWith('/dashboard') || (path !== '/' && !path.startsWith('/build') && !path.startsWith('/workspace'))) {
-    const section = path.startsWith('/dashboard') ? (path.split('/').filter(Boolean)[1] || 'home') : (path.split('/').filter(Boolean)[0] || 'home')
+  if (path.startsWith('/dashboard/') || (path !== '/' && !path.startsWith('/build') && !path.startsWith('/workspace'))) {
+    const section = path.startsWith('/dashboard/') ? (path.split('/').filter(Boolean)[1] || 'home') : (path.split('/').filter(Boolean)[0] || 'home')
     const knownWorkspaceId = activeWorkspaceId()
     if (knownWorkspaceId && (section === 'home' || workspaceSections(knownWorkspaceId).includes(section))) {
       const destination = `/workspace/${knownWorkspaceId}/${section}`
@@ -251,8 +319,10 @@ export default function App() {
     }
   }
 
-  // Anything else is the home page, which by this point is reached signed in.
-  return <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={build} signedIn={Boolean(account)} accounts={accounts === true}/>
+  // Unknown public URLs return to the prompt; an authenticated operator stays inside the product.
+  return account
+    ? <Suspense fallback={<main className="wes-dashboard" aria-busy="true"/>}><ProjectDashboard account={account} workspaces={workspaces} onNavigate={navigate} onBuild={startBuild}/></Suspense>
+    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild} accounts={accounts === true} onSignIn={() => navigate('/signin')}/>
   }
 
   /**
@@ -261,7 +331,12 @@ export default function App() {
    * nothing to watch, and the boot fetch above is the whole answer.
    */
   return <>
-    {Boolean(String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '').trim()) && <AccountWatch onChange={handleAccount}/>}
+    {clerkConfigured && <AccountWatch onChange={handleAccount} onSessionChange={setClerkSession}/>}
     {renderPage()}
+    {/* Mounted only while it is being asked for, so Clerk's form is not loaded by every visitor who
+        never signs in — and closing it leaves them exactly where they were. */}
+    {signInOpen && accounts === true && !account && <Suspense fallback={null}>
+      <SignInDialog open unreachable={unreachable} onClose={() => { setSignInOpen(false); setPendingBrief('') }}/>
+    </Suspense>}
   </>
 }

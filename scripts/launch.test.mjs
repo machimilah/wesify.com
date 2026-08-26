@@ -1,4 +1,4 @@
-import { launchBrowser } from './browser.mjs'
+import { launchBrowser, passOnboarding } from './browser.mjs'
 import { spawn } from 'node:child_process'
 import './noSpend.mjs'
 
@@ -43,8 +43,8 @@ await page.addInitScript(() => {
       title: 'Plumbing Command Center', summary: 'Run dispatch and billing together.',
       explanation: 'Work orders connect customers, technicians and invoices.',
       modules: ['customers', 'field-service', 'scheduling', 'finance'], startView: 'field-service',
-      capabilities: ['Work orders', 'Invoicing'], capabilityIds: ['crm.contacts', 'service.field-work', 'finance.invoicing'], excludedCapabilityIds: [],
-      pages: ['Dashboard', 'Clients', 'Work orders', 'Invoices'],
+      capabilities: ['Work orders', 'Invoicing'], capabilityIds: ['crm.contacts', 'service.field-work', 'work.scheduling', 'finance.invoicing', 'finance.payments'], excludedCapabilityIds: [],
+      pages: ['Dashboard', 'Clients', 'Work orders', 'Schedule', 'Invoices', 'Payments'],
       entities: [{ name: 'Work orders', module: 'field-service', purpose: 'Dispatch jobs' }],
       workflows: [], metrics: ['Open work orders'], processStages: ['New', 'Complete'], pipelineStages: [], billingCadence: 'On completion',
     }
@@ -66,9 +66,9 @@ try {
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle' })
 
-  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business. Technicians visit customer homes. Customers pay on completion. We have a small team.')
   await page.getByTestId('start-building').click()
+  await passOnboarding(page, 'Ridge Plumbing')
   await page.waitForURL('**/build/*')
 
   try { await page.getByTestId('open-dashboard').waitFor({ timeout: 30_000 }) }
@@ -146,20 +146,51 @@ try {
 
   await page.getByTestId('schema-nav-links').click()
   await page.waitForURL('**/links')
-  await page.getByTestId('generated-automation-plan').waitFor()
-  const inferredAutomations = await page.getByTestId('generated-automation').count()
+  await page.getByTestId('workflow-studio').waitFor()
+  const workflowActions = page.locator('.bo-workflow-actions')
+  const testWorkflowButton = workflowActions.getByRole('button', { name: 'Test workflow', exact: true })
+  if (await testWorkflowButton.count() !== 1) throw new Error('The top action bar must contain exactly one Test workflow button.')
+  const workflowActionOrder = await workflowActions.locator(':scope > *').evaluateAll(nodes => nodes.map(node => {
+    if (node.classList.contains('bo-workflow-test')) return 'test'
+    if (node.querySelector('[role="switch"]')) return 'status'
+    return 'other'
+  }))
+  if (workflowActionOrder.indexOf('test') !== workflowActionOrder.indexOf('status') + 1) throw new Error('Test workflow is not immediately beside the Active/Inactive toggle.')
+  if (await page.locator('.bo-canvas-run').count()) throw new Error('The old floating Test workflow canvas control is still present.')
+  const generatedWorkflows = page.getByTestId('saved-link').filter({ hasText: 'Generated' })
+  const inferredAutomations = await generatedWorkflows.count()
   if (inferredAutomations < 1) throw new Error('The generated command center did not expose its inferred automation plan.')
-  const automationPlanBox = await page.getByTestId('generated-automation-plan').boundingBox()
-  const linksToolbarBox = await page.locator('.bo-links-toolbar').boundingBox()
-  if (!automationPlanBox || !linksToolbarBox || automationPlanBox.y + automationPlanBox.height > linksToolbarBox.y) throw new Error('The generated automation plan overlaps the manual Links toolbar.')
+  const scheduledWorkflow = page.getByTestId('saved-link').filter({ hasText: 'Review overdue receivables daily' })
+  if (await scheduledWorkflow.count() !== 1) throw new Error('The finance workspace did not expose its autonomous daily collections workflow.')
+  await scheduledWorkflow.click()
+  await page.getByTestId('link-trigger-node').click()
+  if (await page.getByTestId('link-event').inputValue() !== 'scheduled') throw new Error('The scheduled workflow did not open as a scheduled trigger.')
+  if (await page.getByLabel('Frequency').inputValue() !== 'daily' || await page.getByLabel('Run at').inputValue() !== '08:00' || await page.getByLabel('Timezone').inputValue() !== 'UTC') throw new Error('The scheduled trigger controls did not preserve cadence, time, and timezone.')
+  const workflowListBox = await page.locator('.bo-workflow-list').boundingBox()
+  const workflowEditorBox = await page.locator('.bo-workflow-editor').boundingBox()
+  if (!workflowListBox || !workflowEditorBox || workflowListBox.x + workflowListBox.width > workflowEditorBox.x + 1) throw new Error('The generated workflow list overlaps the automation canvas.')
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  if (mobileOverflow > 2) throw new Error(`The Links screen overflows the mobile viewport by ${mobileOverflow}px.`)
-  const mobileCards = await page.getByTestId('generated-automation').count()
+  if (mobileOverflow > 2) throw new Error(`The Automations screen overflows the mobile viewport by ${mobileOverflow}px.`)
+  const mobileCards = await generatedWorkflows.count()
   if (mobileCards !== inferredAutomations) throw new Error('Generated automation cards disappeared at the mobile breakpoint.')
 
+  /**
+   * The foot of the rail: who is signed in, and the way back out.
+   *
+   * Clerk is switched off in every browser suite, so the account menu itself renders nothing — the
+   * container is what is checked here, exactly as on the workspace list. The door is the part that
+   * has to work either way: a workspace with no way back to the list is a room with no handle on the
+   * inside.
+   */
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.getByTestId('workspace-account').waitFor()
+  await page.getByTestId('leave-workspace').click()
+  await page.waitForURL('**/dashboard')
+  await page.getByTestId('project-dashboard').waitFor()
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Launch test passed: finished workspace launch, navigation, generated automation plan, and Links layout are usable.')
+  console.log('Launch test passed: finished workspace launch, navigation, generated workflows, the Automations canvas, and the account and exit controls at the foot of the rail.')
 } finally {
   await browser.close()
   vite.kill()

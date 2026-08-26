@@ -2,7 +2,7 @@
 
 The command center is the shared operational layer around each AI-generated company workspace. Company templates decide which operating modules appear; the command center, documents, access/audit, and automation surfaces remain available as platform infrastructure.
 
-## Delivered frontend foundation
+## Delivered operating suite
 
 - Executive overview with role-specific KPI visibility.
 - KPIs derived from actual local workspace records; unavailable financial connections display `Not connected`.
@@ -11,19 +11,24 @@ The command center is the shared operational layer around each AI-generated comp
 - Persistent record creation and company-specific pipeline/process stages.
 - Document, access/audit, and automation/integration pages.
 - Indexed routes such as `/dashboard/sales`, `/dashboard/documents`, and `/dashboard/governance`.
+- Server-enforced tenant access, team invitations, assigned roles, approval permissions and audit history.
+- Quote, order and invoice lines with discounts, tax inputs, totals, source lineage and duplicate-safe conversion.
+- Payment allocation, receivable balances, stock movement integrity and balanced immutable journal batches.
+- Versioned workflow graphs with conditions, record actions, approvals, encrypted webhooks, execution traces and retry receipts.
+- Hourly, daily and weekly scheduled scans, including automatically provisioned finance controls.
+- In-process scheduling for persistent servers and a bearer-protected cron endpoint for serverless deployments.
 
 ## Production services still required
 
-The current browser prototype must not be represented as providing these controls until their services exist:
+Wesify must not be represented as providing the following controls until the deployment or specialist service exists:
 
-- Authentication, organizations, invitations, MFA, sessions, and password recovery.
-- Server-enforced RBAC, tenant isolation, audit-event ingestion, retention, and export.
-- Encrypted database and object storage, versioned files, access logs, backups, and recovery.
-- Payment gateway, bank feeds, invoice delivery, reminders, refunds, taxes, and recurring billing.
+- Production Clerk, Postgres, MFA, backup, restore and retention configuration for the target deployment.
+- Object storage, file versioning and attachment access logs.
+- Bank feeds, payment execution, invoice delivery, statutory tax engines and jurisdiction-specific numbering.
 - E-signature provider and legally traceable proposal/contract workflows.
 - Client portal authentication, uploads, comments, approvals, and notifications.
-- Email/in-app delivery workers, scheduled jobs, automation execution, retries, and dead-letter handling.
-- Calendar, communications, banking, storage, and accounting connectors plus API credentials and webhooks.
+- Email delivery workers and a dead-letter queue beyond the built-in in-app notifications, execution history and guarded retry path.
+- Calendar, communications, banking, storage and statutory-accounting connectors beyond Stripe import and encrypted Make/n8n/HTTPS webhooks.
 - Security review, privacy operations, GDPR controls, and evidence required for any SOC 2 claim.
 
 ## Data integrity rule

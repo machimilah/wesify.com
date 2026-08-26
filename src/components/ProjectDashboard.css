@@ -1,0 +1,209 @@
+.wes-dashboard {
+  width: 100%;
+  height: 100svh;
+  overflow: hidden;
+  display: flex;
+  color: #f3f4f1;
+  background: #111310;
+}
+
+.wes-dashboard button,
+.wes-dashboard input,
+.wes-dashboard textarea { font: inherit; }
+
+.wes-dashboard__sidebar {
+  width: 232px;
+  flex: 0 0 232px;
+  z-index: 20;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  color: #d9dcd6;
+  background: #151714;
+  box-shadow: 12px 0 32px rgba(0, 0, 0, .12);
+}
+
+.wes-dashboard__sidebar button { color: inherit; }
+.wes-dashboard__brand-row { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 5px 6px; margin-bottom: 8px; }
+.wes-dashboard__brand-row > button:first-child { padding: 0; border: 0; background: transparent; }
+.wes-dashboard__brand-row .brand { font-size: 16px; }
+.wes-dashboard__brand-row .brand-mark { width: 29px; height: 28px; flex-basis: 29px; }
+.wes-dashboard__brand-row .brand-logo { width: 28px; height: 25px; }
+.wes-dashboard__brand-row .brand em { display: none; }
+.wes-dashboard__sidebar-close { display: none; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 6px; background: transparent; }
+.wes-dashboard__sidebar-close:hover { background: #292b27; }
+
+.wes-dashboard__primary-nav { display: grid; gap: 2px; }
+
+.wes-dashboard__primary-nav button {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #b8bdb5;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+}
+
+.wes-dashboard__primary-nav button:hover,
+.wes-dashboard__primary-nav button.active { color: #fff; background: #292b27; }
+.wes-dashboard__recents h2 { margin: 0 10px 7px; color: #858b83; font-size: 11px; font-weight: 600; }
+
+.wes-dashboard__recents { min-height: 0; margin-top: 20px; display: grid; align-content: start; gap: 1px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #3d413b transparent; }
+.wes-dashboard__recent-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 26px; align-items: center; gap: 2px; border-radius: 5px; }
+.wes-dashboard__recent-row:hover { background: #242622; }
+.wes-dashboard__recent-open { min-height: 28px; min-width: 0; overflow: hidden; padding: 0 4px 0 10px; border: 0; border-radius: 5px; color: #c7cbc4; background: transparent; font-size: 11px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.wes-dashboard__recent-row:hover .wes-dashboard__recent-open { color: #fff; }
+
+/* Shown on hover, and kept visible while its menu is open so it does not vanish under the pointer. */
+.wes-dashboard__recent-more { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 5px; color: #8b918a; background: transparent; opacity: 0; }
+.wes-dashboard__recent-row:hover .wes-dashboard__recent-more,
+.wes-dashboard__recent-more:focus-visible,
+.wes-dashboard__recent-more[aria-expanded='true'] { opacity: 1; }
+.wes-dashboard__recent-more:hover,
+.wes-dashboard__recent-more[aria-expanded='true'] { color: #f2f4ef; background: #33362f; }
+
+.wes-dashboard__recent-menu { margin: 2px 0 4px 10px; display: grid; gap: 1px; }
+.wes-dashboard__recent-menu button { min-height: 28px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 5px; color: #d3d7d0; background: #232520; font-size: 10px; text-align: left; }
+.wes-dashboard__recent-menu button:hover { color: #fff; background: #33362f; }
+.wes-dashboard__recent-menu button.is-destructive { color: #eaa0a0; }
+.wes-dashboard__recent-menu button.is-destructive:hover { color: #fff; background: #43302e; }
+.wes-dashboard__recents > span { padding: 5px 10px; color: #71776f; font-size: 11px; }
+
+/**
+ * A deleted workspace is thrown away rather than blinked out.
+ *
+ * Deleting a Command Center is the one action here that cannot be undone, and a name that simply
+ * stops existing gives nobody a moment to register what went. So the name is thrown into a bin at
+ * the end of its own row, the bin takes it, and only then does the row close up behind it.
+ *
+ * The timings add up to `binFlightMs` in ProjectDashboard.tsx, which is how long the code waits
+ * before discarding the row: 340ms of flight, then 300ms of the gap closing.
+ */
+@keyframes wes-recent-into-bin {
+  0% { transform: none; opacity: 1; }
+  55% { transform: translate(14px, 2px) scale(.6) rotate(-7deg); opacity: .6; }
+  100% { transform: translate(30px, 6px) scale(.05) rotate(-16deg); opacity: 0; }
+}
+
+@keyframes wes-recent-bin-arrives {
+  0% { transform: translateY(-50%) scale(.4); opacity: 0; }
+  40% { transform: translateY(-50%) scale(1); opacity: 1; }
+}
+
+/* The nudge the bin takes as the name lands in it, then it settles. */
+@keyframes wes-recent-bin-catch {
+  0%, 100% { transform: translateY(-50%) rotate(0); }
+  35% { transform: translateY(-50%) rotate(-13deg); }
+  65% { transform: translateY(-50%) rotate(9deg); }
+}
+
+@keyframes wes-recent-close-up {
+  to { max-height: 0; opacity: 0; transform: translateY(-4px); }
+}
+
+.wes-dashboard__recent.is-vanishing { max-height: 90px; overflow: hidden; animation: wes-recent-close-up .3s .34s cubic-bezier(.4, 0, .8, .3) both; }
+.wes-dashboard__recent.is-vanishing .wes-dashboard__recent-row:hover { background: transparent; }
+.wes-dashboard__recent.is-vanishing .wes-dashboard__recent-open { animation: wes-recent-into-bin .34s cubic-bezier(.5, -.15, .8, .45) both; transform-origin: 100% 50%; }
+.wes-dashboard__recent.is-vanishing .wes-dashboard__recent-more { opacity: 0; }
+
+.wes-dashboard__recent-bin {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #f0b9b9;
+  background: #43302e;
+  transform: translateY(-50%);
+  animation: wes-recent-bin-arrives .18s ease-out both, wes-recent-bin-catch .26s .3s ease-in-out both;
+}
+
+.wes-dashboard__account { margin-top: auto; padding-top: 12px; display: grid; gap: 8px; }
+.wes-dashboard__plan { min-height: 38px; padding: 0 10px; display: flex; align-items: center; gap: 9px; border: 0; border-radius: 7px; color: #d6dad3; background: #22241f; font-size: 11px; }
+.wes-dashboard__plan:hover { background: #292b27; }
+.wes-dashboard__identity { min-width: 0; min-height: 44px; padding: 4px 7px; display: flex; align-items: center; gap: 8px; }
+.wes-dashboard__identity > span { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; color: #1b1d19; background: #e9ebe6; font-size: 11px; font-weight: 800; }
+.wes-dashboard__identity > div { min-width: 0; display: grid; margin-right: auto; }
+.wes-dashboard__identity strong,
+.wes-dashboard__identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wes-dashboard__identity strong { color: #eceee9; font-size: 11px; }
+.wes-dashboard__identity small { color: #858b83; font-size: 9px; }
+
+.wes-dashboard__main {
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  background: #111311;
+}
+
+.wes-dashboard__visual,
+.wes-dashboard__visual-veil { position: absolute; z-index: -2; inset: 0; }
+.wes-dashboard__visual > div { width: 100%; height: 100%; }
+.wes-dashboard__visual-loading { position: absolute; inset: 0; background: #171915; }
+/* Copied from the public page deliberately, veil and all: an account signing in should land on the
+   same room it was standing in a second earlier, not a differently lit one. */
+.wes-dashboard__visual-veil { z-index: -1; background: radial-gradient(120% 85% at 50% 46%, rgba(8, 10, 8, .58), rgba(8, 10, 8, .18)); }
+.wes-dashboard__mobile-header { display: none; }
+
+.wes-dashboard__center {
+  width: min(960px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 34px 0 22px;
+  align-self: center;
+  text-align: center;
+}
+
+.wes-dashboard__center h1 { margin: 18px 0; color: #fff; font: 600 32px/1.15 'Ubuntu', sans-serif; letter-spacing: 0; }
+
+.wes-dashboard__backdrop { display: none; }
+
+@media (max-width: 820px) {
+  .wes-dashboard__sidebar { width: min(280px, calc(100% - 48px)); position: fixed; inset: 0 auto 0 0; transform: translateX(-102%); transition: transform .2s ease; }
+  .wes-dashboard__sidebar.is-open { transform: translateX(0); }
+  .wes-dashboard__sidebar-close { display: grid; }
+  .wes-dashboard__backdrop { position: fixed; z-index: 15; inset: 0; display: block; border: 0; background: rgba(0, 0, 0, .58); }
+  .wes-dashboard__main { grid-template-rows: 56px minmax(0, 1fr); }
+  .wes-dashboard__mobile-header { padding: 0 14px; display: flex; align-items: center; justify-content: space-between; }
+  .wes-dashboard__mobile-header > button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 6px; color: #fff; background: rgba(18, 20, 18, .66); }
+  .wes-dashboard__mobile-header .brand { font-size: 15px; }
+  .wes-dashboard__mobile-header .brand-mark { width: 29px; height: 27px; flex-basis: 29px; }
+  .wes-dashboard__mobile-header .brand-logo { width: 28px; height: 24px; }
+  .wes-dashboard__mobile-header .brand em { display: none; }
+  .wes-dashboard__center { width: min(100% - 30px, 960px); padding: 8px 0 18px; }
+  .wes-dashboard__center h1 { margin-top: 14px; font-size: 29px; }
+}
+
+@media (max-width: 560px) {
+  .wes-dashboard__main { grid-template-rows: 54px minmax(0, 1fr); }
+  .wes-dashboard__center { width: min(100% - 24px, 960px); padding-bottom: 12px; }
+  .wes-dashboard__center h1 { margin: 12px 0; font-size: 25px; }
+}
+
+@media (max-height: 700px) and (min-width: 821px) {
+  .wes-dashboard__main { grid-template-rows: minmax(0, 1fr); }
+  .wes-dashboard__center { padding-top: 18px; padding-bottom: 14px; }
+  .wes-dashboard__center h1 { margin: 12px 0; font-size: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wes-dashboard__recent.is-vanishing,
+  .wes-dashboard__recent.is-vanishing .wes-dashboard__recent-open,
+  .wes-dashboard__recent-bin { animation: none; }
+  .wes-dashboard__recent.is-vanishing { opacity: .35; }
+  .wes-dashboard__sidebar { transition: none; }
+  .wes-dashboard__visual { display: none; }
+  .wes-dashboard__main { background: #111311; }
+}

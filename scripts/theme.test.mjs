@@ -1,4 +1,4 @@
-import { launchBrowser } from './browser.mjs'
+import { launchBrowser, passOnboarding } from './browser.mjs'
 import { spawn } from 'node:child_process'
 import './noSpend.mjs'
 
@@ -96,9 +96,9 @@ try {
   await page.getByTestId('theme-toggle').waitFor()
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) throw new Error('Wesify opened in dark mode with no stored preference.')
 
-  const moltenMetal = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
-    const hero = document.querySelector('.bo-home__hero')
-    const frame = document.querySelector('.bo-home__molten-frame')
+  const heroLight = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    const hero = document.querySelector('.wes-home__hero')
+    const frame = document.querySelector('.wes-home__visual')
     const canvas = frame?.querySelector('canvas')
     const gl = canvas?.getContext('webgl2')
     if (!hero || !frame || !canvas || !gl) return resolve({ rendered: false })
@@ -118,8 +118,8 @@ try {
       height: bounds.height,
     })
   })))
-  if (!moltenMetal.rendered) throw new Error('The Molten Metal hero background rendered a blank WebGL canvas.')
-  if (!moltenMetal.fillsHero) throw new Error(`The Molten Metal frame does not fill the hero (${moltenMetal.width}x${moltenMetal.height}).`)
+  if (!heroLight.rendered) throw new Error('The hero light background rendered a blank WebGL canvas.')
+  if (!heroLight.fillsHero) throw new Error(`The hero light frame does not fill the hero (${heroLight.width}x${heroLight.height}).`)
 
   const firstVisitOffenders = await invisibleElements()
   if (firstVisitOffenders.length) throw new Error(`Invisible text in light mode on the home page: ${firstVisitOffenders.join(', ')}`)
@@ -135,17 +135,11 @@ try {
   await page.reload({ waitUntil: 'networkidle' })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('The theme did not survive a reload.')
 
-  // 4. It survives navigation, not just a reload of one page.
+  // 4. It survives navigation from the public prompt into the project dashboard and back.
+  await page.goto(`http://127.0.0.1:${vitePort}/dashboard`, { waitUntil: 'networkidle' })
+  await page.getByTestId('project-dashboard').waitFor({ timeout: 20_000 })
+  if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost on the project dashboard.')
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  const headlineTopBeforePrompt = await page.evaluate(() => document.querySelector('.bo-home__hero h1')?.getBoundingClientRect().top)
-  await page.getByTestId('get-started').click()
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  const headlineTopAfterPrompt = await page.evaluate(() => document.querySelector('.bo-home__hero h1')?.getBoundingClientRect().top)
-  if (typeof headlineTopBeforePrompt !== 'number' || typeof headlineTopAfterPrompt !== 'number' || Math.abs(headlineTopAfterPrompt - headlineTopBeforePrompt) > 0.5) throw new Error('Opening the prompt moved the hero headline.')
-  await page.getByTestId('close-prompt').click()
-  await page.getByTestId('prompt-stage').waitFor({ state: 'detached', timeout: 2_000 })
-  await page.getByTestId('get-started').waitFor({ timeout: 2_000 })
-  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
   if (await page.evaluate(() => document.documentElement.getAttribute('data-theme')) !== 'dark') throw new Error('Dark mode was lost moving between pages.')
 
@@ -169,7 +163,15 @@ try {
   await page.getByTestId('theme-toggle').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business.')
   await page.getByTestId('start-building').click()
+  // The opening questions are checked while they are on screen: they carry buttons of their own —
+  // a picker, a skip — inside a thread with its own surface, which is exactly the arrangement that
+  // produces an icon drawn in its own background.
   await page.waitForURL('**/build/*')
+  await page.getByTestId('build-thread').waitFor({ timeout: 20_000 })
+  await page.getByTestId('intake-actions').waitFor({ timeout: 20_000 })
+  const intakeOffendersDark = await invisibleElements()
+  if (intakeOffendersDark.length) throw new Error(`Invisible content in dark mode in the build intake: ${intakeOffendersDark.join(', ')}`)
+  await passOnboarding(page, 'Ridge Plumbing')
   // Opened deliberately: the proposal is the densest thing Wesify renders, so it is where a colour
   // that vanishes into its own background shows up first.
   await page.getByTestId('check-proposal').click({ timeout: 20_000 })

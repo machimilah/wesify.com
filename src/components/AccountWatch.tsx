@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { useAuth } from '@clerk/react'
 import { currentAccount, type Account, type AccountWorkspace } from '../engine/authClient'
 
@@ -20,11 +20,18 @@ export interface SignedInAccount { user: Account; workspaces: AccountWorkspace[]
  * It renders nothing. It exists to hold a hook, which is the one thing a plain module cannot do, and
  * it is mounted only where the Clerk provider is (see App.tsx) because `useAuth` requires it.
  */
-export function AccountWatch({ onChange }: {
+export function AccountWatch({ onChange, onSessionChange }: {
   /** `null` means nobody. `signedInWithClerk` separates "signed out" from "signed in, but Wesify could not say who". */
   onChange: (account: SignedInAccount | null, signedInWithClerk: boolean) => void
+  /** Report Clerk's decision before the slower Wesify account request finishes. */
+  onSessionChange: (state: 'signed-in' | 'signed-out') => void
 }) {
   const { isLoaded, isSignedIn } = useAuth()
+
+  useLayoutEffect(() => {
+    if (!isLoaded) return
+    onSessionChange(isSignedIn ? 'signed-in' : 'signed-out')
+  }, [isLoaded, isSignedIn, onSessionChange])
 
   useEffect(() => {
     // Still deciding. Reporting anything here is what caused the bug this component exists to fix.

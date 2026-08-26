@@ -66,7 +66,7 @@ export async function sessionHeaders(): Promise<Record<string, string>> {
 }
 
 export interface Account { id: string; email: string }
-export interface AccountWorkspace { id: string; name: string; role: string; created_at: string }
+export interface AccountWorkspace { id: string; name: string; role: string; created_at: string; logo?: string }
 
 /**
  * Who is signed in, and what they have, according to Wesify rather than Clerk.

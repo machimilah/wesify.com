@@ -13,6 +13,7 @@ import { defineConfig } from 'vitest/config'
  *   discoveryModel    the in-browser model loader: downloads weights and drives WebGPU, neither of
  *                     which exists in a test process
  *   local-ai.worker   a worker entry point with no logic of its own
+ *   logoFile          FileReader, Image and a canvas, and no rule of its own to check
  *   naics.generated   a generated table
  */
 export default defineConfig({
@@ -21,7 +22,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/engine/**/*.ts', 'src/components/faces.ts'],
-      exclude: ['**/*.test.ts', 'src/engine/**/*Client.ts', 'src/engine/discoveryModel.ts', 'src/engine/local-ai.worker.ts'],
+      exclude: ['**/*.test.ts', 'src/engine/**/*Client.ts', 'src/engine/discoveryModel.ts', 'src/engine/local-ai.worker.ts', 'src/engine/logoFile.ts'],
       // Set at what the suite actually reaches, not at a round number: a threshold above reality is
       // a broken build nobody can fix, and one below it stops catching anything. Raise them when
       // coverage rises; never lower them to make a red build green.

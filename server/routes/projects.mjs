@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { audit, authorize, readAudit, tenant } from '../access.mjs'
-import { ensureGeneratedAutomations, executeManagedAutomation, publicAutomationWorkspace, readAutomationWorkspace, safeWebhookUrl, triggerManagedAutomations, writeAutomationWorkspace } from '../automations.mjs'
+import { ensureGeneratedAutomations, triggerManagedAutomations } from '../automations.mjs'
 import { recordRebuild, requireRebuildRoom, requireRecordRoom } from '../billing.mjs'
 import { databaseAvailable } from '../db.mjs'
 import { body, send } from '../http.mjs'
@@ -10,6 +10,11 @@ import { readWorkspaceData, writeWorkspaceData } from '../records.mjs'
 import { readDiscoverySession } from '../discoverySessions.mjs'
 import { compileOpeningRecords, proposeOpeningRecords } from '../openingRecords.mjs'
 import { dispatchMutationEvents, mutationEventDefinitions, triggerEventNotifications } from '../businessEvents.mjs'
+import { validateRecordValues } from '../recordValidation.mjs'
+import { documentSupportsLines, linesForDocument, removeDocumentLines, replaceDocumentLines } from '../documentLines.mjs'
+import { transitionAllowed } from '../recordTransitions.mjs'
+import { postBalancedJournal } from '../accountingIntegrity.mjs'
+import { emitIntegrityEffects, integrityAfterMutation, triggerWorkflows } from '../recordRuntime.mjs'
 
 /**
  * The workspace itself: building it, changing it, and everything inside it.
@@ -21,36 +26,6 @@ import { dispatchMutationEvents, mutationEventDefinitions, triggerEventNotificat
 
 /** Two builds of the same workspace at once would race; the second waits on the first instead. */
 const initialBuilds = new Map()
-
-function validateRecord(entity, input, partial = false) {
-  const allowed = new Set(entity.fields.map(field => field.id))
-  const output = {}
-  for (const [key, value] of Object.entries(input ?? {})) if (allowed.has(key)) output[key] = value
-  if (!partial) for (const field of entity.fields.filter(field => field.required)) {
-    if (output[field.id] === undefined || output[field.id] === '') throw Object.assign(new Error(`${field.label} is required.`), { status: 400 })
-  }
-  return output
-}
-
-function validateRelations(entity, values, data) {
-  for (const field of entity.fields.filter(field => field.type === 'relation' && field.relationEntityId)) {
-    const value = values[field.id]
-    if (value && !(data[field.relationEntityId] ?? []).some(record => record.id === value)) {
-      throw Object.assign(new Error(`${field.label} must reference an existing record.`), { status: 400 })
-    }
-  }
-}
-
-function triggerWorkflows(manifest, data, entityId, event, record) {
-  const notifications = data._notifications ?? []
-  for (const workflow of manifest.workflows ?? []) {
-    const trigger = workflow.trigger
-    if (!workflow.enabled || trigger.entityId !== entityId || trigger.event !== event) continue
-    if (trigger.field && String(record[trigger.field] ?? '') !== String(trigger.equals ?? '')) continue
-    if (workflow.action.type === 'notify') notifications.push({ id: randomUUID(), message: workflow.action.message, entityId, recordId: record.id, createdAt: new Date().toISOString(), read: false })
-  }
-  return { ...data, _notifications: notifications }
-}
 
 /**
  * The workspace opens holding what the operator already said.
@@ -191,77 +166,25 @@ export async function projectRoutes(request, response, segments, url) {
     return send(response, 200, await readAudit(workspaceId))
   }
 
-  if (segments[3] === 'connectors' && request.method === 'POST' && segments.length === 4) {
-    authorize(manifest, request, 'admin')
-    const input = await body(request)
-    if (!['make-webhook', 'generic-webhook'].includes(input.type) || !String(input.name ?? '').trim()) return send(response, 400, { error: 'Connector name and supported type are required.' })
-    const endpointUrl = safeWebhookUrl(input.endpointUrl)
-    const state = await readAutomationWorkspace(workspaceId)
-    const connector = { id: randomUUID(), name: String(input.name).trim().slice(0, 100), type: input.type, endpointUrl, endpointHost: new URL(endpointUrl).hostname, status: 'connected', createdAt: new Date().toISOString() }
-    await writeAutomationWorkspace(workspaceId, { ...state, connectors: [...state.connectors, connector] })
-    await audit(workspaceId, 'connector.created', request, { connectorId: connector.id, type: connector.type })
-    const { endpointUrl: hidden, ...safe } = connector
-    return send(response, 201, safe)
-  }
-
-  if (segments[3] === 'automations') {
-    if (request.method === 'GET' && segments.length === 4) {
-      authorize(manifest, request, 'view')
-      return send(response, 200, publicAutomationWorkspace(await ensureGeneratedAutomations(workspaceId, manifest.specification)))
+  if (segments[3] === 'accounting' && segments[4] === 'journals') {
+    if (request.method !== 'POST') return send(response, 405, { error: 'Method not allowed.' })
+    authorize(manifest, request, 'create')
+    authorize(manifest, request, 'financial')
+    const data = await readWorkspaceData(workspaceId)
+    if (databaseAvailable() && caller?.user) {
+      const held = Object.entries(data).filter(([id]) => id !== '_notifications').reduce((total, [, rows]) => total + (Array.isArray(rows) ? rows.length : 0), 0)
+      await requireRecordRoom(caller.user.id, held)
     }
-    if (request.method === 'POST' && segments.length === 4) {
-      authorize(manifest, request, 'admin')
-      const input = await body(request)
-      const state = await readAutomationWorkspace(workspaceId)
-      const compiledEvent = (manifest.specification?.eventArchitecture?.definitions ?? []).some(definition => definition.type === input.event && definition.sourceEntityIds?.includes(input.entityId))
-      if (!manifest.entities.some(item => item.id === input.entityId) || (!['created', 'updated'].includes(input.event) && !compiledEvent) || !state.connectors.some(item => item.id === input.connectorId)) {
-        return send(response, 400, { error: 'Choose a valid record type, trigger, and connector.' })
+    const posted = postBalancedJournal({ workspaceId, manifest, data, input: await body(request) })
+    if (!posted.existing) {
+      await writeWorkspaceData(workspaceId, posted.data)
+      await audit(workspaceId, 'journal.posted', request, { batchId: posted.batchId, reference: posted.entries[0].reference, lines: posted.entries.length, total: posted.total })
+      for (const entry of posted.entries) {
+        await triggerManagedAutomations(workspaceId, 'created', 'journal-entries', entry)
+        await dispatchMutationEvents(workspaceId, manifest, request, 'journal-entries', 'created', entry)
       }
-      const now = new Date().toISOString()
-      const automation = { id: randomUUID(), name: String(input.name ?? '').trim().slice(0, 120) || `${input.entityId} ${input.event}`, enabled: false, trigger: { entityId: input.entityId, event: input.event }, action: { type: 'webhook', connectorId: input.connectorId }, createdAt: now, updatedAt: now }
-      await writeAutomationWorkspace(workspaceId, { ...state, automations: [...state.automations, automation] })
-      await audit(workspaceId, 'automation.created', request, { automationId: automation.id })
-      return send(response, 201, automation)
     }
-
-    const state = await readAutomationWorkspace(workspaceId)
-
-    if (request.method === 'PATCH' && segments[4] === 'approvals' && segments[5]) {
-      authorize(manifest, request, 'approve')
-      const input = await body(request)
-      if (!['approved', 'rejected'].includes(input.decision)) return send(response, 400, { error: 'Choose approve or reject.' })
-      const approval = state.approvals.find(item => item.id === segments[5])
-      if (!approval) return send(response, 404, { error: 'Approval request not found.' })
-      if (approval.status !== 'pending') return send(response, 409, { error: 'This approval request has already been decided.' })
-      const updated = { ...approval, status: input.decision, comment: String(input.comment ?? '').trim().slice(0, 500), decidedAt: new Date().toISOString() }
-      await writeAutomationWorkspace(workspaceId, { ...state, approvals: state.approvals.map(item => item.id === updated.id ? updated : item) })
-      const data = await readWorkspaceData(workspaceId)
-      const notifications = data._notifications ?? []
-      notifications.push({ id: randomUUID(), message: `${approval.automationName}: ${input.decision}.`, entityId: approval.entityId, recordId: approval.recordId, automationId: approval.automationId, createdAt: updated.decidedAt, read: false })
-      await writeWorkspaceData(workspaceId, { ...data, _notifications: notifications })
-      await audit(workspaceId, `automation.approval.${input.decision}`, request, { approvalId: approval.id, automationId: approval.automationId, recordId: approval.recordId })
-      return send(response, 200, updated)
-    }
-
-    const automation = state.automations.find(item => item.id === segments[4])
-    if (!automation) return send(response, 404, { error: 'Automation not found.' })
-
-    if (request.method === 'PATCH' && segments.length === 5) {
-      authorize(manifest, request, 'admin')
-      const input = await body(request)
-      const updated = { ...automation, enabled: Boolean(input.enabled), updatedAt: new Date().toISOString() }
-      await writeAutomationWorkspace(workspaceId, { ...state, automations: state.automations.map(item => item.id === updated.id ? updated : item) })
-      await audit(workspaceId, updated.enabled ? 'automation.enabled' : 'automation.disabled', request, { automationId: updated.id })
-      return send(response, 200, updated)
-    }
-    if (request.method === 'POST' && segments[5] === 'test') {
-      authorize(manifest, request, 'admin')
-      const input = await body(request)
-      const record = { id: 'test-record', test: true, message: 'Wesify automation test' }
-      const run = await executeManagedAutomation(workspaceId, automation, 'test', automation.trigger.entityId, record, input.dryRun !== false)
-      await audit(workspaceId, 'automation.tested', request, { automationId: automation.id, status: run.status })
-      return send(response, 200, run)
-    }
+    return send(response, posted.existing ? 200 : 201, { entries: posted.entries, batchId: posted.batchId, total: posted.total, existing: posted.existing })
   }
 
   if (segments[3] === 'notifications') {
@@ -310,11 +233,13 @@ export async function projectRoutes(request, response, segments, url) {
         const held = Object.entries(data).filter(([id]) => id !== '_notifications').reduce((total, [, rows]) => total + (Array.isArray(rows) ? rows.length : 0), 0)
         await requireRecordRoom(caller.user.id, held)
       }
-      const values = validateRecord(entity, await body(request))
-      validateRelations(entity, values, data)
+      const values = validateRecordValues(entity, await body(request), { data })
       const now = new Date().toISOString()
-      const record = { id: randomUUID(), workspaceId, ...values, createdAt: now, updatedAt: now }
+      let record = { id: randomUUID(), workspaceId, ...values, createdAt: now, updatedAt: now }
       let next = { ...data, [entityId]: [...collection, record] }
+      const inventory = integrityAfterMutation(manifest, data, next, { entityId, recordId: record.id })
+      next = inventory.data
+      record = next[entityId]?.find(item => item.id === record.id) ?? record
       next = triggerWorkflows(manifest, next, entityId, 'created', record)
       const events = mutationEventDefinitions(manifest, entityId, 'created')
       next = triggerEventNotifications(manifest, next, events, entityId, record)
@@ -322,6 +247,7 @@ export async function projectRoutes(request, response, segments, url) {
       await audit(workspaceId, 'record.created', request, { entityId, recordId: record.id })
       await triggerManagedAutomations(workspaceId, 'created', entityId, record)
       await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'created', record)
+      await emitIntegrityEffects(workspaceId, manifest, request, inventory)
       return send(response, 201, record)
     }
 
@@ -329,12 +255,80 @@ export async function projectRoutes(request, response, segments, url) {
     const current = collection.find(record => record.id === recordId)
     if (!current) return send(response, 404, { error: 'Record not found.' })
 
+    if (segments[6] === 'lines' && segments.length === 7) {
+      if (!documentSupportsLines(entity)) return send(response, 400, { error: 'This record type does not support document lines.' })
+      if (request.method === 'GET') {
+        authorize(manifest, request, 'view')
+        return send(response, 200, linesForDocument(data, entityId, recordId))
+      }
+      if (request.method === 'PUT') {
+        authorize(manifest, request, 'edit')
+        const replaced = replaceDocumentLines({ workspaceId, entity, record: current, data, input: await body(request) })
+        const inventory = integrityAfterMutation(manifest, data, replaced.data, { entityId, recordId })
+        const document = inventory.data[entityId]?.find(item => item.id === recordId) ?? replaced.document
+        let next = triggerWorkflows(manifest, inventory.data, entityId, 'updated', document)
+        const events = mutationEventDefinitions(manifest, entityId, 'updated')
+        next = triggerEventNotifications(manifest, next, events, entityId, document)
+        await writeWorkspaceData(workspaceId, next)
+        await audit(workspaceId, 'document.lines_replaced', request, { entityId, recordId, lines: replaced.lines.length, amount: replaced.summary.amount })
+        await triggerManagedAutomations(workspaceId, 'updated', entityId, document)
+        await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'updated', document, replaced.summary)
+        await emitIntegrityEffects(workspaceId, manifest, request, inventory)
+        return send(response, 200, { document, lines: replaced.lines, summary: replaced.summary })
+      }
+      return send(response, 405, { error: 'Method not allowed.' })
+    }
+
+    if (segments[6] === 'convert' && segments.length === 7) {
+      if (request.method !== 'POST') return send(response, 405, { error: 'Method not allowed.' })
+      authorize(manifest, request, 'create')
+      const input = await body(request)
+      const targetEntity = manifest.entities.find(item => item.id === input.targetEntityId)
+      if (!targetEntity || !transitionAllowed(entityId, targetEntity.id)) return send(response, 400, { error: 'That document transition is not available.' })
+      const existing = (data[targetEntity.id] ?? []).find(item => item._sourceEntityId === entityId && item._sourceRecordId === recordId)
+      if (existing) return send(response, 200, { record: existing, copiedLines: linesForDocument(data, targetEntity.id, existing.id).length, existing: true })
+      if (databaseAvailable() && caller?.user) {
+        const held = Object.entries(data).filter(([id]) => id !== '_notifications').reduce((total, [, rows]) => total + (Array.isArray(rows) ? rows.length : 0), 0)
+        await requireRecordRoom(caller.user.id, held)
+      }
+      const supplied = { ...(input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? input.values : {}) }
+      for (const field of targetEntity.fields.filter(field => field.type === 'relation' && field.relationEntityId === entityId)) supplied[field.id] = recordId
+      const values = validateRecordValues(targetEntity, supplied, { data })
+      const now = new Date().toISOString()
+      let record = { id: randomUUID(), workspaceId, ...values, _sourceEntityId: entityId, _sourceRecordId: recordId, createdAt: now, updatedAt: now }
+      let next = { ...data, [targetEntity.id]: [...(data[targetEntity.id] ?? []), record] }
+      let copiedLines = 0
+      if (documentSupportsLines(targetEntity)) {
+        const sourceLines = documentSupportsLines(entity) ? linesForDocument(data, entityId, recordId) : []
+        const candidates = Array.isArray(input.lines) && input.lines.length ? input.lines : sourceLines.map(({ id, workspaceId: ignoredWorkspace, parentEntityId, parentRecordId, createdAt, updatedAt, subtotal, taxAmount, total, ...line }) => line)
+        if (candidates.length) {
+          const replaced = replaceDocumentLines({ workspaceId, entity: targetEntity, record, data: next, input: candidates })
+          next = replaced.data; record = replaced.document; copiedLines = replaced.lines.length
+        }
+      }
+      const inventory = integrityAfterMutation(manifest, data, next, { entityId: targetEntity.id, recordId: record.id })
+      next = inventory.data
+      record = next[targetEntity.id]?.find(item => item.id === record.id) ?? record
+      next = triggerWorkflows(manifest, next, targetEntity.id, 'created', record)
+      const events = mutationEventDefinitions(manifest, targetEntity.id, 'created')
+      next = triggerEventNotifications(manifest, next, events, targetEntity.id, record)
+      await writeWorkspaceData(workspaceId, next)
+      await audit(workspaceId, 'record.converted', request, { sourceEntityId: entityId, sourceRecordId: recordId, targetEntityId: targetEntity.id, targetRecordId: record.id, copiedLines })
+      await triggerManagedAutomations(workspaceId, 'created', targetEntity.id, record)
+      await dispatchMutationEvents(workspaceId, manifest, request, targetEntity.id, 'created', record)
+      await emitIntegrityEffects(workspaceId, manifest, request, inventory)
+      return send(response, 201, { record, copiedLines, existing: false })
+    }
+
     if (request.method === 'PATCH') {
       authorize(manifest, request, 'edit')
-      const values = validateRecord(entity, await body(request), true)
-      validateRelations(entity, values, data)
-      const record = { ...current, ...values, workspaceId, updatedAt: new Date().toISOString() }
+      if (entityId === 'journal-entries' && current._journalBatchId) return send(response, 409, { error: 'Posted journal lines are immutable. Post a reversing journal instead.' })
+      const values = validateRecordValues(entity, await body(request), { partial: true, data })
+      let record = { ...current, ...values, workspaceId, updatedAt: new Date().toISOString() }
       let next = { ...data, [entityId]: collection.map(item => item.id === recordId ? record : item) }
+      const inventory = integrityAfterMutation(manifest, data, next, { entityId, recordId })
+      next = inventory.data
+      record = next[entityId]?.find(item => item.id === recordId) ?? record
       next = triggerWorkflows(manifest, next, entityId, 'updated', record)
       const events = mutationEventDefinitions(manifest, entityId, 'updated')
       next = triggerEventNotifications(manifest, next, events, entityId, record)
@@ -342,16 +336,24 @@ export async function projectRoutes(request, response, segments, url) {
       await audit(workspaceId, 'record.updated', request, { entityId, recordId })
       await triggerManagedAutomations(workspaceId, 'updated', entityId, record)
       await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'updated', record, values)
+      await emitIntegrityEffects(workspaceId, manifest, request, inventory)
       return send(response, 200, record)
     }
 
     if (request.method === 'DELETE') {
       authorize(manifest, request, 'delete')
+      if (entityId === 'journal-entries' && current._journalBatchId) return send(response, 409, { error: 'Posted journal lines are immutable. Post a reversing journal instead.' })
+      if (entityId === 'stock-items' && current.product && [...(data['stock-movements'] ?? []), ...(data['_stock-ledger'] ?? [])].some(movement => (movement.product ?? movement.productId) === current.product)) {
+        return send(response, 409, { error: 'This stock item has movement history and cannot be deleted. Archive the product or post an adjustment instead.' })
+      }
       const events = mutationEventDefinitions(manifest, entityId, 'deleted')
-      const next = triggerEventNotifications(manifest, { ...data, [entityId]: collection.filter(record => record.id !== recordId) }, events, entityId, current)
+      const withoutDocument = removeDocumentLines({ ...data, [entityId]: collection.filter(record => record.id !== recordId) }, entityId, recordId)
+      const inventory = integrityAfterMutation(manifest, data, withoutDocument, { entityId, recordId })
+      const next = triggerEventNotifications(manifest, inventory.data, events, entityId, current)
       await writeWorkspaceData(workspaceId, next)
       await audit(workspaceId, 'record.deleted', request, { entityId, recordId })
       await dispatchMutationEvents(workspaceId, manifest, request, entityId, 'deleted', current)
+      await emitIntegrityEffects(workspaceId, manifest, request, inventory)
       return send(response, 200, { deleted: true })
     }
   }

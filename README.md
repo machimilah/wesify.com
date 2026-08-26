@@ -1,6 +1,13 @@
-# Wesify — MVP V2
+# Wesify — adaptive business operating suite
 
-Wesify es un prototipo funcional de un espacio de trabajo empresarial generado a partir de una conversación:
+Wesify construye una suite operativa conectada a partir de cómo funciona una empresa. El producto
+abarca CRM, ventas, proyectos, inventario, facturación, contabilidad, personas, automatización,
+permisos e informes sin obligar a cada empresa a instalar el mismo ERP.
+
+La dirección de producto y sus límites están definidos en
+[`docs/PRODUCT_REPOSITIONING.md`](docs/PRODUCT_REPOSITIONING.md).
+
+El flujo actual funciona así:
 
 1. Una frase inicial explica qué hace la empresa.
 2. El modelo de IA decide los módulos, la vista inicial y la siguiente pregunta.
@@ -34,6 +41,8 @@ La key de Gemini es gratuita y sin tarjeta: [aistudio.google.com/apikey](https:/
 | `VITE_API_URL` | Solo para despliegue partido: dónde vive la API. Se compila en el bundle, así que es una dirección, nunca un secreto |
 | `BO_ALLOWED_ORIGINS` | Qué orígenes de navegador pueden llamar a la API. Sin ella, ninguno |
 | `BO_CONNECTION_SECRET` | Cifra las credenciales de las apps conectadas. Sin ella, Wesify se niega a guardarlas |
+| `BO_AUTOMATION_SCHEDULER` | El planificador horario/diario/semanal está activo por defecto en procesos persistentes; `off` solo lo desactiva para pruebas o cuando un scheduler externo ejecuta los trabajos |
+| `BO_AUTOMATION_SCHEDULER_SECRET` / `CRON_SECRET` | Protege `POST /api/system/automations/run-due`, la entrada para cron en despliegues serverless |
 | `BO_REASONING_MODEL` | Modelo a usar (por defecto `claude-haiku-4-5-20251001`, el más barato). Subirlo mejora la calidad y multiplica el coste por build |
 | `DATABASE_URL` | Cadena de conexión de Supabase. Es la mitad de las cuentas: dónde vive lo que una cuenta posee |
 | `CLERK_SECRET_KEY` | La otra mitad: con qué verifica el servidor la sesión de Clerk. Sin ella nadie puede iniciar sesión, aunque haya base de datos |
@@ -210,15 +219,17 @@ Las respuestas están restringidas por un esquema JSON en ambos caminos. Con el 
 
 ## Apps conectadas
 
-Wesify no sustituye al sistema que la empresa ya usa: lo muestra. Stripe es el primer conector y es **solo de lectura** — trae clientes, suscripciones y pagos, y nunca cambia nada en Stripe. Las credenciales se guardan cifradas fuera del directorio del workspace y ningún endpoint las devuelve.
+Wesify posee los registros y flujos cuando puede imponer correctamente sus estados, validaciones, permisos y auditoría. Cuando un sistema externo todavía tiene mayor profundidad legal, fiscal o de ecosistema, Wesify lo conecta y conserva la trazabilidad entre ambos lados.
+
+Stripe es el primer conector y hoy es **solo de lectura**: trae clientes, suscripciones y pagos, y nunca cambia nada en Stripe. Las credenciales se guardan cifradas fuera del directorio del workspace y ningún endpoint las devuelve.
 
 El contrato de escritura existe y está probado, pero deliberadamente no está conectado. Ver [docs/CONNECTED_APPS.md](docs/CONNECTED_APPS.md).
 
 ## Alcance consciente
 
-Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` y las claves de Clerk configuradas, la identidad la lleva Clerk y la propiedad de los workspaces y los registros que contienen viven en Postgres, con pantalla de acceso y sesión que sobrevive al recargar. Se empaqueta como imagen, cada push pasa por CI, los fallos en producción se reportan con contexto suficiente para diagnosticarlos, y hay planes de pago con Stripe. Lo que falta ya no es infraestructura sino producto: más conectores —hoy solo Stripe, en modo lectura— y clientes de verdad usándolo.
+Esta V2 valida la experiencia y el modelo de interacción. Con `DATABASE_URL` y las claves de Clerk configuradas, la identidad la lleva Clerk y la propiedad de los workspaces y los registros que contienen viven en Postgres, con pantalla de acceso y sesión que sobrevive al recargar. Se empaqueta como imagen, cada push pasa por CI, los fallos en producción se reportan con contexto suficiente para diagnosticarlos, y hay planes de pago con Stripe. Lo que falta es profundidad de producto: motores transaccionales, inventario y contabilidad deterministas, localización, más conectores y validación con clientes reales.
 
-Consulta [docs/MVP_V1.md](docs/MVP_V1.md) para las decisiones y el alcance de las siguientes versiones.
+Consulta [docs/PRODUCT_REPOSITIONING.md](docs/PRODUCT_REPOSITIONING.md) para la decisión vigente y la secuencia de entrega.
 
 La auditoría de producto y el siguiente sprint recomendado están en [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md).
 

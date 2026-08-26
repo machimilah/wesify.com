@@ -1,4 +1,4 @@
-import { launchBrowser } from './browser.mjs'
+import { launchBrowser, passOnboarding } from './browser.mjs'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import './noInfra.mjs'
@@ -112,9 +112,9 @@ try {
   if (status.available !== true) throw new Error(`The frontier tier should be available in this run: ${JSON.stringify(status)}`)
 
   // Every essential operating-model dimension is stated, so Wesify has enough to architect without asking.
-  await page.getByTestId('get-started').click()
   await page.getByTestId('company-brief').fill('We run a plumbing service business. Technicians visit customer homes. Customers pay on completion. We have a small team.')
   await page.getByTestId('start-building').click()
+  await passOnboarding(page, 'Ridge Plumbing')
   await page.waitForURL('**/build/*')
 
   // The research pass runs, and it is a stage on the progress rail rather than a narrated journal.

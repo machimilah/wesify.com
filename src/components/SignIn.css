@@ -1,0 +1,54 @@
+/**
+ * The sign-in panel.
+ *
+ * Same surface as onboarding — near-black, one warm accent, a heavy shadow over a blurred page —
+ * because they are the two moments Wesify interrupts somebody, and two interruptions that look like
+ * different products make the product feel like two.
+ */
+
+.wes-signin {
+  width: min(440px, calc(100% - 28px));
+  max-height: calc(100dvh - 36px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 14px;
+  color: #f1f3ef;
+  background: #191b18;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .55);
+}
+
+.wes-signin[open] { display: block; animation: wes-signin-in .2s cubic-bezier(.22, .8, .3, 1); }
+.wes-signin::backdrop { background: rgba(10, 12, 10, .62); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.wes-signin :focus-visible { outline: 2px solid #e4a83e; outline-offset: 2px; }
+
+@keyframes wes-signin-in {
+  from { opacity: 0; transform: translateY(9px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.wes-signin__panel { max-height: calc(100dvh - 36px); padding: 20px 20px 22px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3a3e38 transparent; }
+.wes-signin__panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.wes-signin__panel > header p { margin: 12px 0 16px; max-width: 34ch; color: #9aa197; font-size: 12.5px; line-height: 1.55; }
+.wes-signin__panel > header .brand { color: #f1f3ef; font-size: 17px; }
+.wes-signin__panel > header > button { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #9aa197; background: transparent; cursor: pointer; }
+.wes-signin__panel > header > button:hover { color: #f1f3ef; background: rgba(255, 255, 255, .07); }
+
+/* Clerk paints its own form inside; these only stop it drawing a second card inside this one. */
+.wes-signin__panel .cl-rootBox,
+.wes-signin__panel .cl-cardBox,
+.wes-signin__panel .cl-card { width: 100%; box-shadow: none; }
+
+.wes-signin__loading { display: grid; gap: 13px; padding: 6px 0 2px; }
+.wes-signin__loading i { height: 44px; border-radius: 10px; background: #202320; animation: wes-signin-pulse 1.4s ease-in-out infinite; }
+.wes-signin__loading i:nth-child(2) { animation-delay: .15s; }
+.wes-signin__loading i:nth-child(3) { animation-delay: .3s; }
+@keyframes wes-signin-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+.wes-signin__error { margin: 0; padding: 12px 13px; border: 1px solid rgba(228, 168, 62, .38); border-radius: 10px; color: #f6e3bd; background: rgba(228, 168, 62, .12); font-size: 12.5px; line-height: 1.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wes-signin[open] { animation: none; }
+  .wes-signin__loading i { animation: none; }
+}

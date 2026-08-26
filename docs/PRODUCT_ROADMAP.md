@@ -1,5 +1,9 @@
 # Product Roadmap
 
+> **Current product direction:** [PRODUCT_REPOSITIONING.md](PRODUCT_REPOSITIONING.md) defines Wesify
+> as an adaptive business operating suite. This roadmap should be read through that decision: the
+> generated Command Center is now the shell of a connected suite, not the final category.
+
 ## Artifact Inventory
 
 | Artifact | Status | Canonical implementation |
@@ -10,14 +14,14 @@
 | Capability catalog and dependencies | Implemented | `src/engine/capabilityCatalog.ts`, `src/engine/businessGraph.ts` |
 | Process library | Implemented as design-time patterns | `src/data/operatingKnowledge.ts` |
 | Generated data model | Implemented | `src/engine/workspaceSchema.ts` |
-| Event catalog | Implemented; runtime partial | `src/engine/eventArchitecture.ts`, `server/businessEvents.mjs` |
-| Automation library | Implemented; runtime partial | `src/engine/governanceArchitecture.ts`, `server/automations.mjs` |
+| Event catalog | Implemented with record and scheduled runtime triggers | `src/engine/eventArchitecture.ts`, `server/businessEvents.mjs`, `server/automationScheduler.mjs` |
+| Automation library | Implemented with graphs, approvals, schedules, traces and idempotent retry | `server/automations.mjs`, `server/workflowGraph.mjs`, `server/automationAgent.mjs` |
 | KPI library | Implemented | `src/engine/kpiEngine.ts` |
 | Knowledge-gap engine | Implemented | `src/engine/knowledgeEngine.ts` |
 | Agent catalog | Implemented as manifests; enforcement partial | `src/data/businessAgentCatalog.ts`, `src/engine/agentArchitecture.ts` |
-| Permission model | Workspace enforcement implemented; granular roles partial | `server/access.mjs`, `src/engine/workspaceAccess.ts` |
+| Permission model | Workspace enforcement, assigned roles and team administration implemented; record scope partial | `server/access.mjs`, `server/workspaceSetup.mjs` |
 | Audit and versioning | Partial | Event journal, build metadata and migration ledger |
-| Integration framework | Partial | Provider registry, connection routes and Stripe connector |
+| Integration framework | Implemented foundation | Encrypted credential store, Stripe import and Make/n8n/HTTPS webhooks |
 | Industry modules | Implemented selectively | `src/data/industryPacks.ts`, `src/data/operatingKnowledge.ts` |
 | Anonymous learning loop | Implemented | Industry aggregate store, receipts, thresholds and client application |
 | Technical architecture | Complete as implementation contract | `docs/IMPLEMENTATION_ARCHITECTURE.md` |
@@ -43,11 +47,19 @@ MVP is complete when every module traces to evidence or a platform invariant, th
 
 ## Next
 
+### Transactional operating spine hardening
+
+- Versioned state machines for quotes, orders, delivery, invoices, payments, purchasing and receipts.
+- Extend delivered line items, totals, source lineage and duplicate-safe conversion with document revisions and state-machine policies.
+- Extend delivered stock movements and balanced journals with reservation, costing, source posting and period close.
+- Role-scoped transition permissions, separation of duties and a unified approval queue.
+- Drilldown from operational and financial reports to the source transaction and audit event.
+
 ### Durable runtime
 
 - Transactional event outbox and replay-safe consumers.
 - Versioned workflow instances with owners, deadlines and exceptions.
-- Idempotent automation retries, dead-letter handling and recovery tools.
+- Extend delivered idempotent retries and execution recovery with a durable queue and dead-letter administration.
 - Unified human approval and exception queue.
 
 ### Governed intelligence

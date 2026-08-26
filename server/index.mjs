@@ -19,6 +19,9 @@ import { interviewAvailable } from './discoveryAgent.mjs'
 import { reasoningAvailable } from './reasoning.mjs'
 import { industryRoutes } from './routes/industries.mjs'
 import { buildRoutes, projectRoutes } from './routes/projects.mjs'
+import { automationRoutes } from './routes/automationRoutes.mjs'
+import { startAutomationScheduler } from './automationScheduler.mjs'
+import { workspaceSetupRoutes } from './routes/workspaceSetup.mjs'
 
 /**
  * Wesify's server: what listens, and in what order it asks.
@@ -39,7 +42,7 @@ const host = process.env.BO_HOST || '127.0.0.1'
 const distRoot = path.resolve(process.cwd(), 'dist')
 
 /** Asked in order. The first that does not return `false` has answered the request. */
-const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, connectionRoutes, buildRoutes, projectRoutes]
+const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, connectionRoutes, buildRoutes, automationRoutes, workspaceSetupRoutes, projectRoutes]
 
 async function api(request, response, url) {
   /**
@@ -177,6 +180,7 @@ export const server = createServer(handleRequest)
  * what lets the account rules be tested against the real routes rather than against a copy of them.
  */
 const startedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+let stopAutomationScheduler = () => {}
 
 /**
  * Schema first, then requests.
@@ -205,7 +209,11 @@ if (startedDirectly) {
   if (databaseAvailable() && !clerkConfigured()) console.warn('Wesify has a database but no sign-in configured (CLERK_SECRET_KEY), so nobody can sign in and no workspace can belong to anybody.')
   if (!monitoringAvailable()) console.warn('Wesify has no error monitoring configured (SENTRY_DSN), so failures are only written to this log. Nothing will tell you when Wesify breaks.')
   if (databaseAvailable() && !billingAvailable()) console.warn('Wesify has no billing configured (STRIPE_SECRET_KEY and BO_STRIPE_PRICE_PRO), so every account stays on the free plan and nobody can pay.')
+  if (process.env.BO_AUTOMATION_SCHEDULER !== 'off') stopAutomationScheduler = startAutomationScheduler()
   server.listen(port, host, () => console.log(`Wesify project service listening on ${host}:${port}${databaseAvailable() && clerkConfigured() ? ' with accounts' : ` without accounts (no ${databaseAvailable() ? 'CLERK_SECRET_KEY' : 'DATABASE_URL'})`}`))
 }
 
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  stopAutomationScheduler()
+  server.close(() => process.exit(0))
+})

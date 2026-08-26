@@ -1,7 +1,10 @@
 import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
-import { ArrowUp } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { ArrowUp, Mic, Plus } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { enrichBriefWithTools } from '../engine/toolSelection'
+import { ToolConnectionsDialog } from './ToolConnections'
+import './PromptSurface.css'
 
 gsap.registerPlugin(useGSAP)
 
@@ -20,15 +23,67 @@ const exampleBriefs = [
   'We sell B2B SaaS subscriptions with a sales pipeline and customer support.',
 ]
 
-export function CompanyPrompt({ initialValue = '', onSubmit, testId }: {
+type BrowserSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start: () => void
+  stop: () => void
+  abort: () => void
+  onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition
+
+function speechRecognitionConstructor() {
+  const speechWindow = window as Window & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor
+  }
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
+}
+
+export function CompanyPrompt({ initialValue = '', onSubmit, testId, submitTestId = 'start-building', selectedTools, onToolsChange, toolsOpen, onToolsOpenChange }: {
   initialValue?: string
   onSubmit: (brief: string) => void
   testId: string
+  /** Named separately so two pages carrying the same box stay tellable apart in a browser suite. */
+  submitTestId?: string
+  selectedTools: string[]
+  onToolsChange: (providerIds: string[]) => void
+  /**
+   * The connections dialog, where the page has its own way of opening it.
+   *
+   * The box brings the dialog with it, because the `+` inside the box has to open something. A page
+   * with a second entrance to the same dialog — the dashboard has two, in its sidebar and its mobile
+   * header — must not bring a second dialog along with them: there would be two of the same modal in
+   * the document, and whichever one a click reached would be a coin toss. So the page can hold the
+   * open state instead, and there is still exactly one dialog.
+   */
+  toolsOpen?: boolean
+  onToolsOpenChange?: (open: boolean) => void
 }) {
   const [brief, setBrief] = useState(initialValue)
   const [focused, setFocused] = useState(false)
+  const [listening, setListening] = useState(false)
+  const [ownToolsOpen, setOwnToolsOpen] = useState(false)
+  const dialogOpen = toolsOpen ?? ownToolsOpen
+  const openTools = (open: boolean) => (onToolsOpenChange ?? setOwnToolsOpen)(open)
   const promptRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const exampleTextRef = useRef<HTMLSpanElement>(null)
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${textarea.scrollHeight}px`
+  }, [brief])
+
+  useEffect(() => () => recognitionRef.current?.abort(), [])
 
   useGSAP(() => {
     const target = exampleTextRef.current
@@ -59,25 +114,93 @@ export function CompanyPrompt({ initialValue = '', onSubmit, testId }: {
 
   const submit = () => {
     const value = brief.trim()
-    if (value) onSubmit(value)
+    if (!value) return
+    onSubmit(enrichBriefWithTools(value, selectedTools))
   }
+
+  const toggleVoiceInput = () => {
+    if (recognitionRef.current && listening) {
+      recognitionRef.current.stop()
+      return
+    }
+
+    const Recognition = speechRecognitionConstructor()
+    if (!Recognition) return
+    const recognition = new Recognition()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = document.documentElement.lang || navigator.language || 'en'
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results)
+        .slice(event.resultIndex)
+        .map(result => result[0]?.transcript ?? '')
+        .join(' ')
+        .trim()
+      if (transcript) setBrief(current => `${current}${current && !current.endsWith(' ') ? ' ' : ''}${transcript}`)
+    }
+    recognition.onend = () => {
+      recognitionRef.current = null
+      setListening(false)
+    }
+    recognition.onerror = recognition.onend
+    recognitionRef.current = recognition
+    setListening(true)
+    recognition.start()
+  }
+
+  const voiceInputAvailable = typeof window !== 'undefined' && Boolean(speechRecognitionConstructor())
 
   return <>
     <div className="bo-prompt" ref={promptRef}>
-      <div className={`bo-prompt__example${brief || focused ? ' hidden' : ''}`} aria-hidden="true"><span ref={exampleTextRef}/><i/></div>
-      <textarea
-        value={brief}
-        onChange={event => setBrief(event.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit() } }}
-        placeholder={focused ? 'Describe your business…' : ''}
-        aria-label="Describe your business"
-        rows={3}
-        data-testid={testId}
-      />
-      <button onClick={submit} disabled={!brief.trim()} aria-label="Start building" data-testid="start-building"><ArrowUp size={20}/></button>
+      <div className="bo-prompt__input">
+        <div className={`bo-prompt__example${brief || focused ? ' hidden' : ''}`} aria-hidden="true"><span ref={exampleTextRef}/><i/></div>
+        <textarea
+          ref={textareaRef}
+          value={brief}
+          onChange={event => setBrief(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit() } }}
+          placeholder={focused ? 'Describe your business…' : ''}
+          aria-label="Describe your business"
+          rows={1}
+          data-testid={testId}
+        />
+      </div>
+      <div className="bo-prompt__footer">
+        <button type="button" className="bo-prompt__add-tool" onClick={() => openTools(true)} aria-label="Connect tools" title="Connect tools" data-testid="prompt-connect-tools">
+          <Plus size={21}/>
+          {selectedTools.length > 0 && <span>{selectedTools.length}</span>}
+        </button>
+        <div className="bo-prompt__actions">
+          <button
+            type="button"
+            className={`bo-prompt__voice${listening ? ' is-listening' : ''}`}
+            onClick={toggleVoiceInput}
+            disabled={!voiceInputAvailable}
+            aria-label={listening ? 'Stop voice input' : 'Use voice input'}
+            title={voiceInputAvailable ? (listening ? 'Stop voice input' : 'Use voice input') : 'Voice input is not supported by this browser'}
+          >
+            <Mic size={20}/>
+          </button>
+          <button type="button" className="bo-prompt__submit" onClick={submit} disabled={!brief.trim()} aria-label="Start building" title="Start building" data-testid={submitTestId}><ArrowUp size={21}/></button>
+        </div>
+      </div>
     </div>
-    <div className="bo-prompt__guidance">Describe what you do, Wesify will build your workspace.</div>
+    {/**
+      * The dialog only, with no visible trigger of its own.
+      *
+      * Under the box there used to be a row naming CRM, ERP, Automations and KPIs, and a second
+      * button offering to connect tools. Neither was something to do: the row restated the sentence
+      * already printed above the prompt, and the button repeated the `+` inside the box a few pixels
+      * away. What is left below the prompt is nothing, which is the point — there is one thing to do
+      * on this page and it is type.
+      */}
+    <ToolConnectionsDialog
+      open={dialogOpen}
+      selected={selectedTools}
+      onClose={() => openTools(false)}
+      onSave={providerIds => { onToolsChange(providerIds); openTools(false) }}
+    />
   </>
 }

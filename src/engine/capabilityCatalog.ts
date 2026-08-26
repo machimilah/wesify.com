@@ -8,7 +8,7 @@ import { operationsCapabilities } from '../data/capabilities.operations'
 import { financeCapabilities } from '../data/capabilities.finance'
 import type { CapabilityKnowledge } from '../data/operatingKnowledge'
 import { capabilityKnowledgeFor } from './knowledgeEngine'
-import { saysSignal } from './shared'
+import { saysSignal, slug } from './shared'
 
 export type CatalogFieldType = 'text' | 'long-text' | 'number' | 'currency' | 'date' | 'boolean' | 'email' | 'phone' | 'select' | 'relation' | 'file'
 
@@ -111,7 +111,7 @@ const coreCapabilities: CapabilityDefinition[] = [
   capability({ id: 'finance.invoicing', label: 'Invoicing and receivables', module: 'finance', description: 'One-time invoices, due dates, reminders and payment status.', signals: ['invoice', 'billing', 'accounts receivable', 'charge customer'], dependencies: ['crm.contacts'], entities: [entity('invoices', 'Invoice', 'Invoices', 'number', [text('number', 'Invoice number', true), relation('customer', 'Client', 'customers'), select('status', 'Status', ['Draft', 'Sent', 'Part paid', 'Paid', 'Overdue', 'Void']), currency('amount', 'Total'), currency('balance', 'Balance'), date('dueDate', 'Due date')])], pages: [{ id: 'invoices', label: 'Invoices', entityId: 'invoices' }], metrics: [{ id: 'outstanding-invoices', label: 'Outstanding invoices', entityId: 'invoices', operation: 'sum', field: 'balance', format: 'currency', statusNotEquals: 'Paid' }], workflows: [{ id: 'invoice-overdue', name: 'Overdue invoice alert', entityId: 'invoices', event: 'updated', field: 'status', equals: 'Overdue', message: 'An invoice is overdue.' }] }),
   capability({ id: 'finance.payments', label: 'Payment collection', module: 'finance', description: 'Incoming payments, methods, allocation and refunds.', signals: ['collect payment', 'payment gateway', 'credit card', 'bank transfer', 'cash payment', 'refund'], dependencies: ['finance.invoicing'], entities: [entity('payments', 'Payment', 'Payments', 'reference', [text('reference', 'Payment reference', true), relation('invoice', 'Invoice', 'invoices'), currency('amount', 'Amount'), select('method', 'Method', ['Card', 'Bank transfer', 'Cash', 'Direct debit', 'Other']), select('status', 'Status', ['Pending', 'Completed', 'Failed', 'Refunded']), date('date', 'Date')])], pages: [{ id: 'payments', label: 'Payments', entityId: 'payments' }], metrics: [{ id: 'payments-received', label: 'Payments received', entityId: 'payments', operation: 'sum', field: 'amount', format: 'currency' }] }),
   capability({ id: 'finance.expenses', label: 'Expense and receipt tracking', module: 'finance', description: 'Operational spending, categories, receipts and approval.', signals: ['expense', 'receipt', 'business cost', 'spending'], dependencies: [], entities: [entity('expenses', 'Expense', 'Expenses', 'description', [text('description', 'Expense', true), currency('amount', 'Amount'), text('category', 'Category'), select('status', 'Status', ['Draft', 'Submitted', 'Approved', 'Paid', 'Rejected']), date('date', 'Date'), { id: 'receipt', label: 'Receipt', type: 'file' }])], pages: [{ id: 'expenses', label: 'Expenses', entityId: 'expenses' }], metrics: [{ id: 'expenses-total', label: 'Expenses', entityId: 'expenses', operation: 'sum', field: 'amount', format: 'currency' }] }),
-  capability({ id: 'accounting.ledger', label: 'Accounting and general ledger', module: 'accounting', description: 'Chart of accounts, journals, periods and financial statements.', signals: ['accounting', 'bookkeeping', 'general ledger', 'journal entry', 'balance sheet'], dependencies: ['finance.invoicing', 'finance.expenses'], entities: [entity('accounts', 'Account', 'Chart of accounts', 'name', [text('name', 'Account', true), text('code', 'Code'), select('type', 'Type', ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']), select('status', 'Status', ['Active', 'Archived'])]), entity('journal-entries', 'Journal entry', 'Journal entries', 'reference', [text('reference', 'Reference', true), date('date', 'Date'), text('account', 'Account'), currency('debit', 'Debit'), currency('credit', 'Credit'), long('memo', 'Memo')])], pages: [{ id: 'chart-of-accounts', label: 'Chart of accounts', entityId: 'accounts' }, { id: 'journal-entries', label: 'Journal entries', entityId: 'journal-entries' }] }),
+  capability({ id: 'accounting.ledger', label: 'Accounting and general ledger', module: 'accounting', description: 'Chart of accounts, journals, periods and financial statements.', signals: ['accounting', 'bookkeeping', 'general ledger', 'journal entry', 'balance sheet'], dependencies: ['finance.invoicing', 'finance.expenses'], entities: [entity('accounts', 'Account', 'Chart of accounts', 'name', [text('name', 'Account', true), text('code', 'Code'), select('type', 'Type', ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']), select('status', 'Status', ['Active', 'Archived'])]), entity('journal-entries', 'Journal entry', 'Journal entries', 'reference', [text('reference', 'Reference', true), date('date', 'Date'), text('account', 'Account'), currency('debit', 'Debit'), currency('credit', 'Credit'), select('status', 'Status', ['Draft', 'Posted']), long('memo', 'Memo')])], pages: [{ id: 'chart-of-accounts', label: 'Chart of accounts', entityId: 'accounts' }, { id: 'journal-entries', label: 'Journal entries', entityId: 'journal-entries' }] }),
   capability({ id: 'finance.budgets', label: 'Budgets and financial goals', module: 'finance', description: 'Monthly or yearly targets versus actuals.', signals: ['budget', 'financial goal', 'forecast', 'target'], dependencies: [], entities: [entity('budgets', 'Budget', 'Budgets', 'name', [text('name', 'Budget', true), text('category', 'Category'), currency('target', 'Target'), currency('actual', 'Actual'), date('startDate', 'Start date'), date('endDate', 'End date')])], pages: [{ id: 'budgets', label: 'Budgets', entityId: 'budgets' }] }),
   capability({ id: 'finance.tax', label: 'Sales tax administration', module: 'accounting', description: 'Tax rates, taxable sales and filing periods.', signals: ['sales tax', 'vat', 'gst', 'tax on sales'], dependencies: ['finance.invoicing'], entities: [entity('tax-periods', 'Tax period', 'Tax', 'name', [text('name', 'Period', true), date('startDate', 'Start date'), date('endDate', 'End date'), currency('taxCollected', 'Tax collected'), select('status', 'Status', ['Open', 'Ready to file', 'Filed'])])], pages: [{ id: 'tax', label: 'Tax', entityId: 'tax-periods' }] }),
 
@@ -213,6 +213,16 @@ function explicitlyExcluded(text: string) {
 export interface CapabilityPlan {
   pack: IndustryCapabilityPack | null
   selected: CapabilityDefinition[]
+  /**
+   * Capabilities nobody asked for, present only because something that was asked for depends on
+   * them.
+   *
+   * Kept apart from the rest because they are not the same kind of thing. A capability somebody
+   * chose earns a page in the workspace; one that arrived because a task record happens to have a
+   * project field on it has earned a field, not a section in the sidebar. The compiler uses this to
+   * tell the two apart, and drops the supporting ones that end up carrying nothing.
+   */
+  supporting: string[]
   excluded: string[]
   reasons: Record<string, string>
   research: BusinessResearch
@@ -230,14 +240,56 @@ export function planCapabilities(state: BusinessState, architecture: Architectur
   const taxonomyPack = packMatch?.score ? null : industryCapabilityPacks.find(item => item.id === research.archetype?.id)
   const pack = packMatch?.score ? packMatch.pack : taxonomyPack ?? null
   for (const id of architecture.capabilityIds ?? []) if (capabilityById.has(id)) { selected.add(id); reasons[id] = 'Selected by Wesify architecture' }
-  for (const decision of research.include) if (capabilityById.has(decision.capabilityId) && !explicitExcluded.has(decision.capabilityId)) { selected.add(decision.capabilityId); reasons[decision.capabilityId] ||= decision.reason }
-  if (pack) for (const id of pack.capabilities) if (!explicitExcluded.has(id)) { selected.add(id); reasons[id] ||= `${pack.label} operating base` }
-  for (const definition of capabilityCatalog) {
-    if (explicitExcluded.has(definition.id) || selected.has(definition.id)) continue
-    const signal = definition.signals.find(candidate => saysSignal(text, candidate))
-    if (signal) { selected.add(definition.id); reasons[definition.id] = `Business evidence: ${signal}` }
+
+  /**
+   * When the architect has chosen, nothing else gets to add to its list.
+   *
+   * Everything below used to run on top of the architecture rather than instead of it, and the union
+   * was the whole product's biggest lie. Somebody describing a way to keep track of their school
+   * work got Clients, Invoices, Payments, Courses, Enrollments, Documents and a team directory,
+   * because "education" matched an industry pack and the pack was added wholesale — a template
+   * wearing the interview's clothes. The architect had already read the interview and asked for one
+   * thing. Adding fourteen more was not extra intelligence, it was overruling the only intelligent
+   * step in the chain.
+   *
+   * So the pack, the keyword sweep over the whole catalog and the research inferences are what Wesify
+   * falls back on when nothing has been architected — the no-API-key path, and the preview that runs
+   * before the interview has finished. The moment there is a real architecture, they stand down.
+   * Exclusions are the exception: those only ever remove, so they always apply.
+   */
+  const architected = selected.size > 0
+
+  /**
+   * A page the architect asked for is a capability the architect asked for.
+   *
+   * It names pages in the company's own words and capabilities by id, and the two do not always
+   * agree — a factory architecture that listed Inventory, Purchasing and Shipping as pages but named
+   * only four capability ids used to be rescued by the industry pack adding the rest. With the pack
+   * standing down, the page list is the evidence, and it is better evidence than an industry label:
+   * the model wrote it about this company. Matched on the catalog's own page names, so it only ever
+   * resolves a request that was already made.
+   */
+  if (architected) {
+    const asked = new Set((architecture.pages ?? []).map(label => slug(label)).filter(Boolean))
+    if (asked.size) for (const definition of capabilityCatalog) {
+      if (selected.has(definition.id) || explicitExcluded.has(definition.id)) continue
+      if (definition.pages.some(page => asked.has(slug(page.label)))) { selected.add(definition.id); reasons[definition.id] = 'Named as a page by Wesify architecture' }
+    }
   }
-  if (!selected.size) ['crm.contacts', 'finance.invoicing', 'finance.expenses', 'documents.repository'].forEach(id => { selected.add(id); reasons[id] = 'Conservative general-business base' })
+
+  if (!architected) {
+    for (const decision of research.include) if (capabilityById.has(decision.capabilityId) && !explicitExcluded.has(decision.capabilityId)) { selected.add(decision.capabilityId); reasons[decision.capabilityId] ||= decision.reason }
+    if (pack) for (const id of pack.capabilities) if (!explicitExcluded.has(id)) { selected.add(id); reasons[id] ||= `${pack.label} operating base` }
+    for (const definition of capabilityCatalog) {
+      if (explicitExcluded.has(definition.id) || selected.has(definition.id)) continue
+      const signal = definition.signals.find(candidate => saysSignal(text, candidate))
+      if (signal) { selected.add(definition.id); reasons[definition.id] = `Business evidence: ${signal}` }
+    }
+    if (!selected.size) ['crm.contacts', 'finance.invoicing', 'finance.expenses', 'documents.repository'].forEach(id => { selected.add(id); reasons[id] = 'Conservative general-business base' })
+  }
+
+  /** What was actually asked for, before anything is dragged in behind it. */
+  const chosen = new Set(selected)
   let changed = true
   while (changed) {
     changed = false
@@ -251,7 +303,14 @@ export function planCapabilities(state: BusinessState, architecture: Architectur
     pruned = false
     for (const id of [...selected]) if ((capabilityById.get(id)?.dependencies ?? []).some(dependency => explicitExcluded.has(dependency))) { selected.delete(id); pruned = true }
   }
-  return { pack, selected: [...selected].map(id => capabilityById.get(id)).filter(Boolean) as CapabilityDefinition[], excluded: [...explicitExcluded], reasons, research }
+  return {
+    pack,
+    selected: [...selected].map(id => capabilityById.get(id)).filter(Boolean) as CapabilityDefinition[],
+    supporting: [...selected].filter(id => !chosen.has(id)),
+    excluded: [...explicitExcluded],
+    reasons,
+    research,
+  }
 }
 
 export function capabilityCatalogPrompt() {

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -254,6 +254,27 @@ export async function rollbackProject(workspaceId, version) {
 
 export function projectPaths(workspaceId) {
   return { root: projectRoot(workspaceId), data: path.join(projectRoot(workspaceId), 'data.json') }
+}
+
+/**
+ * Erases everything a deleted workspace built: every version, its manifest history, and the JSON
+ * records file the infrastructure-free mode keeps beside them.
+ *
+ * `safeId` is what makes the path safe to remove — the workspace id arrives from a request, and
+ * `projectRoot` is the only place that decides where a workspace's files may live.
+ */
+export async function removeWorkspaceFiles(workspaceId) {
+  await rm(projectRoot(workspaceId), { recursive: true, force: true })
+}
+
+export async function listBuiltWorkspaceIds() {
+  const entries = await readdir(workspaceRoot(), { withFileTypes: true }).catch(error => {
+    if (error?.code === 'ENOENT') return []
+    throw error
+  })
+  const candidates = entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.')).map(entry => entry.name)
+  const built = await Promise.all(candidates.map(async workspaceId => await readJson(path.join(projectRoot(workspaceId), 'current.json')) ? workspaceId : ''))
+  return built.filter(Boolean)
 }
 
 export async function runtimePath(workspaceId, requestedVersion) {
