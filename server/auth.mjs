@@ -50,7 +50,7 @@ export async function membership(workspaceId, userId) {
 
 export async function workspacesFor(userId) {
   const result = await query(
-    'select w.id, w.name, w.logo, m.role, w.created_at from workspace_members m join workspaces w on w.id = m.workspace_id where m.user_id = $1 and w.deleted_at is null order by w.created_at desc',
+    'select w.id, w.name, w.logo, case when w.owner_id = $1 then \'owner\' else \'member\' end as role, w.created_at from workspaces w where w.owner_id = $1 and w.deleted_at is null order by w.created_at desc',
     [userId],
   )
   return result.rows

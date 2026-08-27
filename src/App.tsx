@@ -5,6 +5,7 @@ import { isWorkspaceConfiguration } from './engine/workspaceSchema'
 import type { Answers } from './types'
 import { readStorage } from './engine/shared'
 import { accountsEnabled, currentAccount, type Account, type AccountWorkspace } from './engine/authClient'
+import { rememberSignedInAccount } from './engine/workspaceSetup'
 import { AccountWatch, type SignedInAccount } from './components/AccountWatch'
 
 const Builder = lazy(() => import('./components/Builder').then(module => ({ default: module.Builder })))
@@ -86,6 +87,7 @@ export default function App() {
    */
   const landed = useRef(false)
   const handleAccount = useCallback((found: SignedInAccount | null, signedInWithClerk: boolean) => {
+    rememberSignedInAccount(found?.user.id ?? null)
     setAccount(found?.user ?? null)
     setWorkspaces(found?.workspaces ?? [])
     setUnreachable(signedInWithClerk && !found)

@@ -2,8 +2,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   applyWorkspaceSetup, briefWithSetup, emptyWorkspaceSetup, inviteRejection, logoRejection,
-  normalizeWorkspaceSetup, readWorkspaceSetup, saveWorkspaceSetup, suggestCompanyName,
-  withInvite, withInviteRole, withoutInvite, workspaceSetupKey,
+  normalizeWorkspaceSetup, readWorkspaceSetup, rememberSignedInAccount, saveWorkspaceSetup,
+  signedInAccountId, suggestCompanyName, withInvite, withInviteRole, withoutInvite,
+  workspaceSetupKey,
 } from './workspaceSetup'
 import type { WorkspaceConfiguration } from './workspaceSchema'
 
@@ -74,6 +75,19 @@ describe('what survives storage', () => {
     saveWorkspaceSetup('workspace-1', setup)
     expect(readWorkspaceSetup('workspace-1')).toEqual(setup)
     expect(localStorage.getItem(workspaceSetupKey('workspace-1'))).toContain('Northwind')
+  })
+
+  it('clears cached workspaces when the signed-in account changes', () => {
+    localStorage.setItem('bo-workspace-config', JSON.stringify({ id: 'workspace-1', profile: { companyName: 'Old company' } }))
+    localStorage.setItem('bo-workspace-config:workspace-1', JSON.stringify({ id: 'workspace-1', profile: { companyName: 'Old company' } }))
+    localStorage.setItem('bo-active-workspace-id', 'workspace-1')
+    rememberSignedInAccount('user-1')
+    rememberSignedInAccount('user-2')
+
+    expect(signedInAccountId()).toBe('user-2')
+    expect(localStorage.getItem('bo-workspace-config')).toBeNull()
+    expect(localStorage.getItem('bo-workspace-config:workspace-1')).toBeNull()
+    expect(localStorage.getItem('bo-active-workspace-id')).toBeNull()
   })
 
   it('is empty for a workspace that never went through onboarding', () => {

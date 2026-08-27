@@ -29,6 +29,31 @@ export interface WorkspaceSetup {
   invites: TeamInvite[]
 }
 
+const signedInAccountKey = 'bo-signed-in-account-id'
+
+export function signedInAccountId() {
+  return localStorage.getItem(signedInAccountKey) ?? ''
+}
+
+export function rememberSignedInAccount(userId: string | null) {
+  const id = String(userId ?? '').trim()
+  const current = signedInAccountId()
+  if (id && current !== id) {
+    for (const key of Object.keys(localStorage)) {
+      if (key === 'bo-workspace-config' || key.startsWith('bo-workspace-config:') || key === 'bo-active-workspace-id' || key === 'bo-workspace-id' || key === 'bo-workspace-records' || key === 'bo-records' || key === 'bo-actions' || key === 'bo-role' || key === 'bo-ai-history') localStorage.removeItem(key)
+    }
+    localStorage.setItem(signedInAccountKey, id)
+    return
+  }
+  if (!id) {
+    for (const key of Object.keys(localStorage)) {
+      if (key === 'bo-workspace-config' || key.startsWith('bo-workspace-config:') || key === 'bo-active-workspace-id' || key === 'bo-workspace-id' || key === 'bo-workspace-records' || key === 'bo-records' || key === 'bo-actions' || key === 'bo-role' || key === 'bo-ai-history' || key === signedInAccountKey) localStorage.removeItem(key)
+    }
+    return
+  }
+  localStorage.setItem(signedInAccountKey, id)
+}
+
 /** What an invited colleague can be. `owner` is missing on purpose: it comes from building, not from a list. */
 export const teamRoles: Array<{ id: TeamRole; label: string; detail: string }> = [
   { id: 'admin', label: 'Admin', detail: 'Can change the workspace and invite people' },

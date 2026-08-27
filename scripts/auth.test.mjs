@@ -52,6 +52,12 @@ await claimWorkspace('ws-1', user.id)
 assert.equal((await workspacesFor(user.id)).length, 1)
 assert.equal((await workspacesFor(stranger.id)).length, 0)
 
+// The dashboard shows only workspaces this account created, not every workspace it was invited to.
+await claimWorkspace('ws-shared', user.id, 'Shared workspace')
+await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', ['ws-shared', stranger.id, 'employee'])
+assert.equal((await workspacesFor(user.id)).some(row => row.id === 'ws-shared'), true, 'an owner must still see the workspace they created')
+assert.equal((await workspacesFor(stranger.id)).some(row => row.id === 'ws-shared'), false, 'a collaborator must not see someone else’s workspace in the dashboard list')
+
 // 4. Deleting a person takes their workspaces with them.
 await claimWorkspace('ws-2', stranger.id)
 await query('delete from users where id = $1', [stranger.id])
