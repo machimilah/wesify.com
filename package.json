@@ -49,6 +49,7 @@
     "@gsap/react": "^2.1.2",
     "@mlc-ai/web-llm": "^0.2.84",
     "@types/three": "^0.185.4",
+    "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "latest",
     "@xyflow/react": "^12.11.5",
     "gsap": "^3.15.0",
