@@ -165,40 +165,22 @@
 .bo-control-detail article > div svg { grid-row: 1 / 3; color: var(--text-3); }
 .bo-control-detail article > div strong { color: var(--text); font-size: 10px; }
 .bo-control-detail article > div span { color: var(--text-3); font-size: 8px; }
-.bo-approval-queue, .bo-team-control { margin-top: 22px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.bo-approval-queue > header, .bo-team-control > header { min-height: 64px; padding: 12px 16px; display: flex; align-items: end; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
-.bo-approval-queue header small, .bo-team-control header small { color: var(--text-3); font-size: 9px; font-weight: 800; }
-.bo-approval-queue header h2, .bo-team-control header h2 { margin: 4px 0 0; font-size: 15px; letter-spacing: 0; }
-.bo-approval-queue header > span, .bo-team-control header > span { color: var(--text-3); font-size: 11px; }
+.bo-approval-queue { margin-top: 22px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.bo-approval-queue > header { min-height: 64px; padding: 12px 16px; display: flex; align-items: end; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
+.bo-approval-queue header small { color: var(--text-3); font-size: 9px; font-weight: 800; }
+.bo-approval-queue header h2 { margin: 4px 0 0; font-size: 15px; letter-spacing: 0; }
+.bo-approval-queue header > span { color: var(--text-3); font-size: 11px; }
 .bo-approval-queue > div { padding: 0 14px; }
 .bo-approval-queue article { min-height: 62px; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
 .bo-approval-queue article:last-child { border-bottom: 0; }
 .bo-approval-queue article > svg { color: var(--warning); }
 .bo-approval-queue article > span { min-width: 0; display: grid; gap: 3px; }
-.bo-approval-queue article strong, .bo-team-list strong { overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.bo-approval-queue article small, .bo-team-list small { overflow: hidden; color: var(--text-3); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.bo-approval-queue article strong { overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bo-approval-queue article small { overflow: hidden; color: var(--text-3); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .bo-approval-queue article button { height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-2); background: var(--surface); font-size: 10px; font-weight: 700; }
 .bo-approval-queue article button.primary { border-color: var(--solid-fill); color: white; background: var(--solid-fill); }
 .bo-approval-queue article em { color: var(--text-3); font-size: 10px; font-style: normal; }
-.bo-approval-queue > p, .bo-team-control > p { margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--text-2); background: var(--surface-2); font-size: 11px; }
-.bo-team-control > form { min-height: 58px; padding: 9px 14px; display: grid; grid-template-columns: minmax(220px, 1fr) 140px auto; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
-.bo-team-control form label { height: 38px; padding: 0 10px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--text-3); }
-.bo-team-control form input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--text); background: transparent; font: inherit; font-size: 12px; }
-.bo-team-control form select, .bo-team-list select { height: 38px; padding: 0 28px 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--text-2); background: var(--surface); font-size: 11px; }
-.bo-team-control form > button { height: 38px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 7px; color: white; background: var(--solid-fill); font-size: 11px; font-weight: 700; }
-.bo-team-list { padding: 0 14px; }
-.bo-team-list article { min-height: 58px; display: grid; grid-template-columns: 28px minmax(0, 1fr) 138px 32px; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); }
-.bo-team-list article:last-child { border-bottom: 0; }
-.bo-team-list article > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--text-2); background: var(--surface-hover); }
-.bo-team-list article > div { min-width: 0; display: grid; gap: 3px; }
-.bo-team-list article > button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; color: var(--text-3); background: transparent; }
-.bo-team-list article > button:hover { color: var(--danger); background: var(--danger-soft); }
-.bo-team-list article > em { color: var(--text-2); font-size: 11px; font-style: normal; text-align: right; }
-.bo-team-list article.pending > span { color: var(--warning); background: var(--warning-soft); }
-.bo-team-unavailable { min-height: 72px; padding: 14px 16px; display: flex; align-items: center; gap: 10px; color: var(--text-3); }
-.bo-team-unavailable > span { display: grid; gap: 4px; }
-.bo-team-unavailable strong { color: var(--text-2); font-size: 11px; }
-.bo-team-unavailable small { font-size: 10px; }
+.bo-approval-queue > p { margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--text-2); background: var(--surface-2); font-size: 11px; }
 
 .bo-record-transitions { padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface-2); }
 .bo-record-transitions > div { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 7px; }
@@ -215,13 +197,9 @@
   .bo-workspace-section-head, .bo-operating-map > header, .bo-permission-matrix > header { align-items: start; flex-direction: column; gap: 7px; }
   .bo-control-summary, .bo-control-detail { grid-template-columns: 1fr; }
   .bo-operating-map article button { width: 120px; min-width: 120px; }
-  .bo-approval-queue > header, .bo-team-control > header { align-items: flex-start; flex-direction: column; }
+  .bo-approval-queue > header { align-items: flex-start; flex-direction: column; }
   .bo-approval-queue article { padding: 10px 0; grid-template-columns: 24px minmax(0, 1fr); }
   .bo-approval-queue article button, .bo-approval-queue article em { grid-column: 2; }
-  .bo-team-control > form { grid-template-columns: 1fr; }
-  .bo-team-list article { padding: 10px 0; grid-template-columns: 28px minmax(0, 1fr) 32px; }
-  .bo-team-list article select, .bo-team-list article > em { grid-column: 2; width: 100%; text-align: left; }
-  .bo-team-list article > button, .bo-team-list article > i { grid-column: 3; grid-row: 1 / 3; }
 }
 .bo-setup-banner { padding: 0 22px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-strong); background: linear-gradient(90deg, var(--bg-alt), var(--surface)); }
 .bo-setup-banner > span { width: 26px; height: 26px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 8px; color: white; background: var(--accent); }

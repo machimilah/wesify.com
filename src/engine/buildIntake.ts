@@ -1,23 +1,23 @@
-import { isTeamEmail, readWorkspaceSetup, saveWorkspaceSetup, type TeamInvite, type WorkspaceSetup } from './workspaceSetup'
+import { readWorkspaceSetup, saveWorkspaceSetup, type WorkspaceSetup } from './workspaceSetup'
 
 /**
- * The three things Wesify has to be told, asked inside the build rather than in front of it.
+ * The two things Wesify has to be told, asked inside the build rather than in front of it.
  *
- * They used to be a dialog: three steps, a progress rail and a "Start building" button, standing
- * between a description somebody had just typed and the thing they typed it for. It asked for a
- * name, a logo and some colleagues before Wesify had said a single word back — paperwork in the way of
- * the product, which is the thing Wesify exists to abolish.
+ * They used to be a dialog: steps, a progress rail and a "Start building" button, standing between a
+ * description somebody had just typed and the thing they typed it for. It asked for a name and a
+ * logo before Wesify had said a single word back — paperwork in the way of the product, which is the
+ * thing Wesify exists to abolish.
  *
  * So they are questions now, asked by the same assistant that asks everything else, answered in the
  * same box, and they read as the opening of the interview instead of a form in front of it. Only the
- * wording is scripted: a name, a logo and a team cannot be inferred from a description, and a model
- * inventing a company's name is worse than asking for it.
+ * wording is scripted: a name and a logo cannot be inferred from a description, and a model inventing
+ * a company's name is worse than asking for it.
  *
  * This module is the part with no screen in it — what has been asked, what came back, and what that
  * means for the workspace's setup — so the rules can be read, and tested, without a browser.
  */
 
-export type IntakeStepId = 'name' | 'logo' | 'team'
+export type IntakeStepId = 'name' | 'logo'
 export type IntakeStage = IntakeStepId | 'done'
 
 export interface IntakeTurn {
@@ -31,11 +31,11 @@ export interface BuildIntake {
   turns: IntakeTurn[]
   setup: WorkspaceSetup
   /**
-   * Whether the answers have been acted on — published, invited, folded into the description.
+   * Whether the answers have been acted on — published, folded into the description.
    *
    * Separate from `stage` because reaching the last question and doing something about it are two
-   * different moments, and only the second must never happen twice: a reload that re-sent everybody
-   * their invitation would be this browser's fault, not the operator's.
+   * different moments, and only the second must never happen twice: a reload that published the
+   * workspace's identity a second time would be this browser's fault, not the operator's.
    */
   settled?: boolean
 }
@@ -44,17 +44,16 @@ export interface BuildIntake {
 export const intakeQuestions: Record<IntakeStepId, string> = {
   name: 'How should we name this workspace?',
   logo: 'Should we add a logo now, or skip this step?',
-  team: 'Should we add any team members?',
 }
 
-const order: IntakeStepId[] = ['name', 'logo', 'team']
+const order: IntakeStepId[] = ['name', 'logo']
 
 const intakeKey = (workspaceId: string) => `bo-workspace-intake:${workspaceId}`
 
 const turn = (role: IntakeTurn['role'], text: string): IntakeTurn => ({ id: crypto.randomUUID(), role, text })
 
 /**
- * Every way of saying no, because all three questions can be answered with one.
+ * Every way of saying no, because both questions can be answered with one.
  *
  * A name is the only answer Wesify cannot work out for itself, and even that it will infer from the
  * description rather than refuse to continue. Nobody should have to type a company logo to get past
@@ -62,19 +61,6 @@ const turn = (role: IntakeTurn['role'], text: string): IntakeTurn => ({ id: cryp
  */
 export function saysSkip(text: string) {
   return /^(no|nope|none|skip|skip it|not now|later|no thanks|no thank you|nah)\b[.!]*$/i.test(text.trim())
-}
-
-/** The addresses in a reply, in the order they were written. */
-export function readInvites(text: string): { invites: TeamInvite[]; rejected: string[] } {
-  const candidates = text.split(/[\s,;]+/).map(value => value.trim().replace(/[.,;]$/, '')).filter(Boolean)
-  const invites: TeamInvite[] = []
-  const rejected: string[] = []
-  for (const candidate of candidates) {
-    const address = candidate.toLowerCase()
-    if (!isTeamEmail(address)) rejected.push(candidate)
-    else if (!invites.some(invite => invite.email === address)) invites.push({ email: address, role: 'employee' })
-  }
-  return { invites, rejected }
 }
 
 export function startingIntake(workspaceId: string): BuildIntake {
@@ -123,9 +109,9 @@ function advanced(intake: BuildIntake, setup: WorkspaceSetup, reply: string): Bu
 /**
  * One answer, applied.
  *
- * `problem` is what to say back when an answer cannot be used — a reply that is not an address where
- * addresses were asked for. The intake does not move on in that case, because the question has not
- * actually been answered, and a step silently skipped is a colleague silently not invited.
+ * `problem` is what to say back when an answer cannot be used — typing where the logo question needs
+ * a picked file. The intake does not move on in that case, because the question has not actually
+ * been answered.
  */
 export function answerIntake(intake: BuildIntake, text: string): { intake: BuildIntake; problem: string } {
   const answer = text.trim()
@@ -136,18 +122,10 @@ export function answerIntake(intake: BuildIntake, text: string): { intake: Build
     return { intake: advanced(intake, { ...intake.setup, name: skipping ? '' : answer.slice(0, 120) }, answer), problem: '' }
   }
 
-  if (intake.stage === 'logo') {
-    // The only answer typing can give this question is no. A logo arrives through the button beside
-    // it, and saying so is more use than accepting "yes" and moving on without one.
-    if (skipping) return { intake: advanced(intake, intake.setup, answer), problem: '' }
-    return { intake, problem: 'Pick the image with the button below, or say skip and Wesify will carry on without one.' }
-  }
-
-  if (skipping) return { intake: advanced(intake, { ...intake.setup, invites: [] }, answer), problem: '' }
-  const { invites, rejected } = readInvites(answer)
-  if (rejected.length) return { intake, problem: `${rejected.slice(0, 3).join(', ')} ${rejected.length === 1 ? 'is not an email address' : 'are not email addresses'}. Paste their addresses, or say skip.` }
-  if (!invites.length) return { intake, problem: 'Paste their email addresses, or say skip.' }
-  return { intake: advanced(intake, { ...intake.setup, invites: invites.slice(0, 25) }, answer), problem: '' }
+  // The only answer typing can give this question is no. A logo arrives through the button beside
+  // it, and saying so is more use than accepting "yes" and moving on without one.
+  if (skipping) return { intake: advanced(intake, intake.setup, answer), problem: '' }
+  return { intake, problem: 'Pick the image with the button below, or say skip and Wesify will carry on without one.' }
 }
 
 /** A picked logo, which answers the question it was picked for. */

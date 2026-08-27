@@ -20,7 +20,6 @@ import { recordIndustryObservations } from '../engine/industryClient'
 import { connectStripe, disconnectApp, loadConnectedApps, syncConnectedApp, syncSummary, type ConnectedApp } from '../engine/connectionClient'
 import { loadAutomationWorkspace, respondToAutomationApproval, type AutomationWorkspace } from '../engine/automationClient'
 import { currentAccount } from '../engine/authClient'
-import { loadWorkspaceTeam, type WorkspaceTeam } from '../engine/workspaceSetupClient'
 import { convertBusinessRecord, saveDocumentLines, type DocumentLine } from '../engine/documentClient'
 import { postJournal } from '../engine/accountingClient'
 import { humanize, readStorage } from '../engine/shared'
@@ -106,7 +105,6 @@ export function SchemaDashboard({ initialConfig, basePath = '', onExit }: { init
   const [activeId, setActiveId] = useState(() => routeId(normalizedInitial, basePath))
   const [role, setRole] = useState<WorkspaceRoleId>(() => readStorage(`${storagePrefix}:role`, 'owner'))
   const [serverRole, setServerRole] = useState<WorkspaceRoleId | null>(null)
-  const [workspaceTeam, setWorkspaceTeam] = useState<WorkspaceTeam | null>(null)
   const [formEntity, setFormEntity] = useState<EntityDefinition | null>(null)
   const [formDefaults, setFormDefaults] = useState<Record<string, string | number | boolean>>({})
   const [formTransition, setFormTransition] = useState<{ entityId: string; recordId: string } | null>(null)
@@ -169,11 +167,11 @@ export function SchemaDashboard({ initialConfig, basePath = '', onExit }: { init
       try {
         const project = await ensureGeneratedProject(config)
         if (cancelled) return project
-        const [generatedRuntime, generatedRecords, history, alerts, auditHistory, automations, team, account] = await Promise.all([loadGeneratedRuntime(project), loadGeneratedRecords(project.workspaceId), listGeneratedVersions(project.workspaceId), loadWorkspaceNotifications(project.workspaceId), loadWorkspaceAudit(project.workspaceId).catch(() => []), loadAutomationWorkspace(project.workspaceId).catch(() => emptyAutomationWorkspace), loadWorkspaceTeam(project.workspaceId), currentAccount()])
+        const [generatedRuntime, generatedRecords, history, alerts, auditHistory, automations, account] = await Promise.all([loadGeneratedRuntime(project), loadGeneratedRecords(project.workspaceId), listGeneratedVersions(project.workspaceId), loadWorkspaceNotifications(project.workspaceId), loadWorkspaceAudit(project.workspaceId).catch(() => []), loadAutomationWorkspace(project.workspaceId).catch(() => emptyAutomationWorkspace), currentAccount()])
         if (cancelled) return null
         const linkedSpecification = normalizeNavigation(project.specification)
         const assignedRole = account?.workspaces.find(item => item.id === project.workspaceId)?.role as WorkspaceRoleId | undefined
-        setManifest(project); setRuntime(generatedRuntime); setVersions(history); setNotifications(alerts); setAuditEvents(auditHistory); setAutomationWorkspace(automations); setWorkspaceTeam(team); setServerRole(assignedRole && linkedSpecification.roles.some(item => item.id === assignedRole) ? assignedRole : null); setConfig(linkedSpecification)
+        setManifest(project); setRuntime(generatedRuntime); setVersions(history); setNotifications(alerts); setAuditEvents(auditHistory); setAutomationWorkspace(automations); setServerRole(assignedRole && linkedSpecification.roles.some(item => item.id === assignedRole) ? assignedRole : null); setConfig(linkedSpecification)
         if (!recordsTouched.current) setRecords(generatedRecords)
         localStorage.setItem('bo-workspace-config', JSON.stringify(linkedSpecification))
         if (!recordsTouched.current) localStorage.setItem('bo-workspace-records', JSON.stringify(generatedRecords))
@@ -459,7 +457,7 @@ export function SchemaDashboard({ initialConfig, basePath = '', onExit }: { init
         {activeNavigation.kind === 'entity' && activeEntity && activeView && <EntityView entity={activeEntity} view={activeView} records={records[activeEntity.id] ?? []} workspaceRecords={records} entities={config.entities} connection={connectionFor(config.connections, activeEntity.capabilityId)} createLabel={activeEntity.id === 'journal-entries' ? 'Post journal' : undefined} onCreate={canCreate ? activeEntity.id === 'journal-entries' ? () => setJournalOpen(true) : () => openCreateForm(activeEntity) : undefined} onEdit={canEdit && activeEntity.id !== 'journal-entries' ? record => setEditingRecord({ entity: activeEntity, record }) : undefined} onUpdate={canEdit && activeEntity.id !== 'journal-entries' ? (record, values) => { void runAction({ type: 'update_record', entityId: activeEntity.id, recordId: record.id, values }) } : undefined}/>}
         {activeNavigation.kind === 'analytics' && <AnalyticsView config={config} records={records} role={activeRole}/>}
         {immersiveWorkspace && <WorkflowPage config={config} manifest={manifest} workspace={automationWorkspace} refresh={refreshAutomations}/>}
-        {activeNavigation.kind === 'control' && <ControlView config={config} records={records} automationApprovals={automationWorkspace.approvals} auditEvents={auditEvents} workspaceId={manifest?.workspaceId ?? ''} workspaceTeam={workspaceTeam} canManageTeam={activeRole === 'owner' || activeRole === 'admin'} onTeamChanged={setWorkspaceTeam} onApprovalDecision={async (approvalId, decision) => { if (!manifest) throw new Error('This workspace is not connected to the automation service.'); await respondToAutomationApproval(manifest.workspaceId, approvalId, decision); await refreshAutomations() }}/>}
+        {activeNavigation.kind === 'control' && <ControlView config={config} records={records} automationApprovals={automationWorkspace.approvals} auditEvents={auditEvents} onApprovalDecision={async (approvalId, decision) => { if (!manifest) throw new Error('This workspace is not connected to the automation service.'); await respondToAutomationApproval(manifest.workspaceId, approvalId, decision); await refreshAutomations() }}/>}
         {activeNavigation.kind === 'settings' && <SettingsView config={config} manifest={manifest} versions={versions} auditEvents={auditEvents} role={activeRole} roleLocked={Boolean(serverRole)} onRoleChange={next => { setRole(next); localStorage.setItem(`${storagePrefix}:role`, JSON.stringify(next)); if ((next === 'owner' || next === 'admin') && manifest) void loadWorkspaceAudit(manifest.workspaceId).then(setAuditEvents).catch(() => setAuditEvents([])) }} rollback={() => void rollback()}/>}
       </div>
     </div>

@@ -3,7 +3,6 @@ import {
   answerIntake,
   intakeQuestions,
   readBuildIntake,
-  readInvites,
   saveBuildIntake,
   saysSkip,
   startingIntake,
@@ -12,12 +11,12 @@ import {
 } from './buildIntake'
 
 /**
- * The three opening questions, without a browser.
+ * The two opening questions, without a browser.
  *
  * What matters here is not the wording but the rules underneath it: that a question nobody answered
- * properly is asked again rather than passed, that "no" gets past all three, and that the answers
- * survive a reload — a name typed once and asked for twice is the whole reason the dialog this
- * replaced was worth replacing.
+ * properly is asked again rather than passed, that "no" gets past both, and that the answers survive
+ * a reload — a name typed once and asked for twice is the whole reason the dialog this replaced was
+ * worth replacing.
  */
 
 const store = new Map<string, string>()
@@ -50,34 +49,21 @@ describe('the build intake', () => {
     expect(intake.turns.at(-1)?.text).toBe(intakeQuestions.name)
   })
 
-  it('asks the three questions in order, keeping what it is told', () => {
+  it('asks both questions in order, keeping what it is told', () => {
     const named = answerIntake(startingIntake('ws-1'), 'Northwind Studio')
     expect(named.intake.setup.name).toBe('Northwind Studio')
     expect(named.intake.stage).toBe('logo')
     expect(named.intake.turns.at(-1)?.text).toBe(intakeQuestions.logo)
 
     const skippedLogo = answerIntake(named.intake, 'skip')
-    expect(skippedLogo.intake.stage).toBe('team')
-    expect(skippedLogo.intake.turns.at(-1)?.text).toBe(intakeQuestions.team)
-
-    const invited = answerIntake(skippedLogo.intake, 'colleague@northwind.example')
-    expect(invited.intake.stage).toBe('done')
-    expect(invited.intake.setup.invites).toEqual([{ email: 'colleague@northwind.example', role: 'employee' }])
+    expect(skippedLogo.intake.stage).toBe('done')
   })
 
   it('lets every question be skipped, and asks none of them twice', () => {
-    const intake = answerAll('ws-1', ['no', 'skip', 'none'])
+    const intake = answerAll('ws-1', ['no', 'skip'])
     expect(intake.stage).toBe('done')
-    expect(intake.setup).toEqual({ name: '', logo: '', invites: [] })
-    expect(intake.turns.filter(turn => turn.role === 'bo')).toHaveLength(3)
-  })
-
-  it('says so rather than moving on when a reply is not an address', () => {
-    const asking = answerAll('ws-1', ['Northwind Studio', 'skip'])
-    const refused = answerIntake(asking, 'not-an-address')
-    expect(refused.problem).toContain('not an email address')
-    expect(refused.intake.stage).toBe('team')
-    expect(refused.intake.setup.invites).toEqual([])
+    expect(intake.setup).toEqual({ name: '', logo: '' })
+    expect(intake.turns.filter(turn => turn.role === 'bo')).toHaveLength(2)
   })
 
   it('answers the logo question with a file rather than with words', () => {
@@ -88,14 +74,8 @@ describe('the build intake', () => {
 
     const picked = withLogo(asking, 'data:image/webp;base64,AAA', 'mark.webp')
     expect(picked.setup.logo).toBe('data:image/webp;base64,AAA')
-    expect(picked.stage).toBe('team')
-    expect(picked.turns.at(-2)?.text).toBe('mark.webp')
-  })
-
-  it('reads several addresses out of one reply, and ignores a repeat', () => {
-    const { invites, rejected } = readInvites('ana@example.com, bo@example.com; ana@example.com')
-    expect(invites.map(invite => invite.email)).toEqual(['ana@example.com', 'bo@example.com'])
-    expect(rejected).toEqual([])
+    expect(picked.stage).toBe('done')
+    expect(picked.turns.at(-1)?.text).toBe('mark.webp')
   })
 
   it('comes back where it left off after a reload', () => {
@@ -108,7 +88,7 @@ describe('the build intake', () => {
   })
 
   it('remembers that finished answers were already acted on', () => {
-    const finished: BuildIntake = { ...answerAll('ws-1', ['no', 'no', 'no']), settled: true }
+    const finished: BuildIntake = { ...answerAll('ws-1', ['no', 'no']), settled: true }
     saveBuildIntake('ws-1', finished)
     expect(readBuildIntake('ws-1').settled).toBe(true)
   })

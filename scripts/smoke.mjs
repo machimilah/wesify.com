@@ -173,12 +173,12 @@ try {
   await page.getByTestId('start-building').click()
 
   /**
-   * The three things Wesify has to be told, asked inside the build.
+   * The two things Wesify has to be told, asked inside the build.
    *
    * They were a dialog in front of the build until they were questions inside it: a name Wesify cannot
-   * infer, a logo it cannot draw, colleagues it cannot guess. Checked here rather than skipped past,
-   * because they are the only thing anybody is asked to type about themselves rather than about
-   * their business — and because not one of the three is required.
+   * infer, a logo it cannot draw. Checked here rather than skipped past, because they are the only
+   * thing anybody is asked to type about themselves rather than about their business — and because
+   * neither of the two is required.
    */
   await page.waitForURL('**/build/*')
   await page.getByTestId('build-thread').waitFor({ timeout: 20_000 })
@@ -191,23 +191,12 @@ try {
   await page.getByTestId('intake-logo-pick').waitFor()
   await page.getByTestId('intake-skip').click()
 
-  // A reply that is not an address is said to be one rather than quietly dropped: a colleague
-  // silently not invited is worse than a question asked twice.
-  await page.getByText('Should we add any team members?', { exact: true }).waitFor()
-  await page.getByTestId('intake-skip').waitFor()
-  await page.getByTestId('discovery-answer').fill('not-an-address')
-  await page.getByTestId('answer-question').click()
-  await page.getByTestId('intake-problem').waitFor()
-  await page.getByTestId('discovery-answer').fill('colleague@northwind.example')
-  await page.getByTestId('answer-question').click()
-
   // What Wesify was told is kept with the workspace it was told about, and the interview reads it back.
   const onboarded = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(candidate => candidate.startsWith('bo-workspace-setup:'))
     return key ? JSON.parse(localStorage.getItem(key) ?? '{}') : null
   })
   if (onboarded?.name !== 'Northwind Studio') throw new Error(`The intake did not keep the name it was given: ${JSON.stringify(onboarded)}`)
-  if (onboarded?.invites?.[0]?.email !== 'colleague@northwind.example') throw new Error('The intake did not keep the colleague it was given.')
   await page.getByTestId('build-stages').waitFor()
   await page.getByText('How do clients normally engage the agency: one-off projects, monthly retainers, or a mix?', { exact: true }).waitFor()
   // Wesify asks and waits. Its reasoning is not printed into the thread for the operator to read past.
@@ -225,9 +214,9 @@ try {
   /**
    * The thread is in the order it was said in.
    *
-   * The three opening questions used to be drawn after the whole message list rather than after the
+   * The opening questions used to be drawn after the whole message list rather than after the
    * sentence that started the build, so they slid down the thread with every answer given since —
-   * "How should we name this workspace?" printed underneath the third question of an interview it
+   * "How should we name this workspace?" printed underneath the last question of an interview it
    * had already finished. Read as positions rather than presence, because both versions contained
    * all of these lines; only one of them had them in the right places.
    */
@@ -235,11 +224,11 @@ try {
   const at = text => threadOrder.findIndex(line => line.includes(text))
   const brief = at('We run a marketing agency')
   const naming = at('How should we name this workspace?')
-  const team = at('Should we add any team members?')
+  const logo = at('Should we add a logo now, or skip this step?')
   const firstInterview = at('How do clients normally engage the agency')
   if (brief !== 0) throw new Error(`The sentence that started the build is not the first thing in the thread (position ${brief}).`)
-  if (!(brief < naming && naming < team && team < firstInterview)) {
-    throw new Error(`The build thread is out of order: brief ${brief}, naming ${naming}, team ${team}, first interview question ${firstInterview}.`)
+  if (!(brief < naming && naming < logo && logo < firstInterview)) {
+    throw new Error(`The build thread is out of order: brief ${brief}, naming ${naming}, logo ${logo}, first interview question ${firstInterview}.`)
   }
 
   await page.getByTestId('open-dashboard').waitFor()

@@ -20,7 +20,7 @@ import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoveryS
 import { generateWorkspaceConfigurationFromDiscovery } from '../engine/workspaceSchema'
 import { applyWorkspaceSetup, briefWithSetup, readWorkspaceSetup } from '../engine/workspaceSetup'
 import { answerIntake, readBuildIntake, saveBuildIntake, withLogo, type BuildIntake } from '../engine/buildIntake'
-import { publishWorkspaceIdentity, sendInvites } from '../engine/workspaceSetupClient'
+import { publishWorkspaceIdentity } from '../engine/workspaceSetupClient'
 import { BuildIntakeControls } from './BuildIntake'
 import { Brand } from './Brand'
 
@@ -234,11 +234,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     const brief = session.messages.find(message => message.role === 'user')
     setIntake(saveBuildIntake(workspaceId, { ...intake, settled: true }))
     void publishWorkspaceIdentity(workspaceId, setup)
-    if (setup.invites.length) {
-      void sendInvites(workspaceId, setup.invites).then(result => {
-        if (result.failed.length) setNotice(`Wesify could not invite ${result.failed.map(failure => failure.email).join(', ')}.`)
-      })
-    }
     const described = briefWithSetup(brief?.content ?? '', setup)
     onAnswersChange({ ...initialAnswers, companyDescription: described, ...(setup.name.trim() ? { companyName: setup.name.trim() } : {}) })
     // The interview starts from what the operator has just added to their description, rather than

@@ -1,32 +1,27 @@
 import { readStorage } from './shared'
-import type { WorkspaceConfiguration, WorkspaceRoleId } from './workspaceSchema'
+import type { WorkspaceConfiguration } from './workspaceSchema'
 
 /**
- * The three things Wesify asks for before it starts building: a name, a logo, and who else works here.
+ * The two things Wesify asks for before it starts building: a name and a logo.
  *
  * Everything else about a Command Center is worked out from a description — that is the product, and
- * asking an operator to fill in a form about their own business would undo it. These three cannot be
- * worked out from anything. A company's name is not reliably in its description, nobody's logo is,
- * and no model can guess a colleague's email address. So they are asked once, plainly, in the moment
- * where the answers are cheap: before the interview rather than after the workspace exists.
+ * asking an operator to fill in a form about their own business would undo it. These two cannot be
+ * worked out from anything. A company's name is not reliably in its description, and nobody's logo
+ * is. So they are asked once, plainly, in the moment where the answers are cheap: before the
+ * interview rather than after the workspace exists.
  *
- * All three are optional bar the name, and the name is offered pre-filled from the description
- * wherever the description happened to say it. An onboarding step that cannot be skipped is a wall
- * in front of the thing somebody came here to see.
+ * Both are optional bar the name, and the name is offered pre-filled from the description wherever
+ * the description happened to say it. An onboarding step that cannot be skipped is a wall in front
+ * of the thing somebody came here to see.
+ *
+ * There is no third question about colleagues. A workspace has one owner and no other members, so
+ * there is nobody left here to invite.
  */
-
-export type TeamRole = Exclude<WorkspaceRoleId, 'owner'>
-
-export interface TeamInvite {
-  email: string
-  role: TeamRole
-}
 
 export interface WorkspaceSetup {
   name: string
   /** A data URL. Held rather than a link, so a workspace's logo cannot break when a host does. */
   logo: string
-  invites: TeamInvite[]
 }
 
 const signedInAccountKey = 'bo-signed-in-account-id'
@@ -54,17 +49,7 @@ export function rememberSignedInAccount(userId: string | null) {
   localStorage.setItem(signedInAccountKey, id)
 }
 
-/** What an invited colleague can be. `owner` is missing on purpose: it comes from building, not from a list. */
-export const teamRoles: Array<{ id: TeamRole; label: string; detail: string }> = [
-  { id: 'admin', label: 'Admin', detail: 'Can change the workspace and invite people' },
-  { id: 'manager', label: 'Manager', detail: 'Runs the day to day and approves work' },
-  { id: 'employee', label: 'Team member', detail: 'Works in the records they are given' },
-  { id: 'accountant', label: 'Accountant', detail: 'Sees the money, not the people' },
-]
-
-const teamRoleIds = new Set<string>(teamRoles.map(role => role.id))
-
-export const emptyWorkspaceSetup = (): WorkspaceSetup => ({ name: '', logo: '', invites: [] })
+export const emptyWorkspaceSetup = (): WorkspaceSetup => ({ name: '', logo: '' })
 
 export const workspaceSetupKey = (workspaceId: string) => `bo-workspace-setup:${workspaceId}`
 
@@ -85,10 +70,6 @@ export function logoRejection(file: { type: string; size: number }) {
   if (!logoImageTypes.includes(file.type)) return 'That file is not an image. PNG, JPG, WEBP or SVG.'
   if (file.size > maxLogoFileBytes) return 'That image is too large. Anything up to 8 MB.'
   return ''
-}
-
-export function isTeamEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim())
 }
 
 /**
@@ -115,15 +96,9 @@ export function suggestCompanyName(brief: string) {
 export function normalizeWorkspaceSetup(value: unknown): WorkspaceSetup {
   if (!value || typeof value !== 'object') return emptyWorkspaceSetup()
   const candidate = value as Partial<WorkspaceSetup>
-  const invites = Array.isArray(candidate.invites) ? candidate.invites : []
   return {
     name: typeof candidate.name === 'string' ? candidate.name.slice(0, 120) : '',
     logo: typeof candidate.logo === 'string' && candidate.logo.startsWith('data:image/') ? candidate.logo : '',
-    invites: invites
-      .filter((invite): invite is TeamInvite => Boolean(invite) && typeof invite === 'object' && typeof (invite as TeamInvite).email === 'string' && isTeamEmail((invite as TeamInvite).email))
-      .map(invite => ({ email: invite.email.trim().toLowerCase(), role: teamRoleIds.has(invite.role) ? invite.role : 'employee' }))
-      .filter((invite, index, all) => all.findIndex(other => other.email === invite.email) === index)
-      .slice(0, 25),
   }
 }
 
@@ -183,29 +158,6 @@ export function forgetWorkspaceLocally(workspaceId: string) {
   }
 }
 
-/** Why this address cannot be added, or '' when it can. Same shape, and same reason, as `logoRejection`. */
-export function inviteRejection(setup: WorkspaceSetup, email: string) {
-  const address = email.trim().toLowerCase()
-  if (!address) return 'Type an email address first.'
-  if (!isTeamEmail(address)) return 'That does not look like an email address.'
-  if (setup.invites.some(invite => invite.email === address)) return 'That person is already on the list.'
-  if (setup.invites.length >= 25) return 'Wesify invites up to 25 people at a time. The rest can be added from the workspace.'
-  return ''
-}
-
-export function withInvite(setup: WorkspaceSetup, email: string, role: TeamRole = 'employee'): WorkspaceSetup {
-  if (inviteRejection(setup, email)) return setup
-  return { ...setup, invites: [...setup.invites, { email: email.trim().toLowerCase(), role }] }
-}
-
-export function withoutInvite(setup: WorkspaceSetup, email: string): WorkspaceSetup {
-  return { ...setup, invites: setup.invites.filter(invite => invite.email !== email.trim().toLowerCase()) }
-}
-
-export function withInviteRole(setup: WorkspaceSetup, email: string, role: TeamRole): WorkspaceSetup {
-  return { ...setup, invites: setup.invites.map(invite => invite.email === email.trim().toLowerCase() ? { ...invite, role } : invite) }
-}
-
 /**
  * The description the interview actually receives.
  *
@@ -215,12 +167,10 @@ export function withInviteRole(setup: WorkspaceSetup, email: string, role: TeamR
  */
 export function briefWithSetup(brief: string, setup: WorkspaceSetup) {
   const value = String(brief ?? '').trim()
-  const additions: string[] = []
   const name = setup.name.trim()
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, character => `\\${character}`)
-  if (name && !new RegExp(`(^|\\W)${escaped}(\\W|$)`, 'i').test(value)) additions.push(`Our company is called ${name}.`)
-  if (setup.invites.length) additions.push(`${setup.invites.length + 1} of us will be working in this system.`)
-  return additions.length ? `${value}\n\n${additions.join(' ')}` : value
+  if (!name || new RegExp(`(^|\\W)${escaped}(\\W|$)`, 'i').test(value)) return value
+  return `${value}\n\nOur company is called ${name}.`
 }
 
 /**

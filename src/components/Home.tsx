@@ -117,6 +117,7 @@ export function Home({ initialValue = '', onSubmit, accounts = false, signedIn =
 
       <header className="wes-home__header">
         <Brand inverse/>
+        <ThemeToggle className="wes-home__theme-toggle"/>
       </header>
 
       <section className="wes-home__content" aria-labelledby="wes-home-title">

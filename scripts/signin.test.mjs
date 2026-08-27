@@ -12,19 +12,22 @@ import './noSpend.mjs'
  * Being signed in, from the browser.
  *
  * `accounts.test.mjs` proves the routes refuse a stranger. This proves the part a person actually
- * meets: that Wesify asks who they are before showing them anything, that being signed in survives a
- * reload, that losing the session puts them back at the gate, and — the point of the whole exercise —
- * that a second browser with nothing cached reaches the same workspace rather than a fresh empty Wesify.
+ * meets: that a signed-out visitor is offered a way in rather than the product itself, that being
+ * signed in survives a reload, that losing the session puts them back at the gate wherever they were,
+ * and — the point of the whole exercise — that a second browser with nothing cached reaches the same
+ * workspace rather than a fresh empty Wesify.
  *
- * What is deliberately not here any more is the sign-in form itself. Clerk draws it and Clerk checks
- * what is typed into it, against a hosted instance this suite has no business needing; testing it here
- * would be testing Clerk. What Wesify still owns is everything on either side of it, and that is what
- * follows.
+ * What is deliberately not here is the sign-in form itself. Clerk draws it and Clerk checks what is
+ * typed into it, against a hosted instance this suite has no business needing; testing it here would
+ * be testing Clerk. Wesify's own part of the deal is a single call — `window.Clerk.openSignUp(...)` —
+ * made at the right moments, and that is what is asserted: `window.Clerk` is stubbed with a spy rather
+ * than left absent, so a click on "Get started" (or the effect that fires when a signed-out visitor
+ * lands anywhere but the front page) can be proven to have asked Clerk to open, without a real Clerk
+ * instance ever being loaded over the network.
  *
- * Being signed in is stood in for with `window.__BO_SESSION_TOKEN__`, the seam the interface falls back
- * to when there is no Clerk instance in the page — which is the case here, because loading Clerk's
- * script over the network would make these suites depend on Clerk being up. The token it holds is the
- * stub the server verifies. See clerkStub.mjs.
+ * Being signed in is stood in for with `window.__BO_SESSION_TOKEN__`, the seam the interface falls
+ * back to when there is no Clerk instance in the page. The token it holds is the stub the server
+ * verifies. See clerkStub.mjs.
  */
 
 const apiPort = 8959
@@ -70,6 +73,18 @@ async function open({ signedIn = false } = {}) {
   if (signedIn) {
     await page.addInitScript(value => { window.__BO_SESSION_TOKEN__ = value }, sessionToken)
   }
+  /**
+   * Standing in for Clerk's own script, which this suite deliberately never loads.
+   *
+   * The app's whole side of "open the sign-up panel" is one call — `window.Clerk.openSignUp(...)` —
+   * made where the real SDK would already have attached itself to the page. Recording every call
+   * rather than replacing the function's effect with anything is what lets a test assert that call
+   * happened, with what arguments, at the moment it was supposed to and not before.
+   */
+  await page.addInitScript(() => {
+    window.__BO_CLERK_SIGNUP_CALLS__ = []
+    window.Clerk = { openSignUp: options => { window.__BO_CLERK_SIGNUP_CALLS__.push(options) } }
+  })
   // Installed before React starts so this records a one-frame landing-page flash as well as a page
   // that remains visible. Checking only the final URL cannot catch that regression.
   await page.addInitScript(() => {
@@ -114,32 +129,42 @@ async function open({ signedIn = false } = {}) {
 try {
   const stranger = await open()
 
-  // 1. The prompt is public. Submitting it preserves the sentence and asks who is building it.
-  await stranger.getByTestId('public-home').waitFor({ timeout: 20_000 })
-  await stranger.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  if (await stranger.getByTestId('signin-form').count()) throw new Error('The home page was hidden behind a sign-in screen.')
-  await stranger.getByTestId('company-brief').fill('We run a plumbing business and technicians visit customer homes.')
-  await stranger.getByTestId('start-building').click()
-  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
   /**
-   * A panel over the prompt rather than a page instead of it.
-   *
-   * Signing in used to be its own address, which meant somebody who had just described their company
-   * was navigated away from the sentence they were still thinking about. The sentence stays on screen
-   * behind the question now — and the dialog being modal is what makes the page under it unusable
-   * until the question is answered or dismissed.
+   * 1. A signed-out visitor is offered the pitch and one button, not the box that describes a
+   *    company — that box is what greets them the moment they are signed in, not before.
    */
-  if (!(await stranger.getByTestId('company-brief').count())) throw new Error('The public prompt was replaced rather than covered when Wesify asked who was building.')
-  if (!(await stranger.locator('dialog.wes-signin[open]').count())) throw new Error('Wesify asked for a sign-in somewhere other than a modal dialog.')
+  await stranger.getByTestId('public-home').waitFor({ timeout: 20_000 })
+  await stranger.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  if (await stranger.getByTestId('company-brief').count()) throw new Error('A signed-out visitor was shown the company prompt before signing up.')
 
-  // 2. The address that page lived at is gone, and answers with the prompt and the same panel.
+  // Clicking it is the whole of Wesify's own part of signing somebody up: one call asking Clerk to
+  // open its panel, made with nothing left for a click to have silently done nothing.
+  await stranger.getByTestId('get-started').click()
+  await stranger.waitForFunction(() => window.__BO_CLERK_SIGNUP_CALLS__.length > 0, undefined, { timeout: 20_000 })
+  const firstCall = await stranger.evaluate(() => window.__BO_CLERK_SIGNUP_CALLS__[0])
+  if (firstCall?.redirectUrl !== '/dashboard') throw new Error(`Getting started did not ask Clerk to land somewhere after sign-up: ${JSON.stringify(firstCall)}`)
+
+  /**
+   * 2. Two addresses Wesify no longer owns — /signin was its old sign-in page, /reset was for links
+   *    its own server used to mail — both answered the same way: back to the front page, with
+   *    Wesify's own panel already open over it rather than Clerk's, since neither of those old
+   *    addresses is a click Wesify can attribute to "get started".
+   */
   await stranger.goto(`http://127.0.0.1:${vitePort}/signin`, { waitUntil: 'networkidle' })
   await stranger.waitForFunction(() => window.location.pathname === '/', undefined, { timeout: 20_000 })
-  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  await stranger.locator('dialog.wes-signin[open]').waitFor({ timeout: 20_000 })
 
-  // 3. And the workspace itself stays gated however it is reached, not only through that button.
-  await stranger.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
-  await stranger.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  /**
+   * 3. A signed-out visitor who lands anywhere other than the front page — a bookmark, a shared
+   *    workspace link, a stale tab — is sent back to it and asked to sign in there, not shown
+   *    whatever they were trying to reach.
+   */
+  // A real navigation, so the init scripts run again and `__BO_CLERK_SIGNUP_CALLS__` starts empty —
+  // the call this waits for belongs to landing here signed out, not to the earlier click.
+  await stranger.goto(`http://127.0.0.1:${vitePort}/workspace/nonexistent/home`, { waitUntil: 'networkidle' })
+  await stranger.waitForFunction(() => window.location.pathname === '/', undefined, { timeout: 20_000 })
+  await stranger.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  await stranger.waitForFunction(() => window.__BO_CLERK_SIGNUP_CALLS__.length > 0, undefined, { timeout: 20_000 })
   if (await stranger.getByTestId('app-grid').count()) throw new Error('Wesify showed a workspace before anyone signed in.')
 
   // 4. Signed in, the account lands on its dashboard and can build a finished Command Center there.
@@ -168,7 +193,7 @@ try {
   // next line.
   await page.reload({ waitUntil: 'load' })
   await page.getByTestId('app-grid').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('signin-form').count()) throw new Error('Reloading signed the operator out.')
+  if (await page.getByTestId('get-started').count()) throw new Error('Reloading signed the operator out.')
 
   // 4b. A signed-in visit to `/` resolves to the project dashboard, where its workspace is one click away.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
@@ -232,22 +257,20 @@ try {
    */
   await page.addInitScript(() => { delete window.__BO_SESSION_TOKEN__ })
   await page.reload({ waitUntil: 'networkidle' })
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
+  await page.waitForFunction(() => window.location.pathname === '/', undefined, { timeout: 20_000 })
+  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  await page.waitForFunction(() => window.__BO_CLERK_SIGNUP_CALLS__.length > 0, undefined, { timeout: 20_000 })
   if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out reload of the workspace URL still showed the workspace.')
 
-  // The public prompt is visible again and its header offers the way back in.
+  // Landing on the front page directly, signed out, offers the same one way in.
   await page.goto(`http://127.0.0.1:${vitePort}/`, { waitUntil: 'networkidle' })
-  await page.getByTestId('company-brief').waitFor({ timeout: 20_000 })
-  await page.getByTestId('open-signin').waitFor({ timeout: 20_000 })
-  await page.getByTestId('open-signin').click()
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-
-  await page.goto(`http://127.0.0.1:${vitePort}/home`, { waitUntil: 'networkidle' })
-  await page.getByTestId('signin-form').waitFor({ timeout: 20_000 })
-  if (await page.getByTestId('app-grid').count()) throw new Error('A signed-out browser could still open the workspace.')
+  await page.getByTestId('get-started').waitFor({ timeout: 20_000 })
+  if (await page.getByTestId('company-brief').count()) throw new Error('A signed-out visitor was shown the company prompt after signing out.')
+  await page.getByTestId('get-started').click()
+  await page.waitForFunction(() => window.__BO_CLERK_SIGNUP_CALLS__.length > 0, undefined, { timeout: 20_000 })
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-  console.log('Sign-in test passed: a public prompt, protected build submission, a gated workspace, flash-free signed-in routing to /dashboard, dashboard creation of a finished Command Center, session persistence, project reopening from the dashboard in a second browser, tenant isolation, and sign-out returning to the public home page.')
+  console.log('Sign-in test passed: a signed-out visitor offered a way in rather than the product, Clerk asked to open at every one of those moments, a gated workspace, flash-free signed-in routing to /dashboard, dashboard creation of a finished Command Center, session persistence, project reopening from the dashboard in a second browser, tenant isolation, and losing a session returning to that same gate wherever it was lost.')
 } finally {
   await browser.close()
   vite.kill()

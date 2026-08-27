@@ -1,11 +1,10 @@
-import { AlertTriangle, ArrowRight, Check, Download, FileText, Mail, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, Download, FileText, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import type { BusinessRecord, WorkspaceRecords } from '../engine/workspaceActions'
 import type { MetricDefinition, WorkspaceConfiguration, WorkspaceRoleId } from '../engine/workspaceSchema'
 import type { WorkspaceAuditEvent } from '../engine/projectClient'
 import type { AutomationApproval } from '../engine/automationClient'
 import { humanize } from '../engine/shared'
-import { changeWorkspaceMemberRole, loadWorkspaceTeam, removeWorkspaceMember, revokeInvite, sendInvites, type WorkspaceTeam } from '../engine/workspaceSetupClient'
 
 function matchesFilter(record: BusinessRecord, metric: MetricDefinition) {
   if (!metric.filter) return true
@@ -136,15 +135,11 @@ export function AnalyticsView({ config, records, role }: {
   </>
 }
 
-export function ControlView({ config, records, automationApprovals, auditEvents, workspaceId, workspaceTeam, canManageTeam, onTeamChanged, onApprovalDecision }: {
+export function ControlView({ config, records, automationApprovals, auditEvents, onApprovalDecision }: {
   config: WorkspaceConfiguration
   records: WorkspaceRecords
   automationApprovals: AutomationApproval[]
   auditEvents: WorkspaceAuditEvent[]
-  workspaceId: string
-  workspaceTeam: WorkspaceTeam | null
-  canManageTeam: boolean
-  onTeamChanged: (team: WorkspaceTeam) => void
   onApprovalDecision: (approvalId: string, decision: 'approved' | 'rejected') => Promise<void>
 }) {
   const [deciding, setDeciding] = useState('')
@@ -198,7 +193,6 @@ export function ControlView({ config, records, automationApprovals, auditEvents,
       </div>
       {decisionMessage && <p>{decisionMessage}</p>}
     </section>}
-    <TeamControl workspaceId={workspaceId} team={workspaceTeam} canManage={canManageTeam} onChanged={onTeamChanged}/>
     <section className="bo-permission-matrix" data-testid="permission-matrix">
       <header><div><small>ACCESS MODEL</small><h2>Role permissions</h2></div><span>Effective workspace policy</span></header>
       <div className="bo-permission-matrix__scroll"><table><thead><tr><th>Role</th>
@@ -248,65 +242,3 @@ export function ControlView({ config, records, automationApprovals, auditEvents,
   </>
 }
 
-const managedRoles = [
-  { id: 'admin', label: 'Admin' },
-  { id: 'manager', label: 'Manager' },
-  { id: 'employee', label: 'Employee' },
-  { id: 'accountant', label: 'Accountant' },
-]
-
-function TeamControl({ workspaceId, team, canManage, onChanged }: { workspaceId: string; team: WorkspaceTeam | null; canManage: boolean; onChanged: (team: WorkspaceTeam) => void }) {
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('employee')
-  const [busy, setBusy] = useState('')
-  const [message, setMessage] = useState('')
-
-  const refresh = async () => {
-    const next = await loadWorkspaceTeam(workspaceId)
-    if (next) onChanged(next)
-  }
-  const invite = async () => {
-    if (!email.trim()) return
-    setBusy('invite'); setMessage('')
-    const result = await sendInvites(workspaceId, [{ email: email.trim(), role: role as 'admin' | 'manager' | 'employee' | 'accountant' }])
-    if (result.failed.length) setMessage(result.failed[0].message)
-    else { setEmail(''); setMessage('Invitation sent.'); await refresh() }
-    setBusy('')
-  }
-  const changeRole = async (userId: string, nextRole: string) => {
-    setBusy(userId); setMessage('')
-    try { await changeWorkspaceMemberRole(workspaceId, userId, nextRole); await refresh(); setMessage('Member role updated.') }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Wesify could not update that member.') }
-    finally { setBusy('') }
-  }
-  const remove = async (userId: string, label: string) => {
-    if (!window.confirm(`Remove ${label} from this workspace?`)) return
-    setBusy(userId); setMessage('')
-    try { await removeWorkspaceMember(workspaceId, userId); await refresh(); setMessage('Member removed.') }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Wesify could not remove that member.') }
-    finally { setBusy('') }
-  }
-  const revoke = async (address: string) => {
-    setBusy(address); setMessage('')
-    try { const ok = await revokeInvite(workspaceId, address); if (!ok) throw new Error('Wesify could not withdraw that invitation.'); await refresh(); setMessage('Invitation withdrawn.') }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Wesify could not withdraw that invitation.') }
-    finally { setBusy('') }
-  }
-
-  return <section className="bo-team-control" data-testid="team-control">
-    <header><div><small>WORKSPACE TEAM</small><h2>Members &amp; roles</h2></div><span>{team ? `${team.members.length} member${team.members.length === 1 ? '' : 's'}` : 'Account mode unavailable'}</span></header>
-    {canManage && team && <form onSubmit={event => { event.preventDefault(); void invite() }}>
-      <label><Mail size={15}/><input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="colleague@company.com" aria-label="Email address"/></label>
-      <select value={role} onChange={event => setRole(event.target.value)} aria-label="Workspace role">{managedRoles.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-      <button disabled={busy === 'invite'}><UserPlus size={15}/>{busy === 'invite' ? 'Inviting...' : 'Invite'}</button>
-    </form>}
-    {team ? <div className="bo-team-list">
-      {team.members.map(member => <article key={member.userId}><span><Users size={15}/></span><div><strong>{member.email || member.userId}</strong><small>Joined {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(member.joinedAt))}</small></div>
-        <select value={member.role} disabled={!canManage || member.role === 'owner' || busy === member.userId} onChange={event => void changeRole(member.userId, event.target.value)} aria-label={`Role for ${member.email || member.userId}`}><option value="owner">Owner</option>{managedRoles.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-        {canManage && member.role !== 'owner' ? <button type="button" onClick={() => void remove(member.userId, member.email || member.userId)} disabled={busy === member.userId} title="Remove member" aria-label={`Remove ${member.email || member.userId}`}><Trash2 size={14}/></button> : <i/>}
-      </article>)}
-      {team.invites.map(invite => <article key={invite.email} className="pending"><span><Mail size={15}/></span><div><strong>{invite.email}</strong><small>Invitation pending</small></div><em>{humanize(invite.role)}</em>{canManage ? <button type="button" onClick={() => void revoke(invite.email)} disabled={busy === invite.email} title="Withdraw invitation" aria-label={`Withdraw invitation for ${invite.email}`}><Trash2 size={14}/></button> : <i/>}</article>)}
-    </div> : <div className="bo-team-unavailable"><ShieldCheck size={17}/><span><strong>Team roles are enforced when accounts are configured.</strong><small>Local mode keeps this workspace on one device and does not pretend to send invitations.</small></span></div>}
-    {message && <p>{message}</p>}
-  </section>
-}
