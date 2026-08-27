@@ -12,6 +12,7 @@ import {
   type DiscoverySession,
 } from '../engine/businessDiscovery'
 import { businessDiscoveryModel, interviewQuestionProgress, researchSession, resilientArchitecture } from '../engine/discoveryModel'
+import { coverageForProposal } from '../engine/operatingCoverage'
 import { resolveIndustry } from '../engine/industryResolver'
 import { applyFrontierArchitecture, frontierResearchStatus, mergeFrontierResearch, requestFrontierResearch, type FrontierResearch } from '../engine/researchClient'
 import { applyIndustryVerdict, loadIndustryVerdict, recordIndustryObservations, type IndustryVerdict } from '../engine/industryClient'
@@ -22,7 +23,6 @@ import { answerIntake, readBuildIntake, saveBuildIntake, withLogo, type BuildInt
 import { publishWorkspaceIdentity, sendInvites } from '../engine/workspaceSetupClient'
 import { BuildIntakeControls } from './BuildIntake'
 import { Brand } from './Brand'
-import { ThemeToggle } from './ThemeToggle'
 
 gsap.registerPlugin(useGSAP)
 
@@ -350,6 +350,34 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const proposalResearch = useMemo(() => session && architecture ? mergeFrontierResearch(researchSession(session), frontier) : null, [session, architecture, frontier])
   const proposalReasoning = proposalResearch?.findings.slice(0, 5) ?? []
   const proposalGaps = proposalResearch?.gaps.slice(0, 5) ?? []
+  /**
+   * What Wesify worked out on its own, and what nobody may take its word for.
+   *
+   * Two different things sit in this list and both have to reach the operator before they press the
+   * button. An assumption about money is Wesify saying "I filled this in, check me". A regulatory
+   * subject is Wesify saying "your trade is one an authority governs, and I am not the authority" —
+   * it names who to ask and never what the rule is, because it does not know their jurisdiction and
+   * somebody would go and act on it.
+   */
+  const proposalConfirmations = useMemo(() => {
+    if (!session || !architecture) return []
+    const said = [session.businessState.companySummary, ...session.messages.filter(message => message.role === 'user').map(message => message.content)].join('. ')
+    const coverage = coverageForProposal({ text: said, capabilityIds: architecture.capabilityIds ?? [] })
+    return [
+      ...(architecture.unknowns ?? []).filter(item => item.impact === 'money' || item.impact === 'legal').map(item => ({
+        id: `assumed-${item.topic}`,
+        title: item.topic,
+        detail: item.assumption ? `${item.why} Wesify assumed: ${item.assumption}.` : item.why,
+        tag: 'assumed',
+      })),
+      ...coverage.regulatory.map(item => ({
+        id: item.id,
+        title: item.label,
+        detail: `Confirm with ${item.authorities[0]}: ${item.obligations.slice(0, 3).join(', ')}.`,
+        tag: 'confirm',
+      })),
+    ].slice(0, 4)
+  }, [session, architecture])
   const questionProgress = interviewQuestionProgress(session?.metrics.questionsAsked ?? 0)
 
   /**
@@ -381,7 +409,6 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
             </li>
           ))}
         </ol>
-        <ThemeToggle/>
       </header>
 
       {/* One thread, oldest first. The question Wesify is asking is simply the newest thing in it. */}
@@ -455,6 +482,10 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
               {proposalGaps.length > 0 && <>
                 <small>OPERATING GAPS TO REVIEW</small>
                 <ul className="bo-proposal-reasoning" data-testid="proposal-gaps">{proposalGaps.map(gap => <li key={gap.id}><b>{gap.title}</b><span>{gap.rationale}</span><em>{gap.classification}</em></li>)}</ul>
+              </>}
+              {proposalConfirmations.length > 0 && <>
+                <small>WORTH CONFIRMING</small>
+                <ul className="bo-proposal-reasoning" data-testid="proposal-confirmations">{proposalConfirmations.map(item => <li key={item.id}><b>{item.title}</b><span>{item.detail}</span><em>{item.tag}</em></li>)}</ul>
               </>}
               <div className="bo-workspace-plan">{architecture.pages.map(page => <span key={page}><Check size={11}/>{page}</span>)}</div>
             </div>}

@@ -78,10 +78,39 @@ export async function credentialFor(workspaceId, providerId) {
   return open(stored.credential)
 }
 
-export async function recordSync(workspaceId, providerId, { counts = null, error = '' }) {
+/**
+ * @param cursor Where the next sync should start from, per entity.
+ *
+ * Kept beside the credential rather than in the workspace because it describes the *connection*, not
+ * the company: a workspace restored from a backup should not re-import three years of an ERP, and a
+ * server restarted mid-import should carry on where it stopped. It holds timestamps and nothing else,
+ * which is why it is safe for `publicConnection` to pass it through.
+ */
+export async function recordSync(workspaceId, providerId, { counts = null, error = '', cursor = null }) {
   const all = await readAll(workspaceId)
   if (!all[providerId]) return null
-  all[providerId] = { ...all[providerId], lastSyncAt: new Date().toISOString(), lastSyncCounts: counts, lastError: String(error).slice(0, 300) }
+  all[providerId] = {
+    ...all[providerId],
+    lastSyncAt: new Date().toISOString(),
+    lastSyncCounts: counts,
+    ...(cursor ? { cursor } : {}),
+    lastError: String(error).slice(0, 300),
+  }
+  await writeAll(workspaceId, all)
+  return publicConnection(all[providerId])
+}
+
+/**
+ * How this provider's records map onto this workspace's entities.
+ *
+ * Derived by the client from the same introspection that built the entities, and kept here so a
+ * later sync does not need the build to run again. It is a description of a schema, not a secret,
+ * which is why `publicConnection` returns it.
+ */
+export async function recordMapping(workspaceId, providerId, mapping) {
+  const all = await readAll(workspaceId)
+  if (!all[providerId]) throw Object.assign(new Error('That app is not connected.'), { status: 404 })
+  all[providerId] = { ...all[providerId], mapping }
   await writeAll(workspaceId, all)
   return publicConnection(all[providerId])
 }

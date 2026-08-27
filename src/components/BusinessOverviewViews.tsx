@@ -157,6 +157,9 @@ export function ControlView({ config, records, automationApprovals, auditEvents,
     .filter(record => !/approved|rejected|cancelled/i.test(String(record.status ?? '')))
   const pendingAutomationApprovals = automationApprovals.filter(item => item.status === 'pending')
   const policies = config.governanceArchitecture?.policies ?? []
+  // Absent in every workspace built before the completeness check existed, which is why the whole
+  // panel is conditional rather than rendered empty.
+  const coverage = config.coverage
   const humanControls = Object.entries(config.governanceArchitecture?.humanControl ?? {})
     .filter(([, enabled]) => enabled)
     .map(([name]) => humanize(name))
@@ -209,6 +212,27 @@ export function ControlView({ config, records, automationApprovals, auditEvents,
         })}
       </tr>)}</tbody></table></div>
     </section>
+    {coverage && <section className="bo-control-detail" data-testid="operating-coverage">
+      {/**
+       * What Wesify checked this workspace against, kept where the controls are.
+       *
+       * The build was compared to the APQC process framework — plus SCOR and ISA-95 where they apply
+       * — and this is the part of that an operator has to see: what kind of company Wesify concluded
+       * they run, what it could not close on its own, and what nobody may take Wesify's word for. The
+       * regulatory half never states a rule. It names the subject and the kind of authority to ask,
+       * because Wesify does not know their jurisdiction and somebody would act on what it wrote.
+       */}
+      <article><header><small>OPERATING MODEL</small><h2>How Wesify read this company</h2></header>
+        {coverage.archetypes.slice(0, 5).map(item => <div key={item.id}><ShieldCheck size={15}/><strong>{item.label}</strong><span>{item.meaning}</span></div>)}
+        {coverage.blocking.filter(item => item.capabilityIds.length).slice(0, 3).map(item => <div key={item.id}><FileText size={15}/><strong>{item.label}</strong><span>{item.because}</span></div>)}
+        {!coverage.archetypes.length && <div className="bo-empty-state">Nothing in this workspace describes a trading company, so no business process framework was applied to it.</div>}
+      </article>
+      <article><header><small>TO CONFIRM</small><h2>What nobody has verified</h2></header>
+        {coverage.verify.slice(0, 3).map(item => <div key={item.id}><FileText size={15}/><strong>{item.label}</strong><span>Confirm with {item.authorities[0]}: {item.obligations.slice(0, 3).join(', ')}.</span></div>)}
+        {coverage.questions.slice(0, 3).map(item => <div key={item.id}><FileText size={15}/><strong>{item.text}</strong><span>{item.because}</span></div>)}
+        {!coverage.verify.length && !coverage.questions.length && <div className="bo-empty-state">Nothing outstanding. Every process this company needs is carried by something in the workspace.</div>}
+      </article>
+    </section>}
     <section className="bo-control-detail">
       <article><header><small>HUMAN CONTROL</small><h2>Approval boundaries</h2></header>
         {humanControls.map(item => <div key={item}><ShieldCheck size={15}/><strong>{item}</strong><span>Human approval required</span></div>)}

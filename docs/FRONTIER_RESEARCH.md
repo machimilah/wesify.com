@@ -24,13 +24,13 @@ The key is read by the Node service only. It is never sent to the browser, never
 `localStorage`, and never included in a workspace export. `GET /api/research/status` reports
 `{available, model}` so the interface can show which tier is running without exposing anything else.
 
-Optional: `BO_REASONING_MODEL` overrides the model (default `claude-opus-5`).
+Optional: `BO_REASONING_MODEL` overrides the model (default `claude-haiku-4-5-20251001`).
 
 ## What it actually does
 
 `POST /api/research` runs two passes.
 
-**Pass one — research.** Claude Opus 5 with adaptive thinking, `web_search_20260209`, and
+**Pass one — research.** Claude Haiku 4.5 with adaptive thinking, `web_search_20260209`, and
 `web_fetch_20260209`. It researches the named company where one is public, and otherwise the
 industry and operating model: what is sold, who buys, how and when money arrives, how work reaches
 the customer, what must be bought in to deliver, who does the work, what regulation or contract
@@ -72,8 +72,7 @@ compiles the workspace, so researched conclusions reach the actual product and n
 
 One research call per workspace, at the start of discovery, running alongside the interview rather
 than blocking it. Requests are capped server-side: 4,000 characters of description, 20 conversation
-turns, 8 searches, and 5 fetches. Pricing for Claude Opus 5 is $5 per million input tokens and $25
-per million output.
+turns, 8 searches, and 5 fetches. The configured Claude Haiku model is used here to keep research affordable while preserving the structured workflow.
 
 ## Testing it without a key
 

@@ -5,8 +5,9 @@ import './noInfra.mjs'
  *
  * Wesify's suites spawn or import the real server, and the server decides whether to use a frontier model
  * by asking whether a key is configured. Once a real `ANTHROPIC_API_KEY` sat in `.env.local`, every
- * browser suite that reached the build screen made a real research call — Opus, adaptive thinking,
- * five web searches and three fetches, which is the most expensive thing Wesify does. Nothing failed.
+ * browser suite that reached the build screen made a real research call — the expensive frontier
+ * model path, adaptive thinking, five web searches and three fetches, which is the most expensive
+ * thing Wesify does. Nothing failed.
  * Nothing looked different. The bill was the only signal, and it arrived after the fact.
  *
  * Importing this first removes the key from the environment the test and its child processes see, so

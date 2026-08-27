@@ -24,6 +24,12 @@ function workspaceSections(workspaceId: string) {
   return isWorkspaceConfiguration(saved) ? saved.navigation.map(item => item.id) : []
 }
 
+function openClerkSignUp() {
+  if (typeof window !== 'undefined' && (window as any).Clerk) {
+    (window as any).Clerk.openSignUp({ redirectUrl: '/dashboard' })
+  }
+}
+
 export default function App() {
   const [path, setPath] = useState(window.location.pathname)
   const [answers, setAnswers] = useState<Answers>(() => readStorage('bo-answers', {}))
@@ -152,7 +158,7 @@ export default function App() {
     if (!locked) return
     window.history.replaceState({}, '', '/')
     setPath('/')
-    setSignInOpen(true)
+    openClerkSignUp()
   }, [locked])
 
   /** Refresh project membership when the dashboard becomes visible after a completed build. */
@@ -216,7 +222,7 @@ export default function App() {
   const startBuild = (brief: string) => {
     if (!accounts || account) return build(brief)
     setPendingBrief(brief)
-    setSignInOpen(true)
+    openClerkSignUp()
   }
 
   /**
@@ -247,7 +253,8 @@ export default function App() {
     initialValue={String(answers.companyDescription ?? '')}
     onSubmit={startBuild}
     accounts={accounts === true}
-    onSignIn={() => setSignInOpen(true)}
+    signedIn={hasSignedInSession}
+    onSignIn={openClerkSignUp}
   />
 
   /**
@@ -322,7 +329,7 @@ export default function App() {
   // Unknown public URLs return to the prompt; an authenticated operator stays inside the product.
   return account
     ? <Suspense fallback={<main className="wes-dashboard" aria-busy="true"/>}><ProjectDashboard account={account} workspaces={workspaces} onNavigate={navigate} onBuild={startBuild}/></Suspense>
-    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild} accounts={accounts === true} onSignIn={() => navigate('/signin')}/>
+    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild} accounts={accounts === true} signedIn={hasSignedInSession} onSignIn={openClerkSignUp}/>
   }
 
   /**

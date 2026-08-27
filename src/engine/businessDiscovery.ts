@@ -83,6 +83,47 @@ export interface ArchitectureContext {
   processStages: string[]
   pipelineStages: string[]
   billingCadence: string
+  /**
+   * Every operating model this company holds at once, rather than the closest single label.
+   *
+   * Optional because the in-browser model does not produce them and workspaces built before the
+   * architect was asked for them are still valid. Where they are absent Wesify detects archetypes
+   * from the description instead, which is what it did for every workspace until now.
+   */
+  archetypes?: string[]
+  /** The states each record moves through, in the company's own words. */
+  lifecycles?: ArchitectureLifecycle[]
+  /** The company's end-to-end flows, each followed to an outcome. */
+  processes?: ArchitectureProcess[]
+  /** What the architect had to assume, kept as an assumption rather than promoted to a fact. */
+  unknowns?: ArchitectureUnknown[]
+}
+
+export interface ArchitectureLifecycle {
+  /** The entity's name as the architect wrote it, resolved to an id where the workspace is compiled. */
+  entity: string
+  states: string[]
+}
+
+export interface ArchitectureProcess {
+  name: string
+  trigger: string
+  steps: string[]
+  owner?: string
+  entity?: string
+  controls?: string[]
+  /** What commonly goes wrong, phrased as the thing somebody has to be told about. */
+  exceptions?: string[]
+  documents?: string[]
+  output?: string
+  nextProcess?: string
+}
+
+export interface ArchitectureUnknown {
+  topic: string
+  why: string
+  impact: 'money' | 'legal' | 'operations' | 'data'
+  assumption?: string
 }
 
 export interface DiscoveryAgentResponse {
@@ -134,6 +175,7 @@ export const emptyBusinessState = (): BusinessState => ({
 export const emptyArchitecture = (): ArchitectureContext => ({
   title: '', summary: '', explanation: '', modules: [], startView: 'overview', capabilities: [], capabilityIds: [], excludedCapabilityIds: [], pages: [],
   entities: [], workflows: [], metrics: [], processStages: [], pipelineStages: [], billingCadence: '',
+  archetypes: [], lifecycles: [], processes: [], unknowns: [],
 })
 
 export function createDiscoverySession(workspaceId: string, initialPrompt: string): DiscoverySession {
@@ -204,6 +246,59 @@ export function hasUsableArchitecture(value: ArchitectureContext) {
   return value.modules.length > 0 && value.pages.length > 0 && value.entities.length > 0
 }
 
+/**
+ * The architect's operating model, cleaned rather than trusted or rejected.
+ *
+ * These four are optional everywhere: the in-browser model never produces them, and every workspace
+ * built before the architect was asked for them is still valid without. So a malformed lifecycle is
+ * dropped and the rest of the architecture stands — the opposite of the rule for entity fields,
+ * where a half-read field list makes the whole entity untrusted. The difference is what a bad value
+ * costs: a wrong field builds a form nobody chose, while a missing lifecycle only means Wesify falls
+ * back to inferring the states, which is what it did for every workspace until now.
+ */
+export function normalizeArchitectureModel(value: ArchitectureContext): ArchitectureContext {
+  const text = (candidate: unknown, max: number) => typeof candidate === 'string' ? candidate.trim().slice(0, max) : ''
+  const list = (candidate: unknown, max: number, length: number) => Array.isArray(candidate)
+    ? candidate.map(item => text(item, length)).filter(Boolean).slice(0, max)
+    : []
+  return {
+    ...value,
+    archetypes: list(value.archetypes, 12, 40),
+    lifecycles: (Array.isArray(value.lifecycles) ? value.lifecycles : [])
+      .filter(isObject)
+      .map(item => ({ entity: text(item.entity, 60), states: list(item.states, 12, 40) }))
+      // Two states is the least that is a lifecycle. One is a label, and none is nothing at all.
+      .filter(item => item.entity && item.states.length >= 2)
+      .slice(0, 20),
+    processes: (Array.isArray(value.processes) ? value.processes : [])
+      .filter(isObject)
+      .map(item => ({
+        name: text(item.name, 60),
+        trigger: text(item.trigger, 120),
+        steps: list(item.steps, 12, 80),
+        owner: text(item.owner, 60),
+        entity: text(item.entity, 60),
+        controls: list(item.controls, 8, 80),
+        exceptions: list(item.exceptions, 8, 80),
+        documents: list(item.documents, 8, 60),
+        output: text(item.output, 80),
+        nextProcess: text(item.nextProcess, 60),
+      }))
+      .filter(item => item.name && item.trigger)
+      .slice(0, 14),
+    unknowns: (Array.isArray(value.unknowns) ? value.unknowns : [])
+      .filter(isObject)
+      .map(item => ({
+        topic: text(item.topic, 80),
+        why: text(item.why, 160),
+        impact: (['money', 'legal', 'operations', 'data'] as const).includes(item.impact as ArchitectureUnknown['impact']) ? item.impact as ArchitectureUnknown['impact'] : 'operations',
+        assumption: text(item.assumption, 120),
+      }))
+      .filter(item => item.topic)
+      .slice(0, 10),
+  }
+}
+
 export function parseDiscoveryResponse(value: unknown): DiscoveryAgentResponse {
   if (!isObject(value) || !isBusinessState(value.businessState)) throw new Error('Invalid business state.')
   if (value.decision !== 'ASK_QUESTION' && value.decision !== 'READY_TO_ARCHITECT') throw new Error('Invalid discovery decision.')
@@ -214,7 +309,7 @@ export function parseDiscoveryResponse(value: unknown): DiscoveryAgentResponse {
     suggestedAnswers: strings(value.nextQuestion.suggestedAnswers, 6) ? value.nextQuestion.suggestedAnswers.map(item => item.trim()).filter(Boolean) : [],
   }
   if (value.decision === 'ASK_QUESTION' && !question.text) throw new Error('The model did not provide a question.')
-  return { businessState: value.businessState, decision: value.decision, acknowledgment: value.acknowledgment.trim(), nextQuestion: question, architectureContext: value.architectureContext }
+  return { businessState: value.businessState, decision: value.decision, acknowledgment: value.acknowledgment.trim(), nextQuestion: question, architectureContext: normalizeArchitectureModel(value.architectureContext) }
 }
 
 function normalizeWord(word: string) {

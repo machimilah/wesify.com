@@ -51,22 +51,12 @@ export function SignInDialog({ open, unreachable = false, onClose }: {
       ? 'You are signed in, but Wesify could not open your account. Try again in a moment.'
       : ''
 
-  return <dialog
-    ref={dialogRef}
-    className="wes-signin"
-    aria-labelledby="wes-signin-title"
-    onCancel={event => { event.preventDefault(); onClose() }}
-    onClose={onClose}
-  >
-    <div className="wes-signin__panel" data-testid="signin-form">
+  return <dialog ref={dialogRef} className="wes-signin">
+    <div className="wes-signin__panel">
       <header>
-        <div>
-          <Brand inverse/>
-          <p id="wes-signin-title">Sign in or create your account to keep building.</p>
-        </div>
-        <button type="button" onClick={onClose} aria-label="Close sign in" data-testid="close-signin"><X size={17}/></button>
+        <Brand/>
+        <button type="button" onClick={onClose} aria-label="Close sign in"><X size={20}/></button>
       </header>
-
       {problem
         ? <div className="wes-signin__error" role="alert" data-testid="signin-error">{problem}</div>
         : <ClerkSignIn

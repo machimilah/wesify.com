@@ -64,30 +64,6 @@
   --notify: #b4472f;
 }
 
-:root[data-theme='dark'] {
-  --bg: #151715;
-  --bg-alt: #1b1e1b;
-  --surface: #202420;
-  --surface-2: #1c201d;
-  --surface-hover: #292d29;
-
-  --border: #2b2e2a;
-  --border-strong: #343834;
-
-  --text: #e9ebe7;
-  --text-2: #9aa199;
-  --text-3: #7f877f;
-  --icon-ink: #eceee9;
-
-  --accent: #d3d7d2;
-  --accent-strong: #e6e9e5;
-  --accent-soft: rgba(214, 218, 213, .14);
-
-  --danger: #e7b6ae;
-  --danger-soft: #2c2220;
-  --warning: #e0ac66;
-  --warning-soft: #2e2415;
-}
 
 /**
  * Where the keyboard is.

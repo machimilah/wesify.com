@@ -130,11 +130,29 @@ Ask plenty, but the interview ends. Ten to fourteen questions is a good intervie
 - If they ask you to just build it, or say they do not know, stop asking immediately and build with stated assumptions.
 - Leave suggestedAnswers empty. The operator answers in their own words; offering choices teaches them Wesify wants a pick rather than a sentence, and their sentence is worth more.
 
-Record what you learn in businessState: what the operator said is explicit, what you reasonably concluded is inferred, what is still open is unknown. Include concise evidence and a basis of user or inference for each fact when possible. Never invent facts about this company — no customer names, no numbers, no volumes.
+Spend your questions where being wrong is expensive. In order: money — how much, from whom, when, on what terms; who is legally or contractually on the hook; anything an authority can inspect; stock and production; what has been promised to a customer; who is allowed to approve what; a supplier the company cannot replace; what limits how much work they can take. An unknown that would only change a default is not worth a question — pick the sensible default and move on. Minimum questions, maximum certainty.
+
+Record what you learn in businessState: what the operator said is explicit, what you reasonably concluded is inferred, what is still open is unknown. Include concise evidence and a basis of user or inference for each fact when possible. Never invent facts about this company — no customer names, no numbers, no volumes. An inference is never written down as something they told you.
 
 While the decision is ASK_QUESTION, return an empty architectureContext with every required field present. Return only schema-valid JSON. Never expose private reasoning.`
 
-const architectSystem = `You are Wesify's Business Application Architect. The interview is finished. Turn what is known about this company into the smallest Command Center that actually runs it.
+const architectSystem = `You are Wesify's Business Application Architect. The interview is finished. Reconstruct how this company actually operates, work out what has to be true for it to run correctly, and only then turn that into the smallest Command Center that runs it.
+
+Never start from modules. Start from the company.
+
+1. Operating models. Most companies are more than one kind of business at once — a roaster that imports beans, roasts them, sells wholesale to cafés and runs one shop of its own is four. Put every operating model the conversation supports in archetypes, from: manufacturer, food producer, distributor, wholesaler, retailer, online seller, marketplace, importer, exporter, logistics operator, software product, subscription, professional services, agency, field service, construction, project based, health provider, hospitality, education, property, nonprofit, make to order, make to stock, sells to businesses, sells to consumers, multi-location, regulated, solo operator. Each one you list brings its own records, controls and things that go wrong. Do not list one the operator gave you no evidence for.
+
+2. End-to-end flows. Follow this company's own flows all the way to their end: what a customer wants becoming money in the bank; a shortage becoming a supplier paid; a promise becoming a delivered thing; something going wrong becoming somebody fixing it; a transaction becoming a number management reads. Put the flows this company genuinely runs in processes: what starts it, who owns it, the steps in the company's own words, what has to be checked or approved, what commonly goes wrong, and what it hands to next. A flow that stops without an outcome is the mistake to look for — money that moves and lands nowhere, work that finishes and bills nobody, a failure with no owner.
+
+3. Connections. Every record connects to what causes it, changes it, or results from it. Use relatedTo so the workspace can answer why something happened, not only that it did. Isolated tables are a filing cabinet.
+
+4. Lifecycles. In lifecycles, give the states each important record moves through, in this company's words: what a job, an order or an invoice is actually called at each point of its life. An entity that exists is not the same as one that is in the middle of something, and every board, filter and alert in the workspace is built from these states.
+
+5. Completeness. Before you finish, walk this list and satisfy yourself about each one: money in, money out, who the customers are, who the company buys from, how the promise reaches the customer, who does the work, what limits how much can be done, what must be in stock, how acceptable work is verified, what the company must be able to prove, who is allowed to approve what, what happens when something fails, and what management has to see. For each, either this company has it and something you selected carries it, or this company genuinely does not have it. Silence is neither of those.
+
+6. What you do not know. Anything you had to assume that touches money, legal or regulatory responsibility, stock, production, a commitment to a customer, payment terms, approval authority, a critical supplier, capacity, or somebody's personal data goes in unknowns with why it matters. Never quietly turn an assumption into a fact about this company. Where the unknown would only change a default, pick the sensible default and do not raise it.
+
+7. Obligations. Where this trade, these goods, or where they operate implies a licence, an inspection, a record that must be kept or something that must be filed, name the subject in unknowns as something to confirm with the competent authority. Never state a specific regulation, certificate, agency or deadline as a fact: you do not know their jurisdiction, and somebody will act on what you write.
 
 Select the capabilityIds this company needs now from the supplied catalog, and put deliberately rejected ones in excludedCapabilityIds. Respect dependencies. Never add an adjacent capability without evidence from what the operator said: an unused page is worse than a missing one, because it is the exact failure that makes every other business suite feel wrong.
 
@@ -142,7 +160,9 @@ What you return is the whole workspace. Nothing is added afterwards for the indu
 
 Give every entity its fields, in the company's own words. This is the part that makes the workspace theirs rather than a generic one with their name on it: a plumber's work order has a service address and a technician, a law firm's matter has a court date and a responsible partner, and nothing about the word "job" or "case" should decide that. Choose what the operator actually needs to see and type on that record — usually five to ten fields, the ones they would put on paper. Use relatedTo to point at another entity in this same list where a record genuinely belongs to another. Do not add fields nobody mentioned and nobody would fill in: an empty column is the thing that makes software feel like somebody else's.
 
-Name pages and entities in the company's own language — not Wesify's, and not another vendor's. Include the modules, workflows, metrics, process stages, sales stages where relevant, and billing cadence that follow from this company. Return READY_TO_ARCHITECT, an empty nextQuestion, and only schema-valid JSON.`
+Name pages and entities in the company's own language — not Wesify's, and not another vendor's. Include the modules, workflows, metrics, process stages, sales stages where relevant, and billing cadence that follow from this company.
+
+Every metric you name has to answer something somebody would act on today — what is late, what is short, what is owed, what is at risk — rather than count rows. And anything the workspace does on its own that spends money, commits to a customer, changes a price or moves stock is proposed for a person to approve, never done quietly: name it as a workflow and say what it waits for. Return READY_TO_ARCHITECT, an empty nextQuestion, and only schema-valid JSON.`
 
 /**
  * A list, without a length cap on the wire.
@@ -229,8 +249,79 @@ export function discoverySchema(capabilityIds, modules, { architecting = true } 
             },
           },
           workflows: stringList(40), metrics: stringList(30), processStages: stringList(14), pipelineStages: stringList(14), billingCadence: { type: 'string', maxLength: 100 },
+          /**
+           * Every operating model this company holds, rather than the closest single label.
+           *
+           * Wesify classified a company twice and both answers were "which one" — a template and an
+           * industry code. A roaster that imports beans, roasts them, sells wholesale and runs a shop
+           * scored highest as a retailer, and the build then had a till and no customs file, no
+           * production run and no trade price list: three operations missing because a fourth one won.
+           */
+          archetypes: stringList(12, 40),
+          /**
+           * The states a record moves through, in the company's own words.
+           *
+           * Until this, statuses were guessed by matching the record's *name* against patterns —
+           * anything with "job" in it got Planned/Assigned/In progress/Completed. Every board, filter
+           * and alert in a workspace is built from these, so the guess decided how the company saw
+           * its own work. The architect has read the interview; it knows what they call the middle.
+           */
+          lifecycles: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: { entity: { type: 'string', maxLength: 60, description: 'The name of one entity in this same architecture.' }, states: { type: 'array', items: { type: 'string', maxLength: 40 } } },
+              required: ['entity', 'states'],
+            },
+          },
+          /**
+           * The company's end-to-end flows, each one followed to an outcome.
+           *
+           * Held for what it makes the model do rather than for what Wesify renders: a flow that has to
+           * name its owner, its controls and what goes wrong is a flow whose gaps are visible while
+           * there is still time to close them. `exceptions` becomes the workspace's alerts.
+           */
+          processes: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 60 },
+                trigger: { type: 'string', maxLength: 120, description: 'What starts this flow.' },
+                owner: { type: 'string', maxLength: 60, description: 'The role responsible, in the company words.' },
+                entity: { type: 'string', maxLength: 60, description: 'The entity in this architecture the flow runs on.' },
+                steps: { type: 'array', items: { type: 'string', maxLength: 80 } },
+                controls: { type: 'array', items: { type: 'string', maxLength: 80 }, description: 'What must be checked or approved before the flow continues.' },
+                exceptions: { type: 'array', items: { type: 'string', maxLength: 80 }, description: 'What commonly goes wrong, phrased as the thing somebody must be told about.' },
+                documents: { type: 'array', items: { type: 'string', maxLength: 60 } },
+                output: { type: 'string', maxLength: 80, description: 'What the flow produces.' },
+                nextProcess: { type: 'string', maxLength: 60, description: 'The flow this one hands to, or empty where it ends.' },
+              },
+              required: ['name', 'trigger', 'steps'],
+            },
+          },
+          /**
+           * What the architect had to assume, kept as an assumption.
+           *
+           * The rule this enforces is the one that matters most: an inference never becomes a fact
+           * about the company. Impact says what it would cost to be wrong, which is what decides
+           * whether it is worth an operator's attention or is just a default somebody can change.
+           */
+          unknowns: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                topic: { type: 'string', maxLength: 80 },
+                why: { type: 'string', maxLength: 160, description: 'What it changes about how the company is run.' },
+                impact: { type: 'string', enum: ['money', 'legal', 'operations', 'data'] },
+                assumption: { type: 'string', maxLength: 120, description: 'What was assumed in the meantime, if anything.' },
+              },
+              required: ['topic', 'why', 'impact'],
+            },
+          },
         },
-        required: ['title', 'summary', 'explanation', 'modules', 'startView', 'capabilities', 'capabilityIds', 'excludedCapabilityIds', 'pages', 'entities', 'workflows', 'metrics', 'processStages', 'pipelineStages', 'billingCadence'],
+        required: ['title', 'summary', 'explanation', 'modules', 'startView', 'capabilities', 'capabilityIds', 'excludedCapabilityIds', 'pages', 'entities', 'workflows', 'metrics', 'processStages', 'pipelineStages', 'billingCadence', 'archetypes', 'lifecycles', 'processes', 'unknowns'],
       },
     },
     required: ['businessState', 'decision', 'acknowledgment', 'nextQuestion', 'architectureContext'],
@@ -267,6 +358,7 @@ const emptyArchitecture = () => ({
   title: '', summary: '', explanation: '', modules: [], startView: 'overview',
   capabilities: [], capabilityIds: [], excludedCapabilityIds: [], pages: [], entities: [],
   workflows: [], metrics: [], processStages: [], pipelineStages: [], billingCadence: '',
+  archetypes: [], lifecycles: [], processes: [], unknowns: [],
 })
 
 /**
@@ -331,7 +423,14 @@ export async function runDiscoveryTurn({ mode, conversation = [], businessState 
   const knowledgeLine = knowledgeRequirements.length ? `\n\nUnresolved operating knowledge objectives, highest value first:\n${knowledgeRequirements.map(item => `- [${item.priority}] ${item.objective}${item.informationNeeded?.length ? ` Relevant information may include: ${item.informationNeeded.join(', ')}.` : ''}`).join('\n')}\nThese are decision objectives, not a questionnaire. Use only objectives relevant to this company, translate one into a short natural question only when its answer changes the software, and never ask for an objective already answered in the conversation.` : ''
   const gapLine = businessGaps.length ? `\n\nContextual operating-gap candidates:\n${businessGaps.map(item => `- [${item.classification}, confidence ${item.confidence}] ${item.title}: ${item.rationale} Candidate capabilities: ${item.capabilityIds.join(', ') || 'none'}.`).join('\n')}\nThese are advisory candidates, not automatic features. Reject candidates unsupported by the operator's evidence. During discovery, use a candidate only to choose a high-value question. During architecture, select its capability only when the conversation supports it.` : ''
   const instruction = architecting
-    ? `${known}\n\nThe conversation:\n${said}${industryLine}${knowledgeLine}${gapLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
+    /**
+     * `repairLine` belongs on this branch too.
+     *
+     * The completeness check answers an architecture with the processes it left uncarried, and an
+     * instruction the prompt never includes is one the model never sees. It sat on the interview
+     * branch alone for as long as a repair only ever meant a repeated question.
+     */
+    ? `${known}\n\nThe conversation:\n${said}${industryLine}${knowledgeLine}${gapLine}${repairLine}\n\nBO capability catalog (id = label):\n${catalog}\n\nDesign the Command Center.`
     : `${known}\n\nThe conversation so far:\n${said}${industryLine}${askedLine}${budgetLine}${clarifyLine}${repairLine}${knowledgeLine}${gapLine}\n\n${forceArchitecture ? 'The operator wants to stop answering questions. Decide READY_TO_ARCHITECT now and record your assumptions.' : 'Take the next turn.'}`
 
   const schema = discoverySchema(capabilityIds, modules, { architecting })

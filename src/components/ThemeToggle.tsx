@@ -1,24 +1,20 @@
-import { Moon, Sun } from 'lucide-react'
-import { useState } from 'react'
-import { getTheme, toggleTheme } from '../engine/theme'
+import { Moon } from 'lucide-react'
+import { getTheme } from '../engine/theme'
 
 /**
- * The one control for Wesify's whole light/dark theme.
- *
- * Placed on every screen that has its own header, rather than living only in Settings, because the
- * scope of the toggle is the whole product — landing page included — and a person should not have to
- * find their way into a signed-in workspace before they can turn the lights down.
+ * Light mode only. This component is kept for backwards compatibility but renders nothing.
  */
 export function ThemeToggle({ className = '' }: { className?: string }) {
-  const [theme, setThemeState] = useState(getTheme)
+  const theme = getTheme()
   return <button
     type="button"
     className={`bo-theme-toggle ${className}`.trim()}
-    onClick={() => setThemeState(toggleTheme())}
-    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-    title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+    disabled
+    aria-label="Light mode only"
+    title="Light mode"
     data-testid="theme-toggle"
+    style={{ display: 'none' }}
   >
-    {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
+    <Moon size={16}/>
   </button>
 }

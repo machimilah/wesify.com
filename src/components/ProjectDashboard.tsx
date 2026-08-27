@@ -238,7 +238,7 @@ export function ProjectDashboard({ account, workspaces, onNavigate, onBuild }: {
       </section>
 
       <div className="wes-dashboard__account">
-        {account && <button type="button" className="wes-dashboard__plan" onClick={() => onNavigate('/billing')}><DollarSign size={15}/><span>Plan and billing</span></button>}
+        
         <div className="wes-dashboard__identity">
           <AccountButton/>
         </div>

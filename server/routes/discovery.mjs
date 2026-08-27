@@ -102,9 +102,16 @@ export async function discoveryRoutes(request, response, segments) {
         confidence: Number.isFinite(item?.confidence) ? Math.max(0, Math.min(1, item.confidence)) : 0,
         capabilityIds: idsFrom(item?.capabilityIds, 30),
       })).filter(item => item.id && item.title),
-      // Set only when Wesify has just rejected this turn's question as one already asked, so the retry
-      // knows why rather than rolling the dice on the same prompt.
-      repair: String(input.repair ?? '').slice(0, 400),
+      /**
+       * Set when Wesify has just rejected this turn — a question it had already asked, or an
+       * architecture missing something the process frameworks say this company must be able to do —
+       * so the retry knows why rather than rolling the dice on the same prompt.
+       *
+       * The old cap was 400 characters, which was the length of a note about a repeated question. A
+       * completeness repair names several missing processes with the evidence behind each, and at 400
+       * it arrived cut off mid-sentence: the model was told a company needed something and not what.
+       */
+      repair: String(input.repair ?? '').slice(0, 2000),
     })
     return send(response, 200, turn)
   }

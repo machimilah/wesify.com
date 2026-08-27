@@ -73,8 +73,8 @@ for (const item of files.filter(candidate => candidate.file.startsWith('server/r
  *
  * The suites run the real server, and the server reaches for a frontier model whenever a key is
  * configured. The day a real ANTHROPIC_API_KEY appeared in .env.local, every browser suite that
- * reached the build screen started making real research calls — Opus, thinking, web search — and
- * nothing failed, nothing looked different, and the only signal was the bill.
+ * reached the build screen started making real research calls — the frontier model, thinking, web
+ * search — and nothing failed, nothing looked different, and the only signal was the bill.
  *
  * So each suite must either drop the keys (scripts/noSpend.mjs) or point a provider at its own stub
  * (ANTHROPIC_BASE_URL, GEMINI_BASE_URL). One of the two, never neither. A suite that stubs one

@@ -243,6 +243,15 @@ reglas de escritura segura, está en [docs/CONNECTED_APPS.md](docs/CONNECTED_APP
 La base de conocimiento de negocio —taxonomía de industrias (NAICS, dominio público), arquetipos
 operativos y catálogo de capacidades— está en [docs/KNOWLEDGE_BASE.md](docs/KNOWLEDGE_BASE.md).
 
+El agente que vive dentro del workspace —qué puede construir y cambiar, cómo un plan se convierte en
+una versión nueva probada antes de aplicarse, y qué modelo lo mueve— está en
+[docs/WORKSPACE_AGENT.md](docs/WORKSPACE_AGENT.md).
+
+Cómo Wesify comprueba que no falta ninguna operación antes de construir —APQC como lista maestra,
+SCOR donde se mueven mercancías, ISA-95 donde se producen, COSO para controles, y los temas
+regulatorios que hay que confirmar con la autoridad competente— está en
+[docs/PROCESS_COMPLETENESS.md](docs/PROCESS_COMPLETENESS.md).
+
 ## Investigación externa (opcional)
 
 Con una API key, Wesify añade un segundo nivel: un modelo frontera que investiga en la web cómo opera

@@ -4,7 +4,7 @@ import { researchBusiness } from './businessResearch'
 import { emptyArchitecture } from './businessDiscovery'
 
 const frontier: FrontierResearch = {
-  model: 'claude-opus-5',
+  model: 'claude-haiku-4-5',
   brief: 'Full research brief.',
   archetype: { id: 'field-service', label: 'Field service', confidence: 0.9 },
   summary: 'Dispatch-led plumbing operation billing on completion.',

@@ -15,6 +15,7 @@ import { capabilityCatalogPrompt, capabilityIds, planCapabilities } from './capa
 import { researchBusiness, type BusinessResearch } from './businessResearch'
 import { lastInterviewIssue, lastInterviewModel, requestDiscoveryTurn, serverInterviewAvailable } from './discoveryTurnClient'
 import { evaluateOperatingKnowledge, knowledgeRequirementsFor } from './knowledgeEngine'
+import { coverageForProposal, coverageRepairInstruction } from './operatingCoverage'
 
 const MODEL_F16 = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
 const MODEL_F32 = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
@@ -477,14 +478,40 @@ class ServerFirstDiscoveryModel implements BusinessDiscoveryModel {
        * over the same inputs and waited another seven seconds to be told roughly the same thing.
        * That was half of the wait at the end of an interview, spent re-deriving an answer Wesify had.
        */
+      /**
+       * The review pass is a completeness check now, not a second opinion.
+       *
+       * Re-running the architect prompt over its own output was the old critic, and on the server it
+       * cost seven seconds to be told roughly the same thing. What it never caught is the failure a
+       * second opinion cannot catch: a whole process nobody mentioned. An interview covers what an
+       * operator thought to say, and nobody lists what they forgot — so a bakery gets a way to sell
+       * and no way to buy flour, and both passes agree, because both are reading the same
+       * conversation.
+       *
+       * So the proposal is checked against the process frameworks instead, and the architect is
+       * called back only when something a company of this shape must do has nothing carrying it. It
+       * is told what is missing and decides; a check that selected capabilities itself would rebuild
+       * the module bloat this product exists to avoid.
+       */
       if (request.mode === 'REVIEW_ARCHITECTURE') {
-        return {
+        const architecture = request.session.architecture ?? emptyArchitecture()
+        const unchanged: DiscoveryAgentResponse = {
           businessState: request.session.businessState,
           decision: 'READY_TO_ARCHITECT',
           acknowledgment: '',
           nextQuestion: { text: '', reason: '', suggestedAnswers: [] },
-          architectureContext: request.session.architecture ?? emptyArchitecture(),
+          architectureContext: architecture,
         }
+        const instruction = coverageRepairInstruction(coverageForProposal({
+          text: researchInput(request.session).text,
+          capabilityIds: architecture.capabilityIds ?? [],
+        }))
+        if (!instruction) return unchanged
+        stream.onActivity?.('Checking nothing this company needs is missing')
+        const repaired = await requestDiscoveryTurn({ ...request, mode: 'ARCHITECT' }, request.session.businessState.industry, instruction)
+        // A repair that came back unusable leaves the first architecture standing. It was valid; the
+        // check is an improvement on it, never a precondition for having one.
+        return repaired && hasUsableArchitecture(repaired.architectureContext) ? repaired : unchanged
       }
       stream.onActivity?.(request.mode === 'DISCOVER' ? 'Understanding your business' : 'Designing your Command Center')
       /**

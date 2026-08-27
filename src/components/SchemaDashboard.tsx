@@ -27,7 +27,6 @@ import { humanize, readStorage } from '../engine/shared'
 import { faceFor, faceForNavigation } from './faces'
 import { AccountButton } from './AccountButton'
 import { Brand } from './Brand'
-import { ThemeToggle } from './ThemeToggle'
 import { evaluateActionControl } from '../engine/governanceArchitecture'
 import { planWorkspaceMutation } from '../engine/mutationArchitecture'
 import { refreshWorkspaceIntelligence } from '../engine/operatingArchitecture'
@@ -355,7 +354,10 @@ export function SchemaDashboard({ initialConfig, basePath = '', onExit }: { init
     setCommand('')
     setCommandWorking(true)
     try {
-      const agent = await askWorkspaceAgent(request, config, records, label => setAssistantWorking(label))
+      const agent = await askWorkspaceAgent(request, config, records, { workspaceId: manifest?.workspaceId ?? '', onActivity: label => setAssistantWorking(label) })
+      // Said once, and only when it happened: an answer from the browser model instead of the server
+      // is a different answer, and an operator who is not told reads it as Wesify getting worse.
+      if ('notice' in agent && agent.notice) say(agent.notice)
       if (agent.response.message) say(agent.response.message)
       if (agent.action) await runAction(agent.action, agent.response.decision === 'PREVIEW')
     } catch {
@@ -423,7 +425,7 @@ export function SchemaDashboard({ initialConfig, basePath = '', onExit }: { init
 
   return <div className="bo-dashboard bo-schema-workspace">
     <aside className="bo-dashboard__sidebar">
-      <div className="bo-dashboard__sidebar-head"><Brand inverse/><ThemeToggle/></div>
+      <div className="bo-dashboard__sidebar-head"><Brand inverse/></div>
       <nav>
         {primaryNavigation.map(navigationButton)}
         <section className="bo-sidebar-group">{groupedNavigation.map(group => group.nested ? groupButton(group) : navigationButton(group.items[0]))}</section>

@@ -21,7 +21,7 @@ const calls = []
 const state = { scenario: 'HAPPY' }
 const reset = () => { calls.length = 0; state.scenario = 'HAPPY' }
 
-const messageStart = (model = 'claude-opus-5') => ({ type: 'message_start', message: { id: `msg_${calls.length}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } })
+const messageStart = (model = 'claude-haiku-4-5-20251001') => ({ type: 'message_start', message: { id: `msg_${calls.length}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } })
 const textBlock = (text, index = 0) => [
   { type: 'content_block_start', index, content_block: { type: 'text', text: '' } },
   { type: 'content_block_delta', index, delta: { type: 'text_delta', text } },

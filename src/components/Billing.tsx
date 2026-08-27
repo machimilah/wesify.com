@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, Minus } from 'lucide-react'
 import { billingPortal, billingState, startCheckout, type BillingState, type Plan } from '../engine/billingClient'
 import { Brand } from './Brand'
-import { ThemeToggle } from './ThemeToggle'
 
 /**
  * What this account is on, and how to be on something else.
@@ -51,7 +50,6 @@ export function Billing({ onBack }: { onBack: () => void }) {
     <header>
       <button type="button" className="bo-billing__back" onClick={onBack} data-testid="billing-back"><ArrowLeft size={15}/> Back</button>
       <Brand/>
-      <ThemeToggle/>
     </header>
 
     {outcome === 'done' && null}

@@ -8,6 +8,9 @@ import { slug } from './shared'
 import { agentAllows, selectBusinessAgent, type CompiledBusinessAgent } from './agentArchitecture'
 import type { BusinessAgentPermission } from '../data/businessAgentCatalog'
 import { evaluateActionControl } from './governanceArchitecture'
+import { classifyWorkspaceIntent } from './workspaceActions'
+import { agentContext, lastAgentIssue, lastAgentModel, requestAgentTurn, type AgentMode } from './workspaceAgentClient'
+import { planToWorkspaceAction } from './workspaceAgentPlan'
 
 type AgentDecision = 'EXECUTE' | 'PREVIEW' | 'ANSWER' | 'CLARIFY'
 type AgentActionKind = 'none' | 'create_record' | 'update_record' | 'delete_record' | 'add_field' | 'add_collection' | 'add_capability' | 'remove_capability' | 'create_workflow' | 'navigate' | 'query'
@@ -142,7 +145,55 @@ function validate(value: unknown): WorkspaceAgentResponse {
   return response as WorkspaceAgentResponse
 }
 
-export async function askWorkspaceAgent(command: string, config: WorkspaceConfiguration, records: WorkspaceRecords, onActivity?: (label: string) => void) {
+/**
+ * The turn, taken by whichever model this deployment has.
+ *
+ * The server path is tried first and its failure is never fatal: no key, a spent quota or an
+ * unreachable server all fall through to the model in the browser, which is what a workspace with
+ * nothing configured has always used.
+ *
+ * `build` mode is the reason this exists. A structural request — "set up supplier management" — is
+ * a whole change to the workspace: record types, fields, relations, a page, an alert. Asking for it
+ * one action at a time is what made the assistant look incapable of building anything, whatever
+ * model was behind it.
+ */
+async function serverTurn(command: string, config: WorkspaceConfiguration, records: WorkspaceRecords, workspaceId: string, agent: CompiledBusinessAgent | undefined, onActivity?: (label: string) => void) {
+  const intent = classifyWorkspaceIntent(command)
+  const mode: AgentMode = intent === 'WORKSPACE_CHANGE' || intent === 'WORKFLOW_CHANGE' ? 'build' : 'command'
+  onActivity?.(mode === 'build' ? 'Designing the change' : 'Wesify is working')
+  const turn = await requestAgentTurn(workspaceId, command, mode, agentContext(config, records, { mode, agent }))
+  if (!turn) return null
+
+  if (turn.mode === 'build' || turn.plan) {
+    if (turn.decision === 'CLARIFY' || !turn.plan) {
+      return { response: { decision: 'CLARIFY' as const, message: turn.question || turn.message || 'Tell Wesify a little more about what you need.', action: emptyAction() }, action: undefined }
+    }
+    const action = planToWorkspaceAction(turn.plan, config)
+    if (!action) return { response: { decision: 'CLARIFY' as const, message: turn.message || 'Wesify could not work out what to build from that.', action: emptyAction() }, action: undefined }
+    // Every structural change is a preview. What it produces is a new, tested workspace version the
+    // operator promotes — never something that happens to their workspace while they are talking.
+    return { response: { decision: 'PREVIEW' as const, message: turn.message || `${turn.plan.label} ready to add.`, action: emptyAction() }, action }
+  }
+
+  const response = validate({ decision: turn.decision, message: turn.message, action: turn.action })
+  return { response, action: toWorkspaceAction(response, config, agent) }
+}
+
+/** The half of the response shape a plan does not fill in, so the client validates one shape. */
+const emptyAction = (): ModelWorkspaceAction => ({
+  kind: 'none', entityId: '', recordId: '', navigationId: '', collectionName: '', capabilityId: '', values: [],
+  field: { id: '', label: '', type: 'text', required: false },
+  workflow: { name: '', entityId: '', event: 'created', conditionField: '', conditionEquals: '', message: '' },
+})
+
+export interface WorkspaceAgentOptions {
+  /** The workspace this command belongs to. Absent means the server path is not available. */
+  workspaceId?: string
+  onActivity?: (label: string) => void
+}
+
+export async function askWorkspaceAgent(command: string, config: WorkspaceConfiguration, records: WorkspaceRecords, options: WorkspaceAgentOptions | ((label: string) => void) = {}) {
+  const { workspaceId = '', onActivity } = typeof options === 'function' ? { workspaceId: '', onActivity: options } : options
   const actingAgent = selectBusinessAgent(command, config)
   const authorizingAgent = config.agents?.length ? actingAgent : undefined
   if (window.__BO_WORKSPACE_AGENT_MOCK__) {
@@ -154,6 +205,38 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
     const controlled = control?.requiresApproval ? { ...guarded, decision: 'PREVIEW' as const } : guarded
     return { response: controlled, action, agent: actingAgent, control }
   }
+  if (workspaceId) {
+    try {
+      const served = await serverTurn(command, config, records, workspaceId, authorizingAgent, onActivity)
+      if (served) {
+        /**
+         * A plan is not scoped by business agent, and a command is.
+         *
+         * The distinction is the one this file already draws: what a sales agent may do on the
+         * operator's behalf inside its own domain is its business, while changing the shape of the
+         * workspace is governed by the operator's own role through `evaluateActionControl`. A plan
+         * arrives with no action kind at all, so there is nothing for `agentAllows` to judge.
+         */
+        const scoped = served.response.action.kind !== 'none' && !withinAgentScope(authorizingAgent, served.response.action.kind)
+        if (scoped) return { response: { ...served.response, decision: 'CLARIFY' as const, message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent }
+        const control = served.action ? evaluateActionControl(config, served.action, { agentApprovalRequired: authorizingAgent?.approvalRequired.includes(served.response.action.kind as BusinessAgentPermission) }) : undefined
+        const guarded = control?.requiresApproval ? { ...served.response, decision: 'PREVIEW' as const } : served.response
+        return { response: guarded, action: served.action, agent: actingAgent, control, model: lastAgentModel() }
+      }
+    } catch {
+      // The browser model below is the fallback, and a workspace must keep answering.
+    }
+  }
+
+  /**
+   * Why the answer came from the browser instead.
+   *
+   * Falling back is silent by design, and silent was indistinguishable from broken: a spent quota, a
+   * server started before the key was set and an unreachable API all looked like the assistant
+   * simply getting worse at its job. This is the one line that says which happened.
+   */
+  const notice = workspaceId ? lastAgentIssue() : ''
+
   const accessibleEntities = config.entities.filter(entity => !actingAgent || actingAgent.accessibleEntityIds.includes(entity.id))
   const context = {
     command,
@@ -167,12 +250,12 @@ export async function askWorkspaceAgent(command: string, config: WorkspaceConfig
       onActivity?.(attempt ? 'Checking the command' : 'Wesify is working')
       const raw = await generateLocalStructuredJson<unknown>({ messages: [{ role: 'system', content: system }, { role: 'user', content: `Use this live workspace context. JSON only.\n${JSON.stringify(context)}` }], schema: responseSchema, maxTokens: 520, temperature: 0.1, onActivity })
       const response = validate(raw)
-      if (authorizingAgent && response.action.kind !== 'none' && !agentAllows(authorizingAgent, response.action.kind)) return { response: { ...response, decision: 'CLARIFY', message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent }
+      if (authorizingAgent && response.action.kind !== 'none' && !agentAllows(authorizingAgent, response.action.kind)) return { response: { ...response, decision: 'CLARIFY', message: `${actingAgent?.label ?? 'Wesify'} cannot perform that action within its current scope.` }, action: undefined, agent: actingAgent, notice }
       const action = toWorkspaceAction(response, config, authorizingAgent)
       const agentApprovalRequired = authorizingAgent?.approvalRequired.includes(response.action.kind as BusinessAgentPermission)
       const control = action ? evaluateActionControl(config, action, { agentApprovalRequired }) : undefined
       const guarded = control?.requiresApproval ? { ...response, decision: 'PREVIEW' as const } : response
-      return { response: guarded, action, agent: actingAgent, control }
+      return { response: guarded, action, agent: actingAgent, control, notice }
     } catch (error) { lastError = error }
   }
   throw lastError instanceof Error ? lastError : new Error('Wesify could not understand that command.')

@@ -121,6 +121,24 @@ describe('reading a typed command', () => {
     expect(classifyWorkspaceIntent('add a client called ACME')).toBe('BUSINESS_ACTION')
   })
 
+  /**
+   * This is what decides whether the agent is asked for one action or for a whole change, so a
+   * request on the wrong side of it comes back looking like Wesify cannot build anything.
+   */
+  it('hears a request to build in the words an operator would use', () => {
+    for (const command of [
+      'set up supplier management',
+      'I need somewhere to keep our maintenance records',
+      'we also do repairs now',
+      'track our deliveries',
+      'build me a page for site visits',
+    ]) expect(classifyWorkspaceIntent(command), command).toBe('WORKSPACE_CHANGE')
+
+    // And still hears the ordinary ones as ordinary: these must not reach the building prompt.
+    expect(classifyWorkspaceIntent('mark the ACME invoice paid')).toBe('BUSINESS_ACTION')
+    expect(classifyWorkspaceIntent('which client owes us the most?')).toBe('BUSINESS_QUERY')
+  })
+
   it('asks rather than guesses when the command names nothing it knows', () => {
     const result = interpretWorkspaceCommand('do the thing', config, {})
     expect(result.action, 'Wesify acted on a command it did not understand').toBeUndefined()

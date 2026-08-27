@@ -1,6 +1,6 @@
 import type { Answers } from '../types'
 import type { AIBlueprint, ModuleId } from './blueprint'
-import type { ArchitectureContext, ArchitectureField, BusinessState } from './businessDiscovery'
+import type { ArchitectureContext, ArchitectureField, ArchitectureLifecycle, ArchitectureProcess, BusinessState } from './businessDiscovery'
 import { planCapabilities, type CatalogEntity } from './capabilityCatalog'
 import { selectCompanyTemplate } from './companyTemplates'
 import { slug } from './shared'
@@ -16,6 +16,8 @@ import type { EventArchitecture } from './eventArchitecture'
 import type { GeneratedInterfaceArchitecture } from './interfaceArchitecture'
 import type { GovernanceArchitecture } from './governanceArchitecture'
 import { connectOperationalEntities } from './operatingSuite'
+import { compileOperatingCoverage, type OperatingCoverage } from './operatingCoverage'
+import { archetypesFromLabels, detectArchetypes, mergeArchetypes } from './archetypes'
 
 export type FieldType = 'text' | 'long-text' | 'number' | 'currency' | 'date' | 'boolean' | 'email' | 'phone' | 'select' | 'relation' | 'file'
 export type ViewType = 'table' | 'kanban' | 'cards' | 'calendar' | 'timeline'
@@ -144,6 +146,15 @@ export interface WorkspaceConfiguration {
   industryLabel?: string
   /** Additive operating intelligence. Version-1 workspaces remain valid without this field. */
   businessModel?: BusinessModelV2
+  /**
+   * What this company must be able to do, and whether the build carries it.
+   *
+   * Kept on the configuration rather than recomputed on demand because it is the record of what was
+   * checked at the moment this version was built: which processes were ruled out and why, which
+   * regulatory subjects nobody has verified yet, and which events the workspace had no answer for.
+   * A later version can be compared against it; a recomputed one can only describe today.
+   */
+  coverage?: OperatingCoverage
 }
 
 const field = (id: string, label: string, type: FieldType, extra: Partial<FieldDefinition> = {}): FieldDefinition => ({ id, label, type, ...extra })
@@ -248,7 +259,9 @@ export function generateWorkspaceConfiguration(answers: Answers, blueprint: AIBl
     ...(entities.some(item => item.id === 'tasks') ? [{ id: 'open-tasks', label: 'Open tasks', entityId: 'tasks', operation: 'count' as const, filter: { field: 'status', notEquals: 'Done' }, roles: ['owner', 'admin', 'manager', 'employee'] as WorkspaceRoleId[], format: 'number' as const }] : []),
     ...(entities.some(item => item.id === 'project-costs') ? [{ id: 'project-costs', label: 'Project costs', entityId: 'project-costs', operation: 'sum' as const, field: 'amount', roles: ['owner', 'admin', 'manager', 'accountant'] as WorkspaceRoleId[], format: 'currency' as const }] : []),
   ]
-  return refreshWorkspaceIntelligence({ version: 1, id: crypto.randomUUID(), profile, modules, entities, views, navigation, metrics, workflows: [], roles })
+  const compiled = refreshWorkspaceIntelligence({ version: 1, id: crypto.randomUUID(), profile, modules, entities, views, navigation, metrics, workflows: [], roles })
+  const coverageText = [profile.description, profile.industry, profile.businessModel, profile.productsAndServices, profile.suppliers, ...profile.operatingProcesses].filter(Boolean).join(' ')
+  return { ...compiled, coverage: compileOperatingCoverage(compiled, { text: coverageText, capabilityIds: compiled.capabilities ?? [] }) }
 }
 
 export function isWorkspaceConfiguration(value: unknown): value is WorkspaceConfiguration {
@@ -351,6 +364,69 @@ function customEntity(name: string, module: string, purpose: string, architectur
   push(field('notes', 'Notes', 'long-text'))
   const singular = name.replace(/s$/i, '') || name
   return { id, label: singular, pluralLabel: name, module, primaryField, fields }
+}
+
+/**
+ * The states the architect said this company's records move through, applied over the guessed ones.
+ *
+ * Statuses used to be chosen by matching a record's *name* against patterns: anything with "job" in
+ * it got Planned, Assigned, In progress, Completed, whoever described it and whatever they called
+ * the middle of it. Every board, filter, alert and workflow in a workspace is built from these, so
+ * that guess decided how a company saw its own work — a bakery's order sitting in "Assigned" when
+ * everyone there calls it "proving".
+ *
+ * Applied last, over catalog records as well as architected ones, because a capability's invoice
+ * arrives with Draft/Sent/Paid/Overdue and this company may bill in four different steps of its own.
+ */
+function applyLifecycles(entities: EntityDefinition[], lifecycles: ArchitectureLifecycle[] = []): EntityDefinition[] {
+  if (!lifecycles.length) return entities
+  const claimed = new Set<string>()
+  const assignments = new Map<string, string[]>()
+  for (const lifecycle of lifecycles) {
+    const entity = matchEntity(entities, lifecycle.entity)
+    if (!entity || claimed.has(entity.id)) continue
+    claimed.add(entity.id)
+    assignments.set(entity.id, lifecycle.states)
+  }
+  return entities.map(entity => {
+    const states = assignments.get(entity.id)
+    if (!states) return entity
+    const existing = entity.fields.find(item => item.id === 'status')
+    if (existing) return { ...entity, fields: entity.fields.map(item => item.id === 'status' ? { ...item, type: 'select' as FieldType, options: states } : item) }
+    return { ...entity, fields: [...entity.fields, statuses(...states)] }
+  })
+}
+
+/**
+ * The things the architect said go wrong, turned into the alerts that say they have.
+ *
+ * A process that had to name its exceptions is the only place in the whole pipeline that knows what
+ * failure looks like in this particular trade — "the cold store goes above five degrees", "the
+ * container is held at the port". Without this they were prose in a proposal nobody reads twice;
+ * here each one becomes a workflow that fires when the record it belongs to reaches the state the
+ * exception names, or on any change to that record when it names no state.
+ */
+function exceptionWorkflows(processes: ArchitectureProcess[] = [], entities: EntityDefinition[], existing: WorkflowDefinition[]): WorkflowDefinition[] {
+  const created: WorkflowDefinition[] = []
+  for (const item of processes) {
+    const entity = (item.entity ? matchEntity(entities, item.entity) : undefined) ?? matchEntity(entities, item.name)
+    if (!entity) continue
+    for (const exception of item.exceptions ?? []) {
+      const id = `exception-${slug(item.name)}-${slug(exception)}`.slice(0, 60)
+      if (existing.some(candidate => candidate.id === id) || created.some(candidate => candidate.id === id)) continue
+      const options = entity.fields.find(field => field.id === 'status')?.options ?? []
+      const state = options.find(option => exception.toLowerCase().includes(option.toLowerCase()))
+      created.push({
+        id,
+        name: exception,
+        enabled: true,
+        trigger: { entityId: entity.id, event: 'updated', ...(state ? { field: 'status', equals: state } : {}) },
+        action: { type: 'notify', message: exception },
+      })
+      if (created.length >= 12) return created
+    }
+  }
+  return created
 }
 
 function matchEntity(entities: EntityDefinition[], text: string) {
@@ -498,6 +574,7 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   ].join(' ')
   entities = enrichEntityFieldsFromKnowledge(entities, knowledgeText, capabilityPlan.selected.map(item => item.id))
   entities = connectOperationalEntities(entities)
+  entities = applyLifecycles(entities, architecture.lifecycles)
   const views: ViewDefinition[] = entities.map(entity => {
     const preferred = catalogEntityMetadata.get(entity.id)
     const type = preferred?.view ?? (entity.fields.some(item => item.id === 'status') && /project|task|job|deal|lead|order|booking|campaign|production|ticket/i.test(entity.id) ? 'kanban' : 'table')
@@ -617,6 +694,9 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
     const id = `${slug(name)}-${index + 1}`
     if (!workflows.some(item => item.id === id || item.name.toLowerCase() === name.toLowerCase())) workflows.push({ id, name, enabled: true, trigger: { entityId: entity.id, event: 'updated', ...(desiredStatus ? { field: 'status', equals: desiredStatus } : {}) }, action: { type: 'notify', message: name } })
   })
+  // Only against records somebody can open: an alert about a table with no page is a notification
+  // whose "go and look" leads nowhere.
+  workflows.push(...exceptionWorkflows(architecture.processes, entities.filter(item => navigableEntityIds.has(item.id)), workflows))
 
   /**
    * What was built, rather than what was considered.
@@ -634,5 +714,18 @@ export function generateWorkspaceConfigurationFromDiscovery(answers: Answers, bl
   const kpis = generateKpiDefinitions({ capabilityIds: capabilities, entities, metrics, goals: businessState.goals })
   const config: WorkspaceConfiguration = { version: 1, id: crypto.randomUUID(), profile, modules, capabilities, capabilityPlan: { packId: capabilityPlan.pack?.id ?? 'custom', excluded: capabilityPlan.excluded, reasons: capabilityPlan.reasons }, entities, views, navigation, metrics, kpis, workflows, roles, connections, industrySubsector: industry?.subsector, industryLabel: industry?.subsectorTitle }
   config.businessModel = createBusinessModelV2({ config, state: businessState, architecture, research: capabilityPlan.research })
-  return refreshWorkspaceIntelligence(config)
+  /**
+   * The completeness check, run on the finished workspace rather than on the plan.
+   *
+   * It has to be last. Half of what it looks for — whether anything reacts when a record goes wrong,
+   * whether the impact of a late delivery reaches a number somebody watches — only exists after the
+   * workflows, metrics, KPIs and agents are compiled, and a check run before that would report gaps
+   * the next line of this function closes.
+   */
+  const compiled = refreshWorkspaceIntelligence(config)
+  const coverageText = [profile.description, businessState.companySummary, knowledgeText, architecture.summary, architecture.explanation].filter(Boolean).join(' ')
+  // The architect's own conclusion about what kind of company this is leads, because it read the
+  // whole interview; detection fills in the operating models it did not think to name.
+  const archetypes = mergeArchetypes(archetypesFromLabels(architecture.archetypes ?? []), detectArchetypes(coverageText, capabilities))
+  return { ...compiled, coverage: compileOperatingCoverage(compiled, { text: coverageText, capabilityIds: capabilities, archetypes, unknowns: architecture.unknowns }) }
 }

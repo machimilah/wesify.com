@@ -10,7 +10,15 @@ export function classifyWorkspaceIntent(command: string): CommandIntent {
   const normalized = command.toLowerCase()
   if (/\b(connect|integrate|sync)\b/.test(normalized)) return 'INTEGRATION_REQUEST'
   if (/\b(whenever|when|remind|alert|automation)\b/.test(normalized)) return 'WORKFLOW_CHANGE'
-  if (/\b(add (?:a )?(?:section|field)|start tracking|keep track|management|remove (?:the )?(?:section|module))\b/.test(normalized)) return 'WORKSPACE_CHANGE'
+  /**
+   * The commands that mean "build me something", in the words people actually use.
+   *
+   * This decides which prompt and which budget the agent gets, so a request that lands on the wrong
+   * side of it is answered by the small one-action path and comes back looking like the assistant
+   * cannot build. "Add equipment management" was recognised; "we've started doing repairs and I need
+   * somewhere to keep them" was not, and it is the same request.
+   */
+  if (/\b(add (?:a )?(?:section|field|page|module|area)|start tracking|keep track|track (?:my|our|the)|management|manage (?:my|our|the)|set up|build (?:me|us|a)|somewhere to (?:keep|put|record|track)|i need (?:a|an|somewhere)|we (?:also|now) (?:do|sell|offer)|remove (?:the )?(?:section|module))\b/.test(normalized)) return 'WORKSPACE_CHANGE'
   if (/\b(report|brief|summary)\b/.test(normalized)) return 'REPORT_REQUEST'
   // "How many clients do we have" is the most ordinary way to ask a counting question, and it used to
   // fall through to general advice because only "how much" was listed.

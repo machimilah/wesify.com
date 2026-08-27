@@ -9,7 +9,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .brand-mark { width: 35px; height: 32px; display: grid; place-items: center; flex: 0 0 35px; }
 .brand-logo { width: 34px; height: 29px; display: block; object-fit: contain; }
 .brand em { font: 600 8px 'Ubuntu', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
-.brand--inverse { color: white; }.brand--inverse .brand-logo, :root[data-theme='dark'] .brand-logo { filter: invert(1); }
+.brand--inverse { color: white; }.brand--inverse .brand-logo { filter: invert(1); }
 
 /* One-prompt home */
 /**
@@ -149,7 +149,6 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 @media (max-width: 1080px) { .bo-bento__card, .bo-bento__card--wide { grid-column: span 6; } }
 
 .bo-bento__card { --bo-card-veil: rgba(255,255,255,.42); --bo-card-frame: rgba(255,255,255,.82); min-height: 520px; border: 0; background: transparent; transition: box-shadow .2s ease; }
-:root[data-theme='dark'] .bo-bento__card { --bo-card-veil: rgba(21,23,21,.76); --bo-card-frame: rgba(28,32,29,.88); }
 .bo-bento__card:hover { box-shadow: 0 26px 60px rgba(25,29,26,.12); }
 .bo-bento__card .border-glow-inner { padding: 34px 34px 0; overflow: hidden; background-color: var(--surface); }
 .bo-bento__card .border-glow-inner::before { position: absolute; z-index: 1; inset: 0; background: var(--bo-card-veil); pointer-events: none; content: ''; }
@@ -339,16 +338,6 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-app-grid .tint-slate > span { color: #454c47; background: #e5e8e3; }
 /* Module tints keep their hue in dark mode, just as a darker wash with a brighter mark — the same
    pastel-chip pattern inverted, rather than swept into the neutral ramp with everything else. */
-:root[data-theme='dark'] .bo-app-grid .tint-sky > span { color: #7ec2e0; background: #1b2c33; }
-:root[data-theme='dark'] .bo-app-grid .tint-indigo > span { color: #a8b3ec; background: #232a42; }
-:root[data-theme='dark'] .bo-app-grid .tint-violet > span { color: #c9a8e8; background: #2c2338; }
-:root[data-theme='dark'] .bo-app-grid .tint-pink > span { color: #ec9dbb; background: #38222c; }
-:root[data-theme='dark'] .bo-app-grid .tint-rose > span { color: #e8a294; background: #362520; }
-:root[data-theme='dark'] .bo-app-grid .tint-amber > span { color: #e0b060; background: #332a16; }
-:root[data-theme='dark'] .bo-app-grid .tint-sand > span { color: #d8b57e; background: #322a1d; }
-:root[data-theme='dark'] .bo-app-grid .tint-stone > span { color: #cfc9bb; background: #2b2823; }
-:root[data-theme='dark'] .bo-app-grid .tint-cyan > span { color: #86c3e2; background: #1a2833; }
-:root[data-theme='dark'] .bo-app-grid .tint-slate > span { color: #b0b8ab; background: #262924; }
 
 @media (max-width: 1180px) { .bo-app-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media (max-width: 980px) { .bo-app-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -576,3 +565,66 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bo-dashboard__sidebar-head .bo-theme-toggle { border-color: var(--border); color: var(--text-2); }
 .bo-dashboard__sidebar-head .bo-theme-toggle:hover { background: var(--surface-hover); }
+
+/* Clerk modal styling for light mode */
+.cl-modal {
+  background: transparent !important;
+}
+
+.cl-modal__box,
+.cl-card,
+.cl_rootBox {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.cl-formButtonPrimary {
+  background: var(--solid-fill) !important;
+}
+
+.cl-input {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.cl-input::placeholder {
+  color: var(--text-3) !important;
+}
+
+.cl-label {
+  color: var(--text) !important;
+}
+
+.cl-formButtonPrimary {
+  background: var(--solid-fill) !important;
+  color: white !important;
+}
+
+.cl-input,
+.cl-text_input {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.cl-input::placeholder,
+.cl-text_input::placeholder {
+  color: var(--text-3) !important;
+}
+
+.cl-label {
+  color: var(--text) !important;
+}
+
+.cl-formFieldHint,
+.cl-formFieldErrorText {
+  color: var(--text-2) !important;
+}
+
+.cl-socialButton {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}

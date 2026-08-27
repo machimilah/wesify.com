@@ -11,6 +11,7 @@ import { durabilityWarnings } from './durability.mjs'
 import { send } from './http.mjs'
 import { clerkConfigured } from './clerk.mjs'
 import { captureError, logRequest, monitoringAvailable, newRequestId, watchProcess } from './observability.mjs'
+import { agentRoutes } from './routes/agent.mjs'
 import { authRoutes } from './routes/auth.mjs'
 import { billingRoutes } from './routes/billing.mjs'
 import { connectionRoutes } from './routes/connections.mjs'
@@ -42,7 +43,7 @@ const host = process.env.BO_HOST || '127.0.0.1'
 const distRoot = path.resolve(process.cwd(), 'dist')
 
 /** Asked in order. The first that does not return `false` has answered the request. */
-const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, connectionRoutes, buildRoutes, automationRoutes, workspaceSetupRoutes, projectRoutes]
+const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, agentRoutes, connectionRoutes, buildRoutes, automationRoutes, workspaceSetupRoutes, projectRoutes]
 
 async function api(request, response, url) {
   /**
