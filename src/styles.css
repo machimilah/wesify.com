@@ -6,8 +6,9 @@ button, textarea, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .38; }
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text); font: 700 19px 'Ubuntu', sans-serif; letter-spacing: 0; }
-.brand-mark { width: 35px; height: 32px; display: grid; place-items: center; flex: 0 0 35px; }
-.brand-logo { width: 34px; height: 29px; display: block; object-fit: contain; }
+.brand-mark { width: 120px; height: 80px; display: grid; place-items: center; flex: 0 0 80px; }
+.brand-logo { width: 120px; height: 80px; display: block; object-fit: contain; }
+.brand-logo--white { filter: invert(1); }
 .brand em { font: 600 8px 'Ubuntu', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
 .brand--inverse { color: white; }.brand--inverse .brand-logo { filter: invert(1); }
 

@@ -1,81 +1,173 @@
 -- =====================================================================================
--- BO — complete Supabase setup
+-- Wesify — complete Supabase setup
 --
 -- Paste the whole file into the Supabase SQL editor (Dashboard → SQL Editor → New query)
--- and run it once. Safe to run again — including if you already ran an earlier version of
--- this file: every statement is idempotent, so re-running it only adds what is missing and
--- never destroys anything.
+-- and run it once. Safe to run again: every statement is idempotent, so re-running only
+-- adds what is missing and never destroys anything.
 --
--- What this creates
---   users              one row per person, keyed by their Clerk user id. Clerk holds the
---                      credential; this is what everything below points at
---   workspaces         a Command Center, owned by one account
---   workspace_members  who may open a workspace, and as what role
---   records            every record a workspace holds — clients, invoices, work orders,
---                      anything an operator creates — as one row per record
---   subscriptions      what plan an account is on, and what Stripe last said about it
---   stripe_events      every webhook already handled, so a retry does not do the work twice
---   rebuilds           one row per rebuild, because rebuilds are what the plans meter
---   industry_knowledge what companies in an industry kept, removed and added — counts only
---   schema_migrations  BO's own migration ledger, so the server does not re-run this
+-- WHAT THIS CREATES
 --
--- What this deliberately does NOT create
---   The generated Command Center itself — the versioned manifest, and the runtime.mjs /
---   service / page files BO writes per build — stays on local disk under
---   generated-projects/. Those are regenerable build output, not data an operator typed
---   in, so losing them costs a rebuild rather than costing anyone their records.
+--   Identity and ownership
+--     users                one row per person, keyed by their Clerk user id
+--     workspaces           a Command Center, owned by exactly one account
 --
--- After running this
---   Put the Session pooler connection string in .env.local as DATABASE_URL, then start
---   the server. It should log "listening on 127.0.0.1:8787 with accounts".
+--   What a workspace is
+--     discovery_sessions   the interview: what was asked, what was answered, how far in
+--     business_profile     what the company is — industry, how it makes money, how it runs
+--     business_dimensions  the lists that profile is made of — locations, products,
+--                          customers, suppliers, departments, regulations
+--     workspace_builds     the generated Command Center, versioned
+--     workspace_settings   what the operator changed by hand afterwards
+--     records              every record typed in — clients, invoices, work orders
+--
+--   What happened
+--     event_history        who did what and when, the AI included
+--
+--   How the business runs
+--     operating_nodes      every step and thing — Customer, Order, Production, Invoice
+--     operating_edges      what follows what, in named flows like order-to-cash
+--
+--   Money (switched off, recording anyway)
+--     subscriptions        what plan an account is on, and what Stripe last said
+--     stripe_events        every webhook already handled, so a retry does no work twice
+--     rebuilds             one row per rebuild, because rebuilds are what plans meter
+--
+--   Platform learning
+--     industry_knowledge   what companies in an industry kept, removed and added — counts
+--                          only, never traceable to the company it was learned from
+--
+--   schema_migrations      Wesify's own ledger, so the server does not re-run this
+--
+-- WHAT THIS DELIBERATELY DOES NOT CREATE
+--
+--   No membership or invite table. A workspace belongs to one account and is visible to
+--   that account alone. Isolation is a column, not a join that somebody can forget.
+--
+--   Not the generated runtime files. The service and page files Wesify writes per build stay
+--   on local disk under generated-projects/ — regenerable output, not anything a person
+--   typed, so losing them costs a rebuild rather than costing anyone their records.
+--
+-- AFTER RUNNING THIS
+--   Put the Session pooler connection string in .env.local as DATABASE_URL, then start the
+--   server. It should log "listening on 127.0.0.1:8787 with accounts".
 -- =====================================================================================
 
 
 -- -------------------------------------------------------------------------------------
 -- 1. Tables
 --
--- Ids are `text`, not `uuid`: BO generates them in JavaScript with crypto.randomUUID(),
--- and workspace ids in particular were already being minted by the browser before there
--- was a database at all. Keeping them text means existing workspaces keep working.
+-- Ids are `text`, not `uuid`. Wesify mints them in JavaScript with crypto.randomUUID(), and
+-- a workspace id in particular is minted by the browser before there is any database in
+-- the picture at all.
 -- -------------------------------------------------------------------------------------
 
--- The id is the Clerk user id. Wesify stores no credential of any kind: Clerk authenticates
--- people, and this row exists so that a workspace, a membership and a subscription have
--- something stable to belong to. The email is a display detail, nullable because Clerk can
--- produce an account before it produces an address, and deliberately not unique — Clerk
--- decides who is who, and a second check here could only ever disagree with it.
+-- Keyed by the Clerk user id. Wesify stores no credential of any kind: Clerk authenticates
+-- people, and this row exists so a workspace, a subscription and an event have something
+-- stable to belong to. The address is nullable because Clerk can produce an account before
+-- it produces an address, and deliberately not unique — Clerk decides who is who, and a
+-- second check here could only ever disagree with it.
 create table if not exists users (
   id         text primary key,
   email      text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
+-- `owner_id` is nullable: Wesify's promise is that you describe a company and watch it get
+-- built before signing up for anything, so a workspace exists before it belongs to anyone.
+-- Signing in claims it.
+--
+-- `deleted_at` is a tombstone. The row survives its own deletion so the id can never be
+-- claimed a second time by a stale tab or a retry, which is how deleted workspaces used to
+-- come back from the dead, empty, in somebody's list.
 create table if not exists workspaces (
   id         text primary key,
-  -- Nullable: BO's promise is that you describe a company and get a workspace before signing
-  -- up for anything, so a workspace has to be able to exist before it belongs to anybody.
-  -- Signing in claims it and fills this in.
   owner_id   text references users(id) on delete cascade,
   name       text not null default '',
-  created_at timestamptz not null default now()
+  logo       text not null default '',
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
 
--- Membership is separate from ownership from the start. One row per person today; the
--- table is what lets a second person be added later without moving any data.
-create table if not exists workspace_members (
-  workspace_id text not null references workspaces(id) on delete cascade,
-  user_id      text not null references users(id) on delete cascade,
-  role         text not null default 'owner',
+create index if not exists workspaces_owner_idx on workspaces (owner_id, created_at desc) where deleted_at is null;
+
+-- No foreign key to workspaces, deliberately: the interview is what produces a workspace
+-- and begins before anybody has signed in, so it must be able to exist for a workspace no
+-- account owns yet.
+create table if not exists discovery_sessions (
+  workspace_id text        primary key,
+  session      jsonb       not null,
   created_at   timestamptz not null default now(),
-  primary key (workspace_id, user_id)
+  updated_at   timestamptz not null default now()
 );
 
--- One generic table rather than one table per entity type, because an entity's shape —
--- its fields — is decided by BO's AI architect per workspace at build time, not known in
--- advance. BO already treats a record as an opaque JSON object everywhere except where it
--- checks required fields against the entity definition, so a jsonb payload keeps that
--- contract instead of fighting it with per-workspace dynamic DDL. `_notifications` is
--- stored the same way, as entity_id = '_notifications'.
+-- What the company is. The named columns are the questions asked often enough to deserve
+-- being queryable; `detail` keeps the model's full state so nothing the interview learned
+-- is lost to a column list decided today.
+create table if not exists business_profile (
+  workspace_id    text        primary key,
+  industry        text        not null default '',
+  subsector       text        not null default '',
+  summary         text        not null default '',
+  revenue_model   text        not null default '',
+  operating_model text        not null default '',
+  currency        text        not null default '',
+  detail          jsonb       not null default '{}'::jsonb,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index if not exists business_profile_subsector_idx on business_profile (subsector);
+
+-- The lists a profile is made of, one row each, so they can be counted and corrected
+-- individually instead of buried in a blob.
+--
+-- Note what `customer` and `supplier` mean here: what the company says about who it sells
+-- to and buys from — "independent grocers in Madrid" — which is what shapes the build. The
+-- actual customer rows an operator types in live in `records`.
+create table if not exists business_dimensions (
+  workspace_id text        not null,
+  dimension    text        not null,
+  id           text        not null,
+  label        text        not null default '',
+  detail       jsonb       not null default '{}'::jsonb,
+  source       text        not null default 'ai',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, dimension, id),
+  constraint business_dimensions_dimension_check check (dimension in (
+    'location', 'product', 'service', 'customer', 'supplier',
+    'department', 'regulation', 'channel', 'tool', 'goal', 'risk'
+  )),
+  constraint business_dimensions_source_check check (source in ('user', 'ai', 'interview', 'connector', 'system'))
+);
+
+-- Versioned rather than replaced: records are written against the shape that existed when
+-- they were created, so a rebuild that overwrote the only copy would leave every existing
+-- record described by a schema it never matched.
+create table if not exists workspace_builds (
+  workspace_id text        not null,
+  version      integer     not null,
+  manifest     jsonb       not null,
+  created_at   timestamptz not null default now(),
+  primary key (workspace_id, version)
+);
+
+create index if not exists workspace_builds_latest_idx on workspace_builds (workspace_id, version desc);
+
+-- Kept apart from the manifest so a rebuild, which replaces the manifest wholesale, cannot
+-- take the operator's own preferences with it.
+create table if not exists workspace_settings (
+  workspace_id text        not null,
+  key          text        not null,
+  value        jsonb       not null,
+  updated_at   timestamptz not null default now(),
+  updated_by   text        references users(id) on delete set null,
+  primary key (workspace_id, key)
+);
+
+-- One generic table rather than one per entity, because an entity's shape is decided per
+-- workspace by the architect at build time — arbitrary fields no schema can know ahead.
 create table if not exists records (
   workspace_id text        not null references workspaces(id) on delete cascade,
   entity_id    text        not null,
@@ -86,10 +178,76 @@ create table if not exists records (
   primary key (workspace_id, entity_id, id)
 );
 
--- Billing. One row per account, not per workspace: a plan is something a person buys,
--- and pinning it to a workspace means an operator with two has two half-answers to
--- "what am I paying for". No prices or entitlements here — those live in server/billing.mjs,
--- because they change with product decisions rather than with data.
+-- Who did what, when — the AI included, which is what `actor_type` exists to separate. An
+-- operator who cannot tell their own edit from the system's has no way to trust either.
+create table if not exists event_history (
+  id           text        primary key,
+  workspace_id text,
+  user_id      text        references users(id) on delete set null,
+  actor_type   text        not null default 'system',
+  actor_id     text,
+  action       text        not null,
+  subject_type text        not null default '',
+  subject_id   text        not null default '',
+  summary      text        not null default '',
+  detail       jsonb       not null default '{}'::jsonb,
+  occurred_at  timestamptz not null default now(),
+  constraint event_history_actor_check check (actor_type in ('user', 'ai', 'system', 'connector'))
+);
+
+create index if not exists event_history_workspace_idx on event_history (workspace_id, occurred_at desc);
+create index if not exists event_history_user_idx on event_history (user_id, occurred_at desc);
+create index if not exists event_history_action_idx on event_history (workspace_id, action, occurred_at desc);
+
+-- Every step and thing in the business. `entity_id` is the thread back to `records`: a node
+-- called "Invoice" says this business issues invoices; the invoices are rows over there.
+create table if not exists operating_nodes (
+  workspace_id text        not null,
+  id           text        not null,
+  kind         text        not null default 'process',
+  label        text        not null default '',
+  entity_id    text,
+  module       text        not null default '',
+  position     jsonb       not null default '{}'::jsonb,
+  detail       jsonb       not null default '{}'::jsonb,
+  source       text        not null default 'ai',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, id),
+  constraint operating_nodes_kind_check check (kind in ('entity', 'process', 'actor', 'event', 'system')),
+  constraint operating_nodes_source_check check (source in ('user', 'ai', 'interview', 'connector', 'system'))
+);
+
+create index if not exists operating_nodes_entity_idx on operating_nodes (workspace_id, entity_id);
+
+-- What follows what. The composite foreign keys are the point: an edge cannot name a step
+-- that does not exist, and cannot reach into another company's graph.
+create table if not exists operating_edges (
+  workspace_id text        not null,
+  id           text        not null,
+  from_node    text        not null,
+  to_node      text        not null,
+  relation     text        not null default 'flows-to',
+  label        text        not null default '',
+  flow         text        not null default '',
+  sequence     integer     not null default 0,
+  detail       jsonb       not null default '{}'::jsonb,
+  source       text        not null default 'ai',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, id),
+  constraint operating_edges_from_fk foreign key (workspace_id, from_node) references operating_nodes (workspace_id, id) on delete cascade,
+  constraint operating_edges_to_fk foreign key (workspace_id, to_node) references operating_nodes (workspace_id, id) on delete cascade,
+  constraint operating_edges_relation_check check (relation in ('flows-to', 'triggers', 'produces', 'requires', 'owns', 'references')),
+  constraint operating_edges_source_check check (source in ('user', 'ai', 'interview', 'connector', 'system'))
+);
+
+create index if not exists operating_edges_from_idx on operating_edges (workspace_id, from_node);
+create index if not exists operating_edges_to_idx on operating_edges (workspace_id, to_node);
+create index if not exists operating_edges_flow_idx on operating_edges (workspace_id, flow, sequence);
+
+-- Billing is switched off. These tables exist now because the day it is switched on is the
+-- day Wesify needs to already know who has been using it and how much.
 create table if not exists subscriptions (
   user_id                text primary key references users(id) on delete cascade,
   plan                   text        not null default 'free',
@@ -101,18 +259,16 @@ create table if not exists subscriptions (
   updated_at             timestamptz not null default now()
 );
 
--- Every webhook Stripe has delivered, by its own id. Stripe promises at-least-once
--- delivery, not exactly-once: a retry after a timeout is normal, and the same event
--- arriving twice must not do the work twice.
+create index if not exists subscriptions_stripe_customer_idx on subscriptions (stripe_customer_id);
+
+-- Stripe promises at-least-once delivery, not exactly-once. Recording the id first and
+-- refusing duplicates is what makes the webhook handler idempotent.
 create table if not exists stripe_events (
   id          text primary key,
   type        text        not null,
   received_at timestamptz not null default now()
 );
 
--- One row per rebuild, because rebuilds are the metered thing. The build history on local
--- disk would have answered this, but a redeploy is free to lose it, and a quota that resets
--- when the container restarts is not a quota.
 create table if not exists rebuilds (
   id           text        primary key,
   user_id      text        not null references users(id) on delete cascade,
@@ -120,48 +276,22 @@ create table if not exists rebuilds (
   created_at   timestamptz not null default now()
 );
 
--- What BO has learned about each industry: what real companies kept, removed and added
--- after being handed a workspace. It is the only thing BO owns that cannot be copied by
--- reading the product, and it was sitting in JSON files on the same local disk a redeploy
--- wipes. One row per NAICS subsector; only aggregate counts, never who did what.
+create index if not exists rebuilds_user_month_idx on rebuilds (user_id, created_at);
+
+-- Not scoped to a workspace, and that is the design. Counts and Wesify's own capability ids
+-- and nothing else — no company names, nothing traceable to the business it was learned
+-- from. It is what makes the tenth plumbing company's first build better than the first
+-- one's, without any of them being able to see each other.
 create table if not exists industry_knowledge (
   subsector  text        primary key,
   label      text        not null default '',
   companies  integer     not null default 0,
   observed   jsonb       not null default '{}'::jsonb,
-  patterns   jsonb       not null default '{}'::jsonb,
   researched jsonb,
+  patterns   jsonb       not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
 
-
--- The interview that produced the workspace. It is what BO re-reads to explain a decision,
--- what a returning operator continues from mid-question, and what the opening records in a
--- new workspace are written from. No foreign key to workspaces on purpose: the interview is
--- what produces a workspace, and it starts before anyone has signed in.
-create table if not exists discovery_sessions (
-  workspace_id text        primary key,
-  session      jsonb       not null,
-  updated_at   timestamptz not null default now()
-);
-
--- What a Command Center is: its entities, their fields, its pages. This lived only in
--- project.json on local disk, with a copy cached in the browser — which is why nobody
--- noticed that a redeploy could leave every record intact in Postgres while the description
--- of what those records meant was gone.
-create table if not exists workspace_builds (
-  workspace_id text        not null,
-  version      integer     not null,
-  manifest     jsonb       not null,
-  created_at   timestamptz not null default now(),
-  primary key (workspace_id, version)
-);
-
-create index if not exists workspace_builds_workspace_idx on workspace_builds (workspace_id, version desc);
-
--- BO's migration ledger. The server creates this itself on first start, but creating it
--- here lets the last section record every migration as already applied, so the server does
--- not try to redo work you have just done by hand.
 create table if not exists schema_migrations (
   name       text primary key,
   applied_at timestamptz not null default now()
@@ -169,144 +299,114 @@ create table if not exists schema_migrations (
 
 
 -- -------------------------------------------------------------------------------------
--- 2. Indexes
+-- 2. Lock the Supabase API out entirely
 --
--- Every one of these backs a query BO actually runs. Foreign keys do not create indexes
--- in Postgres, so without them a cascade delete or a lookup by parent is a table scan.
+-- Every one of these tables is reached only by Wesify's own server, over the DATABASE_URL
+-- connection, as the owning role. Nothing in the browser talks to Supabase directly.
+--
+-- So the safe configuration is the strictest one available: row level security ON with no
+-- policy at all. RLS with zero policies matches zero rows, for everybody it applies to.
+-- There is no policy to get wrong, no JWT claim to line up with Clerk, and no clever
+-- predicate that quietly stops being correct when a column is renamed.
+--
+-- The owning role bypasses RLS, which is why the server keeps working. `force row level
+-- security` is deliberately NOT set — setting it would lock out the server too.
+--
+-- This is the backstop, not the isolation. A person sees only their own workspace because
+-- every query in the server is scoped to `owner_id`. This is what stands behind that if a
+-- key ever leaks or somebody points the REST API at the project.
 -- -------------------------------------------------------------------------------------
 
--- Listing the workspaces an account owns.
-create index if not exists workspaces_owner_id_idx on workspaces (owner_id);
+alter table users               enable row level security;
+alter table workspaces          enable row level security;
+alter table discovery_sessions  enable row level security;
+alter table business_profile    enable row level security;
+alter table business_dimensions enable row level security;
+alter table workspace_builds    enable row level security;
+alter table workspace_settings  enable row level security;
+alter table records             enable row level security;
+alter table event_history       enable row level security;
+alter table operating_nodes     enable row level security;
+alter table operating_edges     enable row level security;
+alter table subscriptions       enable row level security;
+alter table stripe_events       enable row level security;
+alter table rebuilds            enable row level security;
+alter table industry_knowledge  enable row level security;
+alter table schema_migrations   enable row level security;
 
--- The primary key above leads with workspace_id, so it cannot answer "which workspaces
--- does this person belong to" — which is exactly what /api/auth/me asks on every page
--- load for a signed-in operator.
-create index if not exists workspace_members_user_id_idx on workspace_members (user_id);
-
--- records needs no extra index: every query BO makes is "every record of this entity in
--- this workspace" or "every record in this workspace", and the primary key above already
--- leads with (workspace_id, entity_id) — exactly what both access patterns filter on.
-
--- Finding the account a Stripe webhook is about: its events name the customer, not BO's id.
-create index if not exists subscriptions_stripe_customer_id_idx on subscriptions (stripe_customer_id);
-
--- The only question ever asked of rebuilds: how many has this account used this month.
-create index if not exists rebuilds_user_id_created_at_idx on rebuilds (user_id, created_at);
-
-
--- -------------------------------------------------------------------------------------
--- 3. Keep these tables off the public API
+-- Belt as well as braces: revoke the API roles' table privileges outright, so the tables
+-- are not merely empty to the API but invisible to it.
 --
--- This section is the one that matters most on Supabase specifically, and it is easy to
--- miss. Supabase exposes the `public` schema through PostgREST, and its default
--- privileges grant every new table in that schema to the `anon` and `authenticated`
--- roles. `anon` is reachable by anyone holding the publishable key — which is public by
--- design and ships in the browser bundle.
---
--- So without this section, a stranger could read every row of `users` (who has an account)
--- and `records` (every client and invoice every workspace holds) over HTTP. BO never uses
--- PostgREST: it connects straight to Postgres as the table owner, and RLS does not apply
--- to the owner, so locking these down costs the application nothing.
---
--- Two independent locks, because either one alone can be undone by accident later:
---   RLS with no policies  → the API can see the table but never any rows
---   REVOKE                → the API cannot see the table at all
--- -------------------------------------------------------------------------------------
-
-alter table users             enable row level security;
-alter table workspaces        enable row level security;
-alter table workspace_members enable row level security;
-alter table records           enable row level security;
-alter table subscriptions     enable row level security;
-alter table stripe_events     enable row level security;
-alter table rebuilds          enable row level security;
-alter table industry_knowledge enable row level security;
-alter table discovery_sessions enable row level security;
-alter table workspace_builds  enable row level security;
-alter table schema_migrations enable row level security;
-
--- Note: no CREATE POLICY statements anywhere in this file. That is deliberate, not an
--- omission — with RLS on and no policy, the API roles match zero rows, which is what we
--- want. Adding a permissive policy here would undo the protection above.
-
--- Guarded on the roles existing. `anon` and `authenticated` are created by Supabase, so
--- on a Supabase project this always runs. Elsewhere — a local Postgres, a plain managed
--- instance — a bare REVOKE would abort the script and leave the tables above created but
--- unprotected, which is the one outcome worth engineering against.
+-- Guarded on the roles existing. `anon` and `authenticated` are created by Supabase, so on
+-- a Supabase project this always runs. On a plain Postgres a bare REVOKE would abort the
+-- script and leave every table above created but unprotected, which is the one outcome
+-- genuinely worth engineering against.
 do $$
+declare
+  guarded text;
 begin
   if to_regrole('anon') is null or to_regrole('authenticated') is null then
-    raise notice 'Supabase API roles (anon, authenticated) not found: this is not a Supabase project, so there are no API grants to revoke. Tables are created and RLS is enabled.';
+    raise notice 'Supabase API roles (anon, authenticated) not found: not a Supabase project, so there are no API grants to revoke. Tables are created and RLS is enabled.';
     return;
   end if;
 
-  execute 'revoke all on table users             from anon, authenticated';
-  execute 'revoke all on table workspaces        from anon, authenticated';
-  execute 'revoke all on table workspace_members from anon, authenticated';
-  execute 'revoke all on table records           from anon, authenticated';
-  execute 'revoke all on table subscriptions     from anon, authenticated';
-  execute 'revoke all on table stripe_events     from anon, authenticated';
-  execute 'revoke all on table rebuilds          from anon, authenticated';
-  execute 'revoke all on table industry_knowledge from anon, authenticated';
-  execute 'revoke all on table discovery_sessions from anon, authenticated';
-  execute 'revoke all on table workspace_builds  from anon, authenticated';
-  execute 'revoke all on table schema_migrations from anon, authenticated';
+  foreach guarded in array array[
+    'users', 'workspaces', 'discovery_sessions', 'business_profile', 'business_dimensions',
+    'workspace_builds', 'workspace_settings', 'records', 'event_history',
+    'operating_nodes', 'operating_edges', 'subscriptions', 'stripe_events', 'rebuilds',
+    'industry_knowledge', 'schema_migrations'
+  ] loop
+    execute format('revoke all on table public.%I from anon, authenticated', guarded);
+  end loop;
 
-  -- The same protection for tables a future BO migration creates, so 003 and beyond are
-  -- not silently published the moment they are added.
-  -- To undo for a table you genuinely want public:
-  --   grant select on table <name> to anon;  -- plus a suitable RLS policy
+  -- The same protection for tables a future migration adds, so table seventeen is not
+  -- silently published the moment it is created.
   execute 'alter default privileges in schema public revoke all on tables from anon, authenticated';
 end
 $$;
 
--- `service_role` is intentionally left alone. It bypasses RLS by design, is a secret that
--- must never reach a browser, and some Supabase dashboard features rely on it.
+-- `service_role` is left alone on purpose. It bypasses RLS by design, it is a secret that
+-- must never reach a browser, and parts of the Supabase dashboard rely on it.
 
 
 -- -------------------------------------------------------------------------------------
--- 4. Record every migration as applied
+-- 3. Record every migration as applied
 --
--- BO runs pending migrations from server/migrations/ on start, tracked by filename. This
--- file does the same work as every file in server/migrations/, so recording them all
--- prevents a duplicate run. ON CONFLICT keeps this file safe to run twice.
+-- The server runs pending migrations from server/migrations/ on start, tracked by filename.
+-- This file does the same work, so recording them all prevents a duplicate run. ON CONFLICT
+-- keeps this file safe to run twice.
 -- -------------------------------------------------------------------------------------
 
 insert into schema_migrations (name)
-values ('001_accounts.sql'), ('002_records.sql'), ('003_password_resets.sql'),
-       ('004_billing.sql'), ('005_industry_knowledge.sql'), ('006_interview_and_builds.sql'),
-       ('007_platform_patterns.sql'), ('008_clerk_identities.sql')
+values ('001_identity_and_workspaces.sql'),
+       ('002_workspace_configuration.sql'),
+       ('003_billing.sql'),
+       ('004_event_history.sql'),
+       ('005_operating_graph.sql'),
+       ('006_industry_knowledge.sql')
 on conflict (name) do nothing;
 
 
 -- -------------------------------------------------------------------------------------
--- 5. Verify
+-- 4. Verify
 --
--- Expect exactly nine rows, and on every one of them:
+-- Expect sixteen rows, and on every one of them:
 --   rls_enabled     = true    row level security is on
 --   policy_count    = 0       no policy, so the API matches no rows
 --   anon_can_select = false   the API cannot read the table at all
 --
--- Anything else means a step above did not take effect — most likely the DO block found
--- no anon role, which on a real Supabase project should never happen.
+-- Anything else means a step above did not take effect — most likely the DO block found no
+-- anon role, which on a real Supabase project should never happen.
 -- -------------------------------------------------------------------------------------
 
 select
   c.relname        as table_name,
   c.relrowsecurity as rls_enabled,
   (select count(*) from pg_policies p
-    where p.schemaname = 'public'
-      and p.tablename = c.relname) as policy_count,
-  case
-    when to_regrole('anon') is null then null
-    else has_table_privilege('anon', c.oid, 'SELECT')
-  end as anon_can_select
+    where p.schemaname = 'public' and p.tablename = c.relname) as policy_count,
+  case when to_regrole('anon') is null then null
+       else has_table_privilege('anon', c.oid, 'SELECT') end as anon_can_select
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'public'
-  and c.relkind = 'r'
-  and c.relname in ('users', 'workspaces', 'workspace_members', 'records',
-                    'subscriptions', 'stripe_events', 'rebuilds',
-                    'industry_knowledge', 'discovery_sessions', 'workspace_builds',
-                    'schema_migrations')
+where n.nspname = 'public' and c.relkind = 'r'
 order by c.relname;

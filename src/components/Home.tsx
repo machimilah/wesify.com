@@ -69,22 +69,13 @@ const howItWorksGlow = {
   colors: ['#c084fc', '#f472b6', '#38bdf8'],
 }
 
-export function Home({ initialValue = '', onSubmit, accounts = false, signedIn = false, onSignIn }: {
+export function Home({ initialValue = '', onSubmit }: {
   initialValue?: string
   onSubmit: (brief: string) => void
-  accounts?: boolean
-  signedIn?: boolean
-  onSignIn?: () => void
 }) {
   const [selectedTools, setSelectedTools] = useState(() => loadSelectedTools(initialValue))
 
   useEffect(() => saveSelectedTools(selectedTools), [selectedTools])
-
-  const handleGetStarted = () => {
-    if (typeof window !== 'undefined' && (window as any).Clerk) {
-      (window as any).Clerk.openSignUp({ redirectUrl: '/dashboard' })
-    }
-  }
 
   return <main className="wes-home" data-testid="public-home">
     <div className="wes-home__hero">
@@ -116,11 +107,17 @@ export function Home({ initialValue = '', onSubmit, accounts = false, signedIn =
       <section className="wes-home__content" aria-labelledby="wes-home-title">
         <h1 id="wes-home-title">Build the operating system for your business.</h1>
         <p>Describe how your company works. Wesify turns it into connected CRM, ERP, workflows, finance, people, permissions, and reporting.</p>
-        {accounts && (
-          <button type="button" className="wes-home__get-started-button" onClick={handleGetStarted} data-testid="get-started">
-            Get started for Free
-          </button>
-        )}
+        <div className="wes-prompt-shell wes-prompt-dark">
+          <Suspense fallback={<div className="wes-prompt-shell__loading" aria-busy="true"/>}>
+            <CompanyPrompt
+              initialValue={initialValue}
+              onSubmit={onSubmit}
+              testId="company-brief"
+              selectedTools={selectedTools}
+              onToolsChange={setSelectedTools}
+            />
+          </Suspense>
+        </div>
       </section>
     </div>
 

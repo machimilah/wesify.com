@@ -156,17 +156,16 @@ try {
   assert.ok(Array.isArray(exported.payload.notifications))
   assert.ok(exported.payload.exportedAt)
 
-  //    Authenticated authority comes from the database membership, never from a role header. An
-  //    owner cannot downgrade or elevate themselves by forging that header; a genuinely assigned
-  //    role with no view permission must still be refused.
+  //    Authority comes from owning the row in the database, never from a role header. An owner
+  //    cannot downgrade themselves by forging that header, and another account cannot promote itself
+  //    by forging it either — export is the sharpest test of this, since it hands back everything.
   const forgedViewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { ...auth, 'x-bo-role': 'viewer' } })
   assert.equal(forgedViewerExport.status, 200, 'an authenticated owner role was replaced by a forged role header')
-  const viewerToken = tokenFor('user_viewless')
-  const viewerProfile = await json('/api/auth/me', { headers: { authorization: `Bearer ${viewerToken}` } })
-  assert.equal(viewerProfile.status, 200)
-  await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, 'user_viewless', 'viewer'])
-  const viewerExport = await json(`/api/projects/${workspaceId}/export`, { headers: { authorization: `Bearer ${viewerToken}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' } })
-  assert.equal(viewerExport.status, 403, 'a database-assigned role that cannot view the workspace could still export it')
+  const outsiderToken = tokenFor('user_viewless')
+  const outsiderProfile = await json('/api/auth/me', { headers: { authorization: `Bearer ${outsiderToken}` } })
+  assert.equal(outsiderProfile.status, 200)
+  const outsiderExport = await json(`/api/projects/${workspaceId}/export`, { headers: { authorization: `Bearer ${outsiderToken}`, 'x-bo-workspace-id': workspaceId, 'x-bo-role': 'owner' } })
+  assert.equal(outsiderExport.status, 403, 'an account that owns nothing here exported the whole workspace by claiming to be its owner')
 
   // 9. Deleting the account cascades all the way down: workspace, then every record it held.
   await query('delete from users where id = $1', ['user_owner'])

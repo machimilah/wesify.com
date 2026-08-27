@@ -11,13 +11,15 @@ import './noSpend.mjs'
  * Deleting a workspace really deletes it.
  *
  * The dashboard offers this beside the workspace it names, and an operator who chooses it is owed
- * the whole thing: the records, the membership, the invitations, the interview, every version Wesify
- * built, and the folder on disk. A deletion that leaves any of those behind is worse than none —
- * the workspace disappears from the list while the data it held is still there.
+ * the whole thing: the records, the interview, the business profile and everything it was made of,
+ * the operating graph, the history, every version Wesify built, and the folder on disk. A deletion
+ * that leaves any of those behind is worse than none — the workspace disappears from the list while
+ * the data it held is still there.
  *
- * Two of those are checked especially: `discovery_sessions` and `workspace_builds` carry a workspace
- * id with no foreign key behind them, deliberately (migration 006 says why), so nothing cascades
- * into them and they have to be deleted by name.
+ * Several of those are checked especially. `discovery_sessions`, `workspace_builds` and
+ * `business_profile` carry a workspace id with no foreign key behind them, deliberately — they exist
+ * before a workspace belongs to anybody — so nothing cascades into them and they have to be deleted
+ * by name.
  *
  * The server is imported rather than spawned, so the real routes run against an in-memory Postgres.
  */
@@ -67,13 +69,20 @@ try {
   const ownerToken = tokenFor('user_owner')
   await call('/api/auth/me', { token: ownerToken })
 
-  // A workspace with everything a real one has: a build, a record, an interview, an invitation.
+  // A workspace with everything a real one has: a build, a record, an interview, a business profile,
+  // the dimensions that profile is made of, an operating graph, a setting and a history.
   const built = await call('/api/builds', { method: 'POST', token: ownerToken, workspaceId, body: { workspaceId, specification } })
   assert.equal(built.status, 201, `the workspace did not build: ${await built.text()}`)
   const written = await call(`/api/projects/${workspaceId}/records/customers`, { method: 'POST', token: ownerToken, workspaceId, body: { name: 'Northwind' } })
   assert.equal(written.status, 201, `a record could not be written: ${await written.text()}`)
   await call(`/api/discovery/sessions/${workspaceId}`, { method: 'PUT', token: ownerToken, workspaceId, body: { messages: [] } })
-  await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'colleague@example.com', role: 'employee' } })
+
+  await query('insert into business_profile (workspace_id, industry, revenue_model) values ($1, $2, $3)', [workspaceId, 'Distribution', 'Invoice on delivery'])
+  await query('insert into business_dimensions (workspace_id, dimension, id, label) values ($1, $2, $3, $4)', [workspaceId, 'location', 'madrid', 'Madrid warehouse'])
+  await query('insert into workspace_settings (workspace_id, key, value) values ($1, $2, $3)', [workspaceId, 'theme', JSON.stringify('dark')])
+  await query('insert into operating_nodes (workspace_id, id, kind, label) values ($1, $2, $3, $4), ($1, $5, $3, $6)', [workspaceId, 'order', 'entity', 'Order', 'invoice', 'Invoice'])
+  await query('insert into operating_edges (workspace_id, id, from_node, to_node, flow) values ($1, $2, $3, $4, $5)', [workspaceId, 'order-invoice', 'order', 'invoice', 'order-to-cash'])
+  await query('insert into event_history (id, workspace_id, actor_type, actor_id, action) values ($1, $2, $3, $4, $5)', ['ev-1', workspaceId, 'ai', 'discovery-agent', 'profile.updated'])
 
   assert.equal((await query('select 1 from records where workspace_id = $1', [workspaceId])).rows.length, 1, 'the test wrote no record to delete')
   assert.ok((await query('select 1 from workspace_builds where workspace_id = $1', [workspaceId])).rows.length, 'the test built nothing to delete')
@@ -85,20 +94,22 @@ try {
   const intruder = await call(`/api/projects/${workspaceId}`, { method: 'DELETE', token: strangerToken, workspaceId })
   assert.equal(intruder.status, 403, `a stranger deleted someone else's workspace (${intruder.status})`)
 
-  // 2. Nor can a member who is not the owner, even one Wesify trusts with the workspace itself.
-  const memberToken = tokenFor('user_member')
-  await call('/api/auth/me', { token: memberToken })
-  await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, 'user_member', 'admin'])
-  const administrator = await call(`/api/projects/${workspaceId}`, { method: 'DELETE', token: memberToken, workspaceId })
-  assert.equal(administrator.status, 403, 'an admin deleted a workspace they do not own')
+  // 2. Nor can any other signed-in account, however it describes itself. There is no membership to
+  //    grant, so there is no role short of owner that could ever reach this.
+  const otherToken = tokenFor('user_member')
+  await call('/api/auth/me', { token: otherToken })
+  const otherAccount = await call(`/api/projects/${workspaceId}`, { method: 'DELETE', token: otherToken, workspaceId })
+  assert.equal(otherAccount.status, 403, 'an account that does not own the workspace deleted it')
   assert.equal((await query('select 1 from workspaces where id = $1', [workspaceId])).rows.length, 1, 'a refused deletion still removed the workspace')
 
   // 3. The owner deletes it, and everything it held goes with it.
   const deleted = await call(`/api/projects/${workspaceId}`, { method: 'DELETE', token: ownerToken, workspaceId })
   assert.equal(deleted.status, 200, `the owner could not delete their own workspace: ${await deleted.text()}`)
 
-  for (const [table, column] of [['workspace_members', 'workspace_id'], ['records', 'workspace_id'], ['workspace_invites', 'workspace_id'], ['discovery_sessions', 'workspace_id'], ['workspace_builds', 'workspace_id']]) {
-    const left = await query(`select 1 from ${table} where ${column} = $1`, [workspaceId])
+  // Every table that can hold something belonging to a workspace, named one at a time. A table added
+  // later and forgotten here is a table that quietly keeps a deleted company's data.
+  for (const table of ['records', 'discovery_sessions', 'business_profile', 'business_dimensions', 'workspace_settings', 'workspace_builds', 'operating_nodes', 'operating_edges', 'event_history']) {
+    const left = await query(`select 1 from ${table} where workspace_id = $1`, [workspaceId])
     assert.equal(left.rows.length, 0, `${table} still holds rows for a deleted workspace`)
   }
   assert.equal(await exists(path.join(generatedRoot, workspaceId)), false, 'the deleted workspace still has its files on disk')
@@ -152,7 +163,7 @@ try {
   assert.deepEqual(untouched.workspaces.map(workspace => workspace.id), [survivorId], 'deleting an unclaimed workspace changed what the account owns')
   assert.equal((await query('select 1 from workspaces where id = $1', [localOnlyId])).rows.length, 0, 'deleting an unclaimed workspace created one')
 
-  console.log('Workspace delete test passed: strangers and admins refused, the owner allowed, the records, members, invitations, interview, builds and files all gone with it, and the id refused to every way back in, with no plan limit standing in the way.')
+  console.log('Workspace delete test passed: strangers and other accounts refused, the owner allowed, the records, interview, business profile, dimensions, settings, operating graph, history, builds and files all gone with it, and the id refused to every way back in, with no plan limit standing in the way.')
 } finally {
   await new Promise(resolve => server.close(resolve))
   await rm(generatedRoot, { recursive: true, force: true })

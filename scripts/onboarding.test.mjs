@@ -8,12 +8,12 @@ import { useTestClerk, tokenFor } from './clerkStub.mjs'
 import './noSpend.mjs'
 
 /**
- * Onboarding: the name, the logo and the colleagues, asked before the build.
+ * Onboarding: the name and the logo, asked before the build.
  *
- * The interesting half is not the form — it is that the three answers outlive the browser that gave
- * them. A name and a logo have to reach a second device; an invitation has to reach somebody who
- * does not have an account yet, and turn into a real membership at the moment they sign in. That
- * last one is the whole point of the invites table, and it is what this proves.
+ * The interesting half is not the form — it is that both answers outlive the browser that gave them
+ * and reach a second device belonging to the same person, and only to that person. A workspace has
+ * one owner and no members, so the other half of this file is the proof that nobody else can reach
+ * it and that no route survives which could ever let them.
  */
 
 const port = 8963
@@ -67,61 +67,37 @@ try {
   const huge = await call(`/api/projects/${workspaceId}/setup`, { method: 'PUT', token: ownerToken, workspaceId, body: { logo: `data:image/png;base64,${'A'.repeat(200_000)}` } })
   assert.equal(huge.status, 413, 'an unbounded logo was accepted')
 
-  // 5. A second person in a workspace is what the Business plan sells, so the free plan is refused
-  //    — and refused before anything is recorded.
-  const refused = await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'user_ana@example.com', role: 'manager' } })
-  assert.equal(refused.status, 402, `inviting on the free plan was allowed (${refused.status})`)
-  assert.deepEqual((await (await call(`/api/projects/${workspaceId}/members`, { token: ownerToken, workspaceId })).json()).invites, [])
-
-  await query("insert into subscriptions (user_id, plan, status) values ($1, 'business', 'active')", ['user_owner'])
-
-  // 6. On a plan that allows it, the invitation is recorded against an address — nobody has to have
-  //    an account for this to work, which is the entire difficulty it exists to solve.
-  const invited = await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'User_Ana@Example.com', role: 'manager' } })
-  const invitedBody = await invited.text()
-  assert.equal(invited.status, 201, `inviting failed: ${invitedBody}`)
-  assert.deepEqual(JSON.parse(invitedBody), { email: 'user_ana@example.com', role: 'manager' })
-  assert.equal((await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'not-an-address' } })).status, 400)
-
-  const team = await (await call(`/api/projects/${workspaceId}/members`, { token: ownerToken, workspaceId })).json()
-  assert.equal(team.members.length, 1, 'the owner should be the only member so far')
-  assert.deepEqual(team.invites.map(invite => [invite.email, invite.role]), [['user_ana@example.com', 'manager']])
-
-  // 7. Until she signs in, the invitation buys nothing: an address on a list is not access.
+  /**
+   * 5. Nobody else gets in, and there is no route that could let them.
+   *
+   * This used to be the invitation half of the file: an address was recorded, a colleague signed in,
+   * and the address turned into a membership. A workspace answers to one account now, so what is
+   * worth proving is the opposite — that a second account, however it asks, is refused on reading,
+   * on writing and on the workspace list, and that the surface which used to grant access is gone
+   * rather than merely unused.
+   */
   const anaToken = tokenFor('user_ana')
-  const beforeSignIn = await call(`/api/projects/${workspaceId}/setup`, { token: tokenFor('user_stranger'), workspaceId })
-  assert.equal(beforeSignIn.status, 403, 'a stranger read an invited workspace')
-
-  // 8. Signing in is how an invitation is accepted. No link, no token: the address Clerk verified is
-  //    the proof, and the workspace is simply there when she arrives.
   const ana = await (await call('/api/auth/me', { token: anaToken })).json()
-  assert.equal(ana.workspaces.length, 1, 'an invited colleague did not receive the workspace on sign-in')
-  assert.equal(ana.workspaces[0].id, workspaceId)
-  assert.equal(ana.workspaces[0].role, 'manager')
-  assert.equal(ana.workspaces[0].name, 'Northwind Freight')
+  assert.equal(ana.workspaces.length, 0, 'a second account arrived holding somebody else’s workspace')
 
-  // 9. Redeeming happens once. Signing in again must not re-add her or resurrect the invitation.
-  const anaAgain = await (await call('/api/auth/me', { token: anaToken })).json()
-  assert.equal(anaAgain.workspaces.length, 1)
-  const afterJoin = await (await call(`/api/projects/${workspaceId}/members`, { token: ownerToken, workspaceId })).json()
-  assert.equal(afterJoin.members.length, 2, 'the invited colleague is not a member')
-  assert.deepEqual(afterJoin.invites, [], 'an accepted invitation is still shown as waiting')
+  const anaRead = await call(`/api/projects/${workspaceId}/setup`, { token: anaToken, workspaceId })
+  assert.equal(anaRead.status, 403, 'a second account read the workspace')
+  const anaRename = await call(`/api/projects/${workspaceId}/setup`, { method: 'PUT', token: anaToken, workspaceId, body: { name: 'Ana Freight' } })
+  assert.equal(anaRename.status, 403, 'a second account renamed somebody else’s workspace')
+  assert.equal((await call(`/api/projects/${workspaceId}/setup`, { token: tokenFor('user_stranger'), workspaceId })).status, 403, 'a stranger read the workspace')
 
-  // 10. Somebody already in the workspace cannot be invited into it a second time.
-  assert.equal((await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'user_ana@example.com' } })).status, 409)
+  // The member routes are gone, not merely refusing. An unmatched path falls through to the API's
+  // own not-found rather than answering as though the feature were still there.
+  const goneRoute = await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'user_ana@example.com', role: 'manager' } })
+  assert.equal(goneRoute.status, 404, `the member route still answers (${goneRoute.status}), so a workspace can still be shared`)
 
-  // 11. A member who is not an owner or admin cannot rename the workspace or invite anybody.
-  assert.equal((await call(`/api/projects/${workspaceId}/setup`, { method: 'PUT', token: anaToken, workspaceId, body: { name: 'Ana Freight' } })).status, 403)
-  assert.equal((await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: anaToken, workspaceId, body: { email: 'user_luis@example.com' } })).status, 403)
+  // 6. The name survived all of that, and still belongs to exactly one account.
+  const stillMine = await (await call('/api/auth/me', { token: ownerToken })).json()
+  assert.equal(stillMine.workspaces.length, 1)
+  assert.equal(stillMine.workspaces[0].name, 'Northwind Freight')
+  assert.equal(stillMine.workspaces[0].role, 'owner')
 
-  // 12. An invitation can be withdrawn before it is accepted.
-  await call(`/api/projects/${workspaceId}/members`, { method: 'POST', token: ownerToken, workspaceId, body: { email: 'user_luis@example.com', role: 'employee' } })
-  assert.equal((await call(`/api/projects/${workspaceId}/members/${encodeURIComponent('user_luis@example.com')}`, { method: 'DELETE', token: ownerToken, workspaceId })).status, 200)
-  const withdrawn = await (await call(`/api/projects/${workspaceId}/members`, { token: ownerToken, workspaceId })).json()
-  assert.deepEqual(withdrawn.invites, [], 'a withdrawn invitation is still waiting')
-  assert.equal((await (await call('/api/auth/me', { token: tokenFor('user_luis') })).json()).workspaces.length, 0, 'a withdrawn invitation still let somebody in')
-
-  console.log('onboarding: name, logo and invitations survive the browser that gave them')
+  console.log('onboarding: name and logo survive the browser that gave them, and the workspace answers to one account with no route left that could share it')
 } finally {
   server.close()
 }

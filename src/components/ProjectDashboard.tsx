@@ -110,6 +110,8 @@ const binFlightMs = 640
  */
 const recentsShown = 10
 
+const exampleBrief = 'We are a vertically integrated food manufacturing and commercialization company connecting production in the Americas with the U.S. market. Foodies INC. manufactures the products, while Rossi Foods handles U.S. importation, sales, and customer relationships. Americanation Food Gateway provides strategic oversight and capital allocation across the group.'
+
 export function ProjectDashboard({ account, workspaces, onNavigate, onBuild }: {
   account: Account | null
   workspaces: AccountWorkspace[]
@@ -133,6 +135,8 @@ export function ProjectDashboard({ account, workspaces, onNavigate, onBuild }: {
    * stays on screen until that refresh happens reads as a deletion that did not work.
    */
   const [deleted, setDeleted] = useState<string[]>([])
+  const [briefDraft, setBriefDraft] = useState('')
+  const [promptKey, setPromptKey] = useState(0)
   useEffect(() => saveSelectedTools(selectedTools), [selectedTools])
 
   const projects = useMemo(() => allProjects.filter(project => !deleted.includes(project.id)), [allProjects, deleted])
@@ -277,6 +281,8 @@ export function ProjectDashboard({ account, workspaces, onNavigate, onBuild }: {
         <div className="wes-prompt-shell wes-prompt-dark">
           <Suspense fallback={<div className="wes-prompt-shell__loading" aria-busy="true"/>}>
             <CompanyPrompt
+              key={promptKey}
+              initialValue={briefDraft}
               onSubmit={onBuild}
               testId="dashboard-brief"
               submitTestId="dashboard-start-building"
@@ -287,6 +293,17 @@ export function ProjectDashboard({ account, workspaces, onNavigate, onBuild }: {
             />
           </Suspense>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setBriefDraft(exampleBrief)
+            setPromptKey(k => k + 1)
+          }}
+          className="wes-dashboard__test-button"
+          data-testid="test-it"
+        >
+          Test It
+        </button>
 
       </div>
     </section>

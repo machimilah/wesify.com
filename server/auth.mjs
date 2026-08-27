@@ -27,13 +27,12 @@ export async function claimWorkspace(workspaceId, userId, name = '') {
   if (existing) {
     // A deleted workspace is not an unowned one. Without this the id would be handed straight back
     // to whoever mentioned it next, and the workspace somebody deleted would return from the dead —
-    // empty, but in their list. See migration 010.
+    // empty, but in their list.
     if (existing.deleted_at) throw Object.assign(new Error('That workspace was deleted.'), { status: 410 })
     if (existing.owner_id !== userId) throw Object.assign(new Error('That workspace belongs to someone else.'), { status: 403 })
     return existing
   }
   await query('insert into workspaces (id, owner_id, name) values ($1, $2, $3)', [workspaceId, userId, String(name).slice(0, 120)])
-  await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, userId, 'owner'])
   return { id: workspaceId, owner_id: userId }
 }
 
@@ -43,14 +42,26 @@ export async function workspaceOwner(workspaceId) {
   return row?.owner_id ?? null
 }
 
-/** Whether this person may act on this workspace at all, and as what. */
+/**
+ * Whether this person may act on this workspace at all, and as what.
+ *
+ * One owner, and nobody else. This used to consult a membership table, which meant every access
+ * decision was a join that had to be remembered — and a workspace could accumulate people through a
+ * path that was never quite visible from the row itself. Ownership is now a column on the workspace,
+ * so the question has exactly one answer and no way to be asked incorrectly.
+ *
+ * The shape of the return is unchanged — `{ role }` or null — because that is what every caller
+ * already checks, and the role is always 'owner' for the same reason there is only ever one.
+ */
 export async function membership(workspaceId, userId) {
-  return queryOne('select role from workspace_members where workspace_id = $1 and user_id = $2', [workspaceId, userId])
+  if (!userId) return null
+  const row = await queryOne('select owner_id from workspaces where id = $1 and deleted_at is null', [workspaceId])
+  return row && row.owner_id === userId ? { role: 'owner' } : null
 }
 
 export async function workspacesFor(userId) {
   const result = await query(
-    'select w.id, w.name, w.logo, case when w.owner_id = $1 then \'owner\' else \'member\' end as role, w.created_at from workspaces w where w.owner_id = $1 and w.deleted_at is null order by w.created_at desc',
+    "select id, name, logo, 'owner' as role, created_at from workspaces where owner_id = $1 and deleted_at is null order by created_at desc",
     [userId],
   )
   return result.rows

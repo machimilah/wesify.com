@@ -1,5 +1,4 @@
 import { sessionUser, workspacesFor } from '../auth.mjs'
-import { redeemInvites } from '../workspaceSetup.mjs'
 import { clerkConfigured } from '../clerk.mjs'
 import { databaseAvailable } from '../db.mjs'
 import { bearer, send } from '../http.mjs'
@@ -23,10 +22,8 @@ export async function authRoutes(request, response, segments) {
   if (request.method === 'GET' && segments[2] === 'me') {
     const user = await sessionUser(bearer(request))
     if (!user) return send(response, 401, { error: 'Not signed in.' })
-    // An invitation is accepted by signing in, and this is the first thing every signed-in page asks
-    // — so a colleague who was invited by address finds the workspace already in the list below,
-    // with no link to click. Redeeming is idempotent and never throws; see workspaceSetup.mjs.
-    await redeemInvites(user.id, user.email)
+    // Only ever this person's own workspaces. `workspacesFor` asks for the ones they own, which is
+    // the whole of what they may see: a workspace has one owner and no other members.
     return send(response, 200, { user, workspaces: await workspacesFor(user.id) })
   }
 

@@ -22,14 +22,18 @@ useDatabase(new Pool())
 useTestClerk()
 
 const ran = await migrate()
-assert.ok(ran.includes('001_accounts.sql'), `the accounts migration did not run: ${ran.join(', ')}`)
-assert.ok(ran.includes('008_clerk_identities.sql'), 'the Clerk migration did not run')
+assert.ok(ran.includes('001_identity_and_workspaces.sql'), `the identity migration did not run: ${ran.join(', ')}`)
 assert.deepEqual(await migrate(), [], 'migrations must not run twice')
 
-// 1. The tables that held credentials are gone, so there is nothing left to leak.
+// 1. Nothing here holds a credential, and nothing here holds a second person.
+//
+// The credential tables went when Clerk took over authentication; the membership and invite tables
+// went when a workspace became answerable to exactly one account. Both are asserted rather than
+// assumed, because either one reappearing is a way for a workspace to become visible to somebody it
+// does not belong to.
 const tables = await query("select table_name from information_schema.tables where table_schema = 'public'")
-for (const table of ['sessions', 'password_resets']) {
-  assert.equal(tables.rows.some(row => row.table_name === table), false, `${table} survived the move to Clerk`)
+for (const table of ['sessions', 'password_resets', 'workspace_members', 'workspace_invites']) {
+  assert.equal(tables.rows.some(row => row.table_name === table), false, `${table} exists, so a workspace can be reached by more than its owner`)
 }
 const columns = await query("select column_name from information_schema.columns where table_name = 'users'")
 assert.equal(columns.rows.some(row => row.column_name === 'password_hash'), false, 'users still has somewhere to put a password')
@@ -52,15 +56,22 @@ await claimWorkspace('ws-1', user.id)
 assert.equal((await workspacesFor(user.id)).length, 1)
 assert.equal((await workspacesFor(stranger.id)).length, 0)
 
-// The dashboard shows only workspaces this account created, not every workspace it was invited to.
-await claimWorkspace('ws-shared', user.id, 'Shared workspace')
-await query('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', ['ws-shared', stranger.id, 'employee'])
-assert.equal((await workspacesFor(user.id)).some(row => row.id === 'ws-shared'), true, 'an owner must still see the workspace they created')
-assert.equal((await workspacesFor(stranger.id)).some(row => row.id === 'ws-shared'), false, 'a collaborator must not see someone else’s workspace in the dashboard list')
+// The dashboard shows the workspaces this account owns, and there is no other way onto that list.
+// Nobody can be added to somebody else's workspace, because there is nowhere to record it.
+await claimWorkspace('ws-second', user.id, 'Second workspace')
+assert.equal((await workspacesFor(user.id)).some(row => row.id === 'ws-second'), true, 'an owner must see the workspace they created')
+assert.equal((await workspacesFor(stranger.id)).some(row => row.id === 'ws-second'), false, 'a stranger must not see someone else’s workspace in the dashboard list')
+assert.equal(await membership('ws-second', stranger.id), null, 'a stranger was granted a role on a workspace that is not theirs')
+
+// A deleted workspace is nobody's, including the owner's. The row survives as a tombstone so the id
+// cannot be claimed again, and that survival must not put it back on anybody's list.
+await query('update workspaces set deleted_at = now() where id = $1', ['ws-second'])
+assert.equal((await workspacesFor(user.id)).some(row => row.id === 'ws-second'), false, 'a deleted workspace came back in the owner’s list')
+assert.equal(await membership('ws-second', user.id), null, 'a deleted workspace still authorized its owner')
 
 // 4. Deleting a person takes their workspaces with them.
 await claimWorkspace('ws-2', stranger.id)
 await query('delete from users where id = $1', [stranger.id])
 assert.equal((await query('select id from workspaces where id = $1', ['ws-2'])).rows.length, 0, 'workspaces outlived their owner')
 
-console.log('Auth test passed: no credential tables left behind, a Clerk id is the account id, workspaces owned by exactly one account, strangers refused, re-claiming harmless, and deleting an account taking its workspaces with it.')
+console.log('Auth test passed: no credential or membership tables left behind, a Clerk id is the account id, workspaces owned by exactly one account with no second way in, strangers refused, deleted workspaces off every list, re-claiming harmless, and deleting an account taking its workspaces with it.')
