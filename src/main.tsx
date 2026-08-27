@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
+import { Analytics } from '@vercel/analytics/react'
 import App from './App'
 import { applyStoredTheme } from './engine/theme'
 import './theme.css'
@@ -59,7 +60,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
            */
           routerPush={to => { window.history.pushState({}, '', to); window.dispatchEvent(new PopStateEvent('popstate')) }}
           routerReplace={to => { window.history.replaceState({}, '', to); window.dispatchEvent(new PopStateEvent('popstate')) }}
-        ><App /></ClerkProvider>
-      : <App />}
+        >
+          <App />
+          <Analytics />
+        </ClerkProvider>
+      : <>
+          <App />
+          <Analytics />
+        </>}
   </React.StrictMode>,
 )
