@@ -254,9 +254,6 @@ export default function App() {
   if (path === '/') return <Home
     initialValue={String(answers.companyDescription ?? '')}
     onSubmit={startBuild}
-    accounts={accounts === true}
-    signedIn={hasSignedInSession}
-    onSignIn={openClerkSignUp}
   />
 
   /**
@@ -331,7 +328,7 @@ export default function App() {
   // Unknown public URLs return to the prompt; an authenticated operator stays inside the product.
   return account
     ? <Suspense fallback={<main className="wes-dashboard" aria-busy="true"/>}><ProjectDashboard account={account} workspaces={workspaces} onNavigate={navigate} onBuild={startBuild}/></Suspense>
-    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild} accounts={accounts === true} signedIn={hasSignedInSession} onSignIn={openClerkSignUp}/>
+    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild}/>
   }
 
   /**
