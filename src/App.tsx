@@ -25,10 +25,28 @@ function workspaceSections(workspaceId: string) {
   return isWorkspaceConfiguration(saved) ? saved.navigation.map(item => item.id) : []
 }
 
+/**
+ * Opens Clerk's sign-up panel, waiting out the moment early in a page load where the button that
+ * opens it exists before the script that makes it work has attached itself to the page.
+ *
+ * `window.Clerk` is a queueing object: calling `openSignUp` on it before Clerk has finished loading is
+ * normal and Clerk runs the call once it is ready. What is not safe to assume is that `window.Clerk`
+ * exists at all yet — `ClerkProvider` injects the script asynchronously, and a click a beat after
+ * first paint can land before that script has run. Retried for a few seconds rather than given up on
+ * immediately, which is what silently did nothing before.
+ */
 function openClerkSignUp() {
-  if (typeof window !== 'undefined' && (window as any).Clerk) {
-    (window as any).Clerk.openSignUp({ redirectUrl: '/dashboard' })
+  if (typeof window === 'undefined') return
+  const attempt = (triesLeft: number) => {
+    const clerk = (window as any).Clerk
+    if (clerk) { clerk.openSignUp({ redirectUrl: '/dashboard' }); return }
+    if (triesLeft <= 0) {
+      console.error('Wesify could not open sign-up: Clerk never loaded. If this is a deployment, check that VITE_CLERK_PUBLISHABLE_KEY is set for the build.')
+      return
+    }
+    window.setTimeout(() => attempt(triesLeft - 1), 200)
   }
+  attempt(25)
 }
 
 export default function App() {
@@ -254,6 +272,9 @@ export default function App() {
   if (path === '/') return <Home
     initialValue={String(answers.companyDescription ?? '')}
     onSubmit={startBuild}
+    accounts={accounts === true}
+    signedIn={hasSignedInSession}
+    onSignIn={openClerkSignUp}
   />
 
   /**
@@ -328,7 +349,7 @@ export default function App() {
   // Unknown public URLs return to the prompt; an authenticated operator stays inside the product.
   return account
     ? <Suspense fallback={<main className="wes-dashboard" aria-busy="true"/>}><ProjectDashboard account={account} workspaces={workspaces} onNavigate={navigate} onBuild={startBuild}/></Suspense>
-    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild}/>
+    : <Home initialValue={String(answers.companyDescription ?? '')} onSubmit={startBuild} accounts={accounts === true} signedIn={hasSignedInSession} onSignIn={openClerkSignUp}/>
   }
 
   /**

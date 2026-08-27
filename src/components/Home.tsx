@@ -69,13 +69,28 @@ const howItWorksGlow = {
   colors: ['#c084fc', '#f472b6', '#38bdf8'],
 }
 
-export function Home({ initialValue = '', onSubmit }: {
+export function Home({ initialValue = '', onSubmit, accounts = false, signedIn = false, onSignIn }: {
   initialValue?: string
   onSubmit: (brief: string) => void
+  /** Whether this deployment has accounts at all. False in the infrastructure-free test/dev mode. */
+  accounts?: boolean
+  signedIn?: boolean
+  onSignIn?: () => void
 }) {
   const [selectedTools, setSelectedTools] = useState(() => loadSelectedTools(initialValue))
 
   useEffect(() => saveSelectedTools(selectedTools), [selectedTools])
+
+  /**
+   * Whether a stranger has to sign up before they can describe their company here.
+   *
+   * Deployments with no accounts configured (accounts === false — the CI and local dev path, no
+   * Clerk key set) never gate: there is nothing to sign up for, so the prompt is the whole page, as
+   * it always was. Where accounts exist, a signed-out visitor gets the pitch and one button rather
+   * than a text box asking them to describe their business before they have even agreed to use
+   * Wesify — the box is what they land on the moment they are signed in.
+   */
+  const requiresSignIn = accounts && !signedIn
 
   return <main className="wes-home" data-testid="public-home">
     <div className="wes-home__hero">
@@ -107,17 +122,21 @@ export function Home({ initialValue = '', onSubmit }: {
       <section className="wes-home__content" aria-labelledby="wes-home-title">
         <h1 id="wes-home-title">Build the operating system for your business.</h1>
         <p>Describe how your company works. Wesify turns it into connected CRM, ERP, workflows, finance, people, permissions, and reporting.</p>
-        <div className="wes-prompt-shell wes-prompt-dark">
-          <Suspense fallback={<div className="wes-prompt-shell__loading" aria-busy="true"/>}>
-            <CompanyPrompt
-              initialValue={initialValue}
-              onSubmit={onSubmit}
-              testId="company-brief"
-              selectedTools={selectedTools}
-              onToolsChange={setSelectedTools}
-            />
-          </Suspense>
-        </div>
+        {requiresSignIn
+          ? <button type="button" className="wes-home__get-started-button" onClick={onSignIn} data-testid="get-started">
+              Get started for Free
+            </button>
+          : <div className="wes-prompt-shell wes-prompt-dark">
+              <Suspense fallback={<div className="wes-prompt-shell__loading" aria-busy="true"/>}>
+                <CompanyPrompt
+                  initialValue={initialValue}
+                  onSubmit={onSubmit}
+                  testId="company-brief"
+                  selectedTools={selectedTools}
+                  onToolsChange={setSelectedTools}
+                />
+              </Suspense>
+            </div>}
       </section>
     </div>
 
