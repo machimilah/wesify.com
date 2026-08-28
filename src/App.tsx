@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Home } from './components/Home'
+import { Brand } from './components/Brand'
 import type { AIBlueprint } from './engine/blueprint'
 import { isWorkspaceConfiguration } from './engine/workspaceSchema'
 import type { Answers } from './types'
@@ -301,7 +302,7 @@ export default function App() {
 
   const buildMatch = path.match(/^\/build\/([a-zA-Z0-9-]+)$/)
   if (buildMatch) return <Suspense fallback={<main className="bo-home" aria-busy="true"/>}><Builder workspaceId={buildMatch[1]} initialAnswers={answers} onAnswersChange={setAnswers} onBlueprintChange={setBlueprint} onExit={() => navigate(account ? '/dashboard' : '/')} onComplete={() => { localStorage.setItem('bo-active-workspace-id', buildMatch[1]); navigate(`/workspace/${buildMatch[1]}/home`) }}/></Suspense>
-  if (path === '/build') return <main className="bo-home"/>
+  if (path === '/build') return <main className="bo-home"><Brand/></main>
 
   /**
    * The canonical address of a workspace: /workspace/:workspaceId, optionally followed by a section.

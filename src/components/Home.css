@@ -33,13 +33,42 @@
   width: min(1180px, calc(100% - 48px));
   min-height: 76px;
   margin: 0 auto;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 20px;
 }
 
 .wes-home__header-actions { display: flex; align-items: center; gap: 10px; }
+
+.wes-home__nav-link {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 8px 0 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition: color 0.2s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.wes-home__nav-link:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(255, 255, 255, 0.5);
+}
+
+.wes-home__nav-link:first-of-type {
+  left: 50%;
+  transform: translate(calc(-100% - 140px), -50%);
+}
+
+.wes-home__nav-link:last-of-type {
+  left: 50%;
+  transform: translate(140px, -50%);
+}
 
 .wes-home__theme-toggle,
 .wes-home__signin {
@@ -53,7 +82,7 @@
   backdrop-filter: blur(12px);
 }
 
-.wes-home__theme-toggle { display: grid; place-items: center; }
+.wes-home__theme-toggle { display: grid; place-items: center; position: absolute; right: 24px; }
 .wes-home__signin { padding: 0 16px; font-size: 13px; font-weight: 700; }
 .wes-home__theme-toggle:hover,
 .wes-home__signin:hover { border-color: rgba(255, 255, 255, .5); background: rgba(18, 20, 18, .78); }
@@ -124,4 +153,80 @@
 
 @media (prefers-reduced-motion: reduce) {
   .wes-home__visual { display: none; }
+}
+
+.bo-home__ai-agents {
+  position: relative;
+  padding: 80px 120px 120px;
+  background: #001a4d;
+  text-align: center;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bo-home__ai-agents h2 {
+  max-width: 900px;
+  margin: 0 auto 48px;
+  color: #ffffff;
+  font: 400 52px/1.15 'Ubuntu', sans-serif;
+  letter-spacing: 0;
+}
+
+.bo-home__ai-agents-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.bo-home__stat-card {
+  text-align: center;
+  padding: 40px 30px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.bo-home__stat-number {
+  font: 400 48px/1.1 'Ubuntu', sans-serif;
+  margin-bottom: 12px;
+}
+
+.bo-home__stat-label {
+  font: 400 16px/1.2 'Ubuntu', sans-serif;
+  margin-bottom: 8px;
+}
+
+.bo-home__stat-desc {
+  font: 400 14px/1.5 'Ubuntu', sans-serif;
+}
+
+.bo-home__stat-card:not(.bo-home__stat-card--active) .bo-home__stat-number,
+.bo-home__stat-card:not(.bo-home__stat-card--active) .bo-home__stat-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.bo-home__stat-card:not(.bo-home__stat-card--active) .bo-home__stat-desc {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.bo-home__stat-card--active .bo-home__stat-number,
+.bo-home__stat-card--active .bo-home__stat-label {
+  color: #ffffff;
+}
+
+.bo-home__stat-card--active .bo-home__stat-desc {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bo-home__ai-agents-content {
+  position: relative;
+  padding: 120px 48px;
+  background: #ffffff;
+  text-align: center;
 }
