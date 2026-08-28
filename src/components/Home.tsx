@@ -3,6 +3,7 @@ import { loadSelectedTools, saveSelectedTools } from '../engine/toolSelection'
 import Aurora from './Aurora'
 import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
+import { UserCount } from './UserCount'
 import './Home.css'
 
 const CompanyPrompt = lazy(() => import('./CompanyPrompt').then(module => ({ default: module.CompanyPrompt })))
@@ -84,6 +85,9 @@ export function Home({ initialValue = '', onSubmit, accounts = false, signedIn =
         <div style={{ marginTop: '40px' }}>
           <a href="https://www.producthunt.com/products/wesify?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-wesify" target="_blank" rel="noopener noreferrer"><img alt="Wesify - The workplace built around what your company needs. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1235186&theme=dark&t=1787940523787"/></a>
         </div>
+        {/* The line is always there; only the number waits. A dash rather than a zero while the
+            count is unknown, because a zero that corrects itself a moment later reads as the answer. */}
+        <UserCount/>
       </section>
     </div>
 

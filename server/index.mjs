@@ -6,7 +6,7 @@ import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { billingAvailable } from './billing.mjs'
-import { databaseAvailable, migrate } from './db.mjs'
+import { databaseAvailable, migrate, queryOne } from './db.mjs'
 import { durabilityWarnings } from './durability.mjs'
 import { send } from './http.mjs'
 import { clerkConfigured } from './clerk.mjs'
@@ -41,6 +41,27 @@ const port = Number.isFinite(requestedPort) ? requestedPort : Number(process.env
 // A container has to bind every interface or nothing outside it can reach the port at all.
 const host = process.env.BO_HOST || '127.0.0.1'
 const distRoot = path.resolve(process.cwd(), 'dist')
+
+// One second. The home page polls this every two, and a sign-up should appear on it as it happens
+// rather than after a wait nobody can explain. Still a cache, and that is what it is for: a hundred
+// visitors polling together cost one count, not a hundred.
+const USER_COUNT_TTL_MS = 1_000
+let userCountCache = { at: 0, users: 0 }
+
+/** Signed-up accounts, at most once a minute. `0` where there is no database to hold any. */
+async function userCount() {
+  if (!databaseAvailable()) return 0
+  if (Date.now() - userCountCache.at < USER_COUNT_TTL_MS) return userCountCache.users
+  try {
+    const row = await queryOne('select count(*)::int as users from users')
+    userCountCache = { at: Date.now(), users: Number(row?.users ?? 0) }
+  } catch {
+    // A count is not worth failing a page load over: the last known figure stands, and a first
+    // failure leaves the zero this started at.
+    userCountCache = { at: Date.now(), users: userCountCache.users }
+  }
+  return userCountCache.users
+}
 
 /** Asked in order. The first that does not return `false` has answered the request. */
 const routes = [authRoutes, industryRoutes, billingRoutes, researchRoutes, discoveryRoutes, agentRoutes, connectionRoutes, buildRoutes, automationRoutes, workspaceSetupRoutes, projectRoutes]
@@ -78,6 +99,21 @@ async function api(request, response, url) {
       warnings: durabilityWarnings(),
     })
   }
+  /**
+   * How many people have signed up, for the public home page.
+   *
+   * Public and unauthenticated on purpose: it is a single number on a page anybody can load, and it
+   * names nobody. Counted from `users`, which holds one row per Clerk account the server has ever
+   * seen, so it is the real figure rather than a stored tally that drifts.
+   *
+   * Cached for a minute because the home page is the most-loaded route Wesify has and this would
+   * otherwise be a database round trip per visit. Without a database there are no accounts at all,
+   * which is `0` rather than an error — the prototype path still renders the page.
+   */
+  if (request.method === 'GET' && url.pathname === '/api/stats/users') {
+    return send(response, 200, { users: await userCount() })
+  }
+
   const segments = url.pathname.split('/').filter(Boolean)
   if (segments[0] !== 'api') return false
 
