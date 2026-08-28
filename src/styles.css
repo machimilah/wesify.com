@@ -351,7 +351,7 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   /* Same reasoning as the builder preview rail above: this sidebar stays dark in both themes. */
   --bg-alt: #1b1e1b; --surface: #202420; --surface-hover: #292d29; --border: #2b2e2a; --border-strong: #343834;
   --text: #e9ebe7; --text-2: #9aa199; --text-3: #7f877f; --accent: #d3d7d2; }
-.bo-dashboard__sidebar nav { min-height: 0; display: grid; gap: 5px; margin-top: 42px; overflow-y: auto; scrollbar-width: none; }.bo-dashboard__sidebar nav::-webkit-scrollbar { display: none; }.bo-dashboard__sidebar nav > small { margin: 14px 11px 4px; color: var(--text-2); font-size: 7px; font-weight: 800; letter-spacing: .16em; }.bo-dashboard__sidebar nav button { min-height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 9px; color: var(--text-3); background: transparent; font-size: 10px; text-align: left; }.bo-dashboard__sidebar nav button.active { color: white; background: var(--surface-hover); }
+.bo-dashboard__sidebar nav { min-height: 0; display: grid; gap: 5px; margin-top: 10px; overflow-y: auto; scrollbar-width: none; }.bo-dashboard__sidebar nav::-webkit-scrollbar { display: none; }.bo-dashboard__sidebar nav > small { margin: 14px 11px 4px; color: var(--text-2); font-size: 7px; font-weight: 800; letter-spacing: .16em; }.bo-dashboard__sidebar nav button { min-height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 9px; color: var(--text-3); background: transparent; font-size: 10px; text-align: left; }.bo-dashboard__sidebar nav button.active { color: white; background: var(--surface-hover); }
 .bo-dashboard__agent { margin-top: auto; padding: 12px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text-2); font-size: 9px; }.bo-dashboard__agent i { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--online); }
 /* Clerk's account menu, at the foot of the sidebar. Empty and invisible when this build has no Clerk
    key, which is why it carries no border or padding of its own. */
@@ -563,6 +563,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 /* On the home page it sits on a plain field, so it keeps the same readable surface treatment as the prompt. */
 .bo-home__account { display: flex; align-items: center; }
 .bo-home__theme-toggle { margin-left: auto; transform: translateX(-8px); border-color: var(--border-strong); background: var(--surface-2); }
+/* The wordmark is wide and short, so the shared 120x80 .brand-mark box leaves a tall band of empty
+   space under it. Both sidebars cap it to the ink, the way the /dashboard rail does. */
+.bo-dashboard__sidebar .brand-mark { width: 100%; height: auto; flex-basis: auto; max-height: 38px; }
+.bo-dashboard__sidebar .brand-logo { width: 100%; height: auto; }
 .bo-dashboard__sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bo-dashboard__sidebar-head .bo-theme-toggle { border-color: var(--border); color: var(--text-2); }
 .bo-dashboard__sidebar-head .bo-theme-toggle:hover { background: var(--surface-hover); }
