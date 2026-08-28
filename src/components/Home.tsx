@@ -81,6 +81,9 @@ export function Home({ initialValue = '', onSubmit, accounts = false, signedIn =
               </Suspense>
             </div>}
         <div style={{ marginTop: '80px', color: '#fff', fontSize: '18px' }}>This is an MVP :D</div>
+        <div style={{ marginTop: '40px' }}>
+          <a href="https://www.producthunt.com/products/wesify?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-wesify" target="_blank" rel="noopener noreferrer"><img alt="Wesify - The workplace built around what your company needs. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1235186&theme=dark&t=1787940523787"/></a>
+        </div>
       </section>
     </div>
 
