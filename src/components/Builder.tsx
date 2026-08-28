@@ -17,8 +17,9 @@ import { resolveIndustry } from '../engine/industryResolver'
 import { applyFrontierArchitecture, frontierResearchStatus, mergeFrontierResearch, requestFrontierResearch, type FrontierResearch } from '../engine/researchClient'
 import { applyIndustryVerdict, loadIndustryVerdict, recordIndustryObservations, type IndustryVerdict } from '../engine/industryClient'
 import { loadDiscoverySession, saveDiscoverySession } from '../engine/discoverySessionClient'
-import { generateWorkspaceConfigurationFromDiscovery } from '../engine/workspaceSchema'
+import { generateWorkspaceConfigurationFromDiscovery, type WorkspaceConfiguration } from '../engine/workspaceSchema'
 import { applyWorkspaceSetup, briefWithSetup, readWorkspaceSetup } from '../engine/workspaceSetup'
+import { ensureGeneratedProject } from '../engine/projectClient'
 import { answerIntake, readBuildIntake, saveBuildIntake, withLogo, type BuildIntake } from '../engine/buildIntake'
 import { publishWorkspaceIdentity } from '../engine/workspaceSetupClient'
 import { BuildIntakeControls } from './BuildIntake'
@@ -49,6 +50,15 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
   const chat = useRef<HTMLDivElement>(null)
   const launchRect = useRef<DOMRect | null>(null)
   const booted = useRef(false)
+  /**
+   * The server's copy of what was just approved, in flight.
+   *
+   * Held here so `approve` can start it and `finish` can wait on it: the launch animation is roughly
+   * three quarters of a second of cover, which is usually the whole round trip.
+   */
+  const savingBuild = useRef<Promise<unknown> | null>(null)
+  /** Kept so a save that failed can be sent again without re-running the interview. */
+  const approvedConfig = useRef<WorkspaceConfiguration | null>(null)
   const [session, setSession] = useState<DiscoverySession | null>(null)
   /**
    * The three scripted questions that open every build — a name, a logo, colleagues — and what has
@@ -67,6 +77,12 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
    */
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  /**
+   * Separate from `error`, which is the interview's: it is worded as a thought Wesify could not
+   * finish and its retry re-runs the agent, neither of which is true of a build that was made and
+   * then could not be stored.
+   */
+  const [saveProblem, setSaveProblem] = useState('')
   const [launching, setLaunching] = useState(false)
   const [launchPhase, setLaunchPhase] = useState(0)
   const [frontier, setFrontier] = useState<FrontierResearch | null>(null)
@@ -282,6 +298,23 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     localStorage.setItem('bo-workspace-config', JSON.stringify(config))
     localStorage.setItem(`bo-workspace-config:${workspaceId}`, JSON.stringify(config))
     localStorage.setItem('bo-workspace-id', workspaceId)
+    /**
+     * The copy that outlives this browser, written here rather than left to the workspace's first
+     * paint.
+     *
+     * It used to be sent only when SchemaDashboard mounted, and that ordering could not hold: the
+     * account claims the workspace before any of this runs, so a first visit that was cut short —
+     * a closed tab, a dropped request — left the workspace listed on the account with its shape
+     * stored nowhere but this browser's localStorage. Clearing that storage then produced a
+     * workspace that was permanently present and permanently unopenable, because the only copy of
+     * what it *was* had been the local one. Approving is the moment the shape becomes real, so it
+     * is the moment it is saved. The server treats a repeat as the same build, so the later mount
+     * costs nothing.
+     */
+    approvedConfig.current = config
+    savingBuild.current = ensureGeneratedProject(config)
+    // Awaited in `finish`. Attached now only so a failure never surfaces as an unhandled rejection.
+    savingBuild.current.catch(() => {})
     // What this company was given becomes evidence for the next company in the same industry.
     const patterns = [
       ...(config.businessModel?.operatingModel.processIds ?? []).map(id => ({ kind: 'process' as const, id, outcome: 'adopted' as const })),
@@ -304,9 +337,32 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     return () => window.clearInterval(timer)
   }, [launching])
 
-  const finish = () => {
+  /**
+   * Opening the workspace is conditional on it having been saved.
+   *
+   * Landing anyway would put somebody inside a Command Center that works until the day their browser
+   * forgets it, which is the failure this waits out rather than hides.
+   */
+  const finish = async () => {
+    try { await savingBuild.current }
+    catch (problem) {
+      setLaunching(false)
+      setSaveProblem(problem instanceof Error ? problem.message : 'Wesify could not reach the project service.')
+      return
+    }
+    setSaveProblem('')
     if (session) commit({ ...session, phase: 'READY', updatedAt: new Date().toISOString() })
     onComplete()
+  }
+
+  /** Sends the approved shape again. Nothing is rebuilt: the same architecture is stored a second time. */
+  const retrySave = () => {
+    if (!approvedConfig.current) return
+    setSaveProblem('')
+    savingBuild.current = ensureGeneratedProject(approvedConfig.current)
+    savingBuild.current.catch(() => {})
+    // Re-entering the launch runs the animation again, which is what calls `finish`.
+    setLaunchPhase(0); setLaunching(true)
   }
 
   useGSAP(() => {
@@ -314,10 +370,12 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
     const rect = launchRect.current
     const media = gsap.matchMedia()
     media.add('(prefers-reduced-motion: no-preference)', () => {
-      gsap.fromTo('.bo-launch-overlay', { x: rect.left, y: rect.top, scaleX: rect.width / window.innerWidth, scaleY: rect.height / window.innerHeight, transformOrigin: 'top left', borderRadius: 24 }, { x: 0, y: 0, scaleX: 1, scaleY: 1, borderRadius: 0, duration: 0.45, ease: 'power3.inOut', onComplete: () => window.setTimeout(finish, 250) })
+      gsap.fromTo('.bo-launch-overlay', { x: rect.left, y: rect.top, scaleX: rect.width / window.innerWidth, scaleY: rect.height / window.innerHeight, transformOrigin: 'top left', borderRadius: 24 }, { x: 0, y: 0, scaleX: 1, scaleY: 1, borderRadius: 0, duration: 0.45, ease: 'power3.inOut', onComplete: () => window.setTimeout(() => void finish(), 250) })
       gsap.to('.bo-builder__conversation', { autoAlpha: 0, duration: 0.25, ease: 'power2.in' })
     })
-    media.add('(prefers-reduced-motion: reduce)', finish)
+    // `void`, not `finish` itself: the callback's return value is gsap's cleanup hook, and an async
+    // function hands it a promise to call.
+    media.add('(prefers-reduced-motion: reduce)', () => { void finish() })
     return () => media.revert()
   }, { dependencies: [launching], scope: root, revertOnUpdate: true })
 
@@ -454,6 +512,11 @@ export function Builder({ workspaceId, initialAnswers, onAnswersChange, onBluepr
           <span><Bot size={15}/></span>
           <div><span className="bo-turn__text bo-turn__working">{activity || 'Working on it'}</span></div>
         </div>}
+
+        {saveProblem ? <div className="bo-turn bo-turn--bo">
+          <span><Bot size={15}/></span>
+          <div className="bo-turn-error"><span className="bo-turn__text">Your Command Center was built, but Wesify could not save it — so it would not survive leaving this browser. {saveProblem}</span><button onClick={retrySave}><RotateCcw size={13}/> Retry</button></div>
+        </div> : null}
 
         {error ? <div className="bo-turn bo-turn--bo">
           <span><Bot size={15}/></span>

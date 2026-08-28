@@ -239,6 +239,8 @@ export function Dashboard({ workspaceId, onExit }: { workspaceId: string; onExit
   const cachedConfig = isWorkspaceConfiguration(cached) && cached.id === workspaceId ? cached : null
   const [fetched, setFetched] = useState<WorkspaceConfiguration | null>(null)
   const [checkedServer, setCheckedServer] = useState(false)
+  /** Why the workspace could not be read, when the reason is something other than "never built". */
+  const [problem, setProblem] = useState('')
 
   useEffect(() => {
     // The fast path already has an answer; asking the server as well would only race it and repaint
@@ -246,9 +248,14 @@ export function Dashboard({ workspaceId, onExit }: { workspaceId: string; onExit
     if (cachedConfig) return
     let cancelled = false
     setCheckedServer(false)
+    setProblem('')
     void loadGeneratedManifest(workspaceId).then(manifest => {
       if (cancelled) return
       setFetched(manifest?.specification ?? null)
+      setCheckedServer(true)
+    }, (failure: unknown) => {
+      if (cancelled) return
+      setProblem(failure instanceof Error ? failure.message : 'Wesify could not open this workspace.')
       setCheckedServer(true)
     })
     return () => { cancelled = true }
@@ -270,7 +277,7 @@ export function Dashboard({ workspaceId, onExit }: { workspaceId: string; onExit
    * A workspace that was really built in this browser is already in the cache below, written by the
    * builder when it finished, so nothing real depended on the invention.
    */
-  if (!config) return <main className="bo-dashboard-page"><div className="bo-preview-empty">{checkedServer ? 'This workspace has not been built yet.' : 'Opening workspace...'}</div></main>
+  if (!config) return <main className="bo-dashboard-page"><div className="bo-preview-empty">{!checkedServer ? 'Opening workspace...' : problem || 'This workspace has not been built yet.'}</div></main>
 
   config.id = workspaceId
   localStorage.setItem('bo-workspace-config', JSON.stringify(config))

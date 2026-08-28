@@ -83,8 +83,17 @@ export async function ensureGeneratedProject(config: WorkspaceConfiguration) {
  * built yet, not that this browser has not seen it before.
  */
 export async function loadGeneratedManifest(workspaceId: string): Promise<GeneratedProjectManifest | null> {
-  try { return await request<GeneratedProjectManifest>(workspaceId, apiUrl(`/api/projects/${workspaceId}`)) }
-  catch { return null }
+  const response = await fetch(apiUrl(`/api/projects/${workspaceId}`), { headers: await headers(workspaceId) })
+  // 404 is the only answer that means "this workspace was never built". Every other failure — a
+  // session that expired, a workspace belonging to somebody else, the service being down — used to
+  // be flattened into the same `null`, and so was reported to the operator as an empty workspace
+  // rather than as the problem it was. Those are raised instead, and said in the operator's words.
+  if (response.status === 404) return null
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(payload?.error ?? 'Wesify could not open this workspace.')
+  }
+  return await response.json() as GeneratedProjectManifest
 }
 
 export function buildGeneratedChange(config: WorkspaceConfiguration, action: WorkspaceAction, description: string) {
