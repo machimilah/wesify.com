@@ -1,0 +1,362 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-google-sans), "Google Sans", "Google Sans Text", "Product Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Dark theme. Names kept from the light palette (--color-ink is the primary text
+     color, --color-wash a subtle raised tint) so components didn't need renaming. */
+  --color-ink: #f4f4f5;
+  --color-ink-soft: #c4c4ca;
+  --color-muted: #8a8a93;
+  --color-line: #26262a;
+  --color-line-strong: #38383e;
+  --color-surface: #121214;
+  --color-bg: #080809;
+  --color-wash: #1c1c1f;
+  /* Crimson is the app's primary accent; everything else stays neutral on the dark ground. */
+  --color-crimson: #dc143c;
+  --color-crimson-soft: #f2647f;
+  --color-blue: #4c8dff;
+  --color-indigo: #dc143c;
+  --color-violet: #b083ff;
+  --color-up: #f2647f;
+  --color-down: #8b90a8;
+
+  /* Semantic states (design system §2). Always paired with an icon or word, never color alone. */
+  --color-success: #3ecf8e;
+  --color-warning: #f5b547;
+  --color-danger: #ff5a5f;
+  --color-info: #4c8dff;
+
+  /* Secondary brand gradient (logo, share cards, social image): blue → light purple. */
+  --color-brand-blue: #2f80ff;
+  --color-brand-purple: #a56eff;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+}
+
+:root {
+  /* The brand fill is flat crimson; anything sitting on it is white. */
+  --gradient-main: var(--color-crimson);
+  --on-gradient-main: #ffffff;
+  --gradient-brand: linear-gradient(90deg, #2f80ff 0%, #6c63ff 55%, #a56eff 100%);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
+  /* Spacing follows Tailwind's 4px scale; touch targets are at least 44px (§36, §62). */
+  --touch-target: 44px;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Soft brand accents, used on onboarding and share surfaces only. */
+.bg-accents {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-accents::before,
+.bg-accents::after {
+  content: "";
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 9999px;
+  filter: blur(60px);
+}
+.bg-accents::before {
+  top: -30vmax;
+  left: -25vmax;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 65%);
+}
+.bg-accents::after {
+  top: -20vmax;
+  right: -35vmax;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06), transparent 65%);
+}
+
+/* Was a gradient; now the crimson accent. */
+.text-gradient {
+  color: var(--color-crimson-soft);
+}
+
+/* Crimson fill. Everything inside it is white, so a stray text color can't go invisible. */
+.bg-gradient-main {
+  background: var(--gradient-main);
+  color: var(--on-gradient-main);
+}
+.bg-gradient-main *,
+.bg-gradient-main .text-muted,
+.bg-gradient-main .text-ink-soft {
+  color: var(--on-gradient-main);
+}
+
+/* Exchange-style surfaces: flat and borderless — the surface tone alone separates them from the page. */
+.card {
+  background: var(--color-surface);
+  border-radius: 12px;
+}
+.card-hover {
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.card-hover:hover {
+  background: var(--color-wash);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* Outcome price button: quiet crimson tint that fills in when it's the selected side. */
+.btn-outcome {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  border-radius: 8px;
+  padding: 0 0.85rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-crimson-soft);
+  background: rgba(220, 20, 60, 0.14);
+  transition: background 120ms ease, color 120ms ease;
+}
+.btn-outcome:hover {
+  background: rgba(220, 20, 60, 0.24);
+}
+.btn-outcome[aria-pressed="true"],
+.btn-outcome.is-active {
+  background: var(--gradient-main);
+  color: var(--on-gradient-main);
+}
+.btn-outcome-alt {
+  color: var(--color-ink-soft);
+  background: rgba(255, 255, 255, 0.07);
+}
+.btn-outcome-alt:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+/* Compact variant for tight spaces (e.g. the featured card's outcome list). */
+.btn-outcome-sm {
+  min-height: 1.625rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+  gap: 0.2rem;
+}
+
+/* Neutral solid button (e.g. "Sell", an active tab) — high-contrast against both the page
+   and the colorful gradient buttons, without being tied to accent colors. */
+.btn-solid {
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+.btn-solid:hover {
+  background: var(--color-ink-soft);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-indigo);
+  outline-offset: 2px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise 180ms ease-out;
+}
+
+@keyframes flash {
+  0% {
+    background-color: rgba(220, 20, 60, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.animate-flash {
+  animation: flash 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Design-system components (§2). See docs/design-system.md for usage.
+   --------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--touch-target);
+  padding: 0 1rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--gradient-main);
+  color: var(--on-gradient-main);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.btn-secondary {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-wash);
+}
+.btn-ghost {
+  color: var(--color-ink-soft);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-wash);
+  color: var(--color-ink);
+}
+.btn-danger {
+  background: rgba(255, 90, 95, 0.14);
+  color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 90, 95, 0.24);
+}
+
+.input {
+  width: 100%;
+  min-height: var(--touch-target);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  padding: 0 0.875rem;
+  font-size: 1rem; /* 16px stops iOS Safari zooming into inputs */
+  color: var(--color-ink);
+  outline: none;
+}
+.input:focus {
+  border-color: var(--color-indigo);
+}
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+textarea.input {
+  padding: 0.75rem 0.875rem;
+  min-height: 7rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius-pill);
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--color-wash);
+  color: var(--color-ink-soft);
+}
+.badge-success { background: rgba(62, 207, 142, 0.14); color: var(--color-success); }
+.badge-warning { background: rgba(245, 181, 71, 0.14); color: var(--color-warning); }
+.badge-danger { background: rgba(255, 90, 95, 0.14); color: var(--color-danger); }
+.badge-info { background: rgba(76, 141, 255, 0.14); color: var(--color-info); }
+
+.notice {
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  background: var(--color-wash);
+  color: var(--color-ink-soft);
+}
+.notice-warning { background: rgba(245, 181, 71, 0.1); color: #f7cf85; }
+.notice-danger { background: rgba(255, 90, 95, 0.1); color: #ff9a9d; }
+.notice-success { background: rgba(62, 207, 142, 0.1); color: #86e3b8; }
+
+.text-brand-gradient {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Long text (usernames, handles) never breaks a layout (§36). */
+.truncate-anywhere {
+  overflow-wrap: anywhere;
+}
+
+.prose-legal h2 {
+  margin-top: 2rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.prose-legal h3 {
+  margin-top: 1.25rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.prose-legal p,
+.prose-legal li {
+  margin-top: 0.5rem;
+  line-height: 1.65;
+}
+.prose-legal ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-legal a {
+  color: var(--color-crimson-soft);
+  text-decoration: underline;
+}
+
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}

@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.data/
+*.tsbuildinfo
+next-env.d.ts
+.env
+.env.local
+test-results/
+playwright-report/
+.data-e2e/
+.env*.local
+# Third-party reference material, not part of the codebase
+RP1927.pdf
